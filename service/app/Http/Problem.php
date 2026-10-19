@@ -14,6 +14,9 @@ final class Problem
 {
     public const CONTENT_TYPE = 'application/problem+json';
 
+    /** Documented shape of every error body, for the OpenAPI `#[Response]` attributes. */
+    public const SHAPE = 'array{type: string, title: string, status: int, detail: string, code: string, request_id: string, errors?: array<string, list<string>>}';
+
     /**
      * @param  array<string, list<string>>|null  $errors  field name => messages
      * @param  array<string, string>  $headers

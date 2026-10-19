@@ -1,5 +1,33 @@
-# Local development stack. The api, worker and scheduler services arrive with the tooling slice.
-# Host ports are overridable (HRA_DB_PORT, HRA_REDIS_PORT) when the defaults are already taken.
+# Local development stack: PostgreSQL, Redis and the api, worker and scheduler services.
+# One image serves all three application services; build it with `docker compose build api`.
+# Host ports are overridable (HRA_DB_PORT, HRA_REDIS_PORT, HRA_API_PORT) when the defaults are taken.
+# Secrets come from the environment or from service/.env, never from this file.
+
+x-app: &app
+  image: hra-service:local
+  environment: &app-environment
+    APP_ENV: ${APP_ENV:-local}
+    APP_KEY: ${APP_KEY}
+    HRA_JWT_SECRET: ${HRA_JWT_SECRET}
+    HRA_PUBLIC_BASE_URL: ${HRA_PUBLIC_BASE_URL:-http://localhost:8100}
+    LOG_CHANNEL: stderr
+    DB_CONNECTION: pgsql
+    DB_HOST: postgres
+    DB_PORT: 5432
+    DB_DATABASE: hra
+    DB_USERNAME: postgres
+    DB_PASSWORD: ${HRA_DB_PASSWORD:-postgres}
+    REDIS_CLIENT: phpredis
+    REDIS_HOST: redis
+    REDIS_PORT: 6379
+    CACHE_STORE: redis
+    QUEUE_CONNECTION: redis
+  depends_on: &app-depends-on
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: pgvector/pgvector:0.8.0-pg17
@@ -27,6 +55,28 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  api:
+    <<: *app
+    build: .
+    ports:
+      - "127.0.0.1:${HRA_API_PORT:-8100}:8000"
+
+  worker:
+    <<: *app
+    command: ["php", "artisan", "queue:work"]
+    depends_on:
+      <<: *app-depends-on
+      api:
+        condition: service_started
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      <<: *app-depends-on
+      api:
+        condition: service_started
 
 volumes:
   hra-pgdata:

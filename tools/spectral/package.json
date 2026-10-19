@@ -1,0 +1,10 @@
+{
+  "name": "spectral-lint",
+  "private": true,
+  "devDependencies": {
+    "@stoplight/spectral-cli": "6.16.3"
+  },
+  "scripts": {
+    "lint": "spectral lint --ruleset ../../.spectral.yaml --fail-severity=warn ../../service/openapi.json"
+  }
+}

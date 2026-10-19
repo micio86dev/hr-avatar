@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Http\OpenApi\DocumentIdentity;
+use App\Http\OpenApi\SecurityDocumentation;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
@@ -28,6 +30,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->guardJwtSecret();
+
+        Scramble::configure()
+            ->withDocumentTransformers(DocumentIdentity::apply(...))
+            ->withDocumentTransformers(SecurityDocumentation::document(...))
+            ->withOperationTransformers(SecurityDocumentation::operation(...));
 
         Event::listen(RouteMatched::class, fn (RouteMatched $event) => Log::shareContext(['route' => $event->route->getName()]));
     }

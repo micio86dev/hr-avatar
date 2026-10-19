@@ -7,6 +7,9 @@
  */
 return [
 
+    /* The product name, used wherever the service has to name itself (for example the OpenAPI title). */
+    'name' => 'HR-Avatar',
+
     /*
     | HS256 secret that signs the per-conversation client_secret. At least 32 bytes outside the
     | testing environment; the application refuses to boot otherwise, so a deployment can never

@@ -1,0 +1,149 @@
+{
+    "openapi": "3.1.2",
+    "info": {
+        "title": "HR-Avatar",
+        "version": "0.1.0",
+        "description": "HTTP API of the HR-Avatar avatar conversation engine: create, drive and tear down real-time avatar conversations.",
+        "contact": {
+            "name": "HR-Avatar API"
+        }
+    },
+    "servers": [
+        {
+            "url": "/v1"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Health"
+        }
+    ],
+    "paths": {
+        "/health": {
+            "get": {
+                "operationId": "health.live",
+                "description": "Always answers `{\"status\":\"ok\"}` while the process runs. It touches neither the database nor\nRedis, so an orchestrator can use it to decide whether to restart the process.",
+                "summary": "Liveness: the process is up",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "const": "ok"
+                                        }
+                                    },
+                                    "required": [
+                                        "status"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/health/ready": {
+            "get": {
+                "operationId": "health.ready",
+                "description": "Checks PostgreSQL and Redis. A failure answers 503 and names each dependency `ok` or `failed`,\nnever its address, version or connection string.",
+                "summary": "Readiness: the dependencies answer",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ok"
+                                                },
+                                                "checks": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "database": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "failed",
+                                                                "ok"
+                                                            ]
+                                                        },
+                                                        "redis": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "failed",
+                                                                "ok"
+                                                            ]
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "database",
+                                                        "redis"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "status",
+                                                "checks"
+                                            ]
+                                        },
+                                        {
+                                            "type": "string"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "A dependency is unreachable; `checks` names each one `ok` or `failed`.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "secretKey": {
+                "type": "http",
+                "description": "Server-to-server secret key (`hra_sk_...`) sent as `Authorization: Bearer`.",
+                "scheme": "bearer"
+            },
+            "clientSecret": {
+                "type": "http",
+                "description": "Per-conversation `client_secret` JWT sent as `Authorization: Bearer`, always together with the publishable key.",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            },
+            "publishableKey": {
+                "type": "apiKey",
+                "description": "Browser-safe publishable key (`hra_pk_...`); it grants nothing without the client secret.",
+                "in": "header",
+                "name": "X-HRA-Publishable-Key"
+            }
+        }
+    }
+}

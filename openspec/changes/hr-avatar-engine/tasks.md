@@ -152,31 +152,31 @@ Budget note: the untouched `composer create-project` skeleton and `composer.lock
 Commit: `build(service): add OpenAPI export with drift gate, Spectral lint, Dockerfile, compose services, CI workflow and boundary scan`
 Specs: service-foundation (OpenAPI publication and drift gate, boundary rules, local runtime topology and CI gates).
 
-- [ ] 2.1 Architecture vocabulary scanner (test the scanner first).
+- [x] 2.1 Architecture vocabulary scanner (test the scanner first).
   - RED: `service/tests/Arch/VocabularyScannerTest.php` scenarios "Host vocabulary is rejected" (a temp tree with `candidate` in `app/` fails and names file and term), "Clean tree passes", word-boundary and plural matching, `tenant-of-beai`, exemption of the arch test files; plus a BEAI-namespace reference check.
   - GREEN: `service/tests/Support/VocabularyScanner.php`, `service/tests/Arch/BoundaryTest.php` running it over `app`, `config`, `database`, `routes` (and `../sdk/src` when it exists). Rewrite any skeleton comment that trips the scan; never weaken the term list.
   - Verify: `cd service && php artisan test --filter='VocabularyScanner|BoundaryTest'`.
-- [ ] 2.2 Scramble configuration and security transformers (check the 0.13 API with context7 first).
+- [x] 2.2 Scramble configuration and security transformers (check the 0.13 API with context7 first).
   - RED: `service/tests/Feature/OpenApiTest.php` scenarios "Every route is documented" (each registered `/v1` route+method appears in the generated document) and "Auth is declared per operation" (health has no security; later slices extend the dataset), `info.version` equals `service/VERSION`, the four security schemes exist.
   - GREEN: `service/VERSION` (`0.1.0`), `service/config/scramble.php` (`api_path` `v1`), transformers in `service/app/Providers/AppServiceProvider.php` (`secretKey`, `clientSecret`, `publishableKey`, `providerToken`; per-operation security from `auth.secret` / `auth.client` middleware aliases), Problem response documented on the ready endpoint.
   - Verify: `cd service && php artisan test --filter=OpenApiTest`.
-- [ ] 2.3 Committed export and drift check.
+- [x] 2.3 Committed export and drift check.
   - RED: `service/tests/Feature/OpenApiDriftTest.php` regenerates the document and compares it with `service/openapi.json`; fails because the file does not exist.
   - GREEN: composer script `openapi:export` (`php artisan scramble:export --path=openapi.json`, against Postgres), commit `service/openapi.json`.
   - Verify: `cd service && php artisan scramble:export --path=openapi.json && git diff --exit-code service/openapi.json`.
-- [ ] 2.4 Spectral lint, pinned.
+- [x] 2.4 Spectral lint, pinned.
   - RED: `cd tools/spectral && bun run lint` fails (no package, no ruleset).
   - GREEN: `tools/spectral/package.json` (Spectral exactly `6.16.3`), `tools/spectral/bun.lock`, root `.spectral.yaml` (zero errors and zero warnings required: `--fail-severity=warn`); fix the document, not the ruleset, when it reports.
   - Verify: `cd tools/spectral && bun install --frozen-lockfile && bun run lint`.
-- [ ] 2.5 Dockerfile.
+- [x] 2.5 Dockerfile.
   - RED: `service/tests/Feature/DockerfileTest.php` asserts pinned `php:8.5.8-fpm-alpine`, extensions `pdo_pgsql redis pcntl`, a multi-stage build, no frontend steps; fails (no file).
   - GREEN: `service/Dockerfile` mirroring BEAI `api/Dockerfile` (read-only reference `../api/Dockerfile`), minus frontend stages. If an image tag does not resolve when built, STOP.
   - Verify: `cd service && php artisan test --filter=DockerfileTest`.
-- [ ] 2.6 Compose api, worker and scheduler services.
+- [x] 2.6 Compose api, worker and scheduler services.
   - RED: `service/tests/Feature/ComposeTopologyTest.php` scenario "Compose services": parsed YAML lists `postgres`, `redis`, `api` (host 8100 -> 8000), `worker` (`queue:work`), `scheduler` (`schedule:work`); ports 55432/56379/8100; volume `hra-pgdata`; init script mounted.
   - GREEN: extend `service/docker-compose.yml`.
   - Verify: `cd service && php artisan test --filter=ComposeTopologyTest`.
-- [ ] 2.7 CI workflow `.github/workflows/service.yml`.
+- [x] 2.7 CI workflow `.github/workflows/service.yml`.
   - RED: `service/tests/Feature/CiWorkflowTest.php` parses the workflow: every `uses:` is pinned to a 40-hex commit SHA; jobs `service` (postgres 17 + redis 8 services; `pint --test`; `phpstan analyse`; `migrate`; `php artisan test --coverage --min=90`) and `openapi` (export, `git diff --exit-code service/openapi.json`, Spectral via `bun run lint`; `HRA_JWT_SECRET` 32-byte dummy for the non-test export step); the Bun setup step precedes any step that needs Bun. The high-integrity step is added in slice 4.
   - GREEN: `.github/workflows/service.yml`. SHAs for pinned actions must come from an authorized source (user-provided or an already-vendored lockfile); if not available, STOP and request authorization for a GitHub lookup. No push or remote run happens in this change.
   - Verify: `cd service && php artisan test --filter=CiWorkflowTest`.
