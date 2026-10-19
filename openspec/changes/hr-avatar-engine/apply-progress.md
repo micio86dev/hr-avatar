@@ -261,3 +261,33 @@ BEAI tests for these classes (`LlmBindingResolverTest` etc.) belong to slice 8; 
 - `last_four` is `null` for keys under 12 characters (`LastFour::of`, multibyte-safe).
 - The list entries for provider credentials are plain arrays with a `CredentialSource` enum (documented in OpenAPI), not a resource: they describe providers, not rows.
 - Common 401/404/429 Problem responses remain undocumented in `openapi.json` (see slice 5).
+
+## Slice 8: Avatar config and ledger persistence, LLM binding (tasks 8.1-8.3) - complete
+
+Commit subject: `feat(service): add avatar config and provider resource persistence with LLM binding resolution`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 8.1 | `tests/Unit/HasPrefixedIdTest.php` | trait not found; then `isValidUniqueId` undefined (8 errors) | 11/11 | the second RED is a real defect found while writing the test: `HasUlids` only accepts a bare ULID during route binding, which would make every `avc_` id a 404, so the trait overrides `isValidUniqueId` (prefix + ULID) |
+| 8.2 | `AvatarConfigModelTest.php`, `ProviderResourceTest.php` | dataset could not load (`ResourceKind` missing), then 1 failure | 33/33 | jsonb does not keep key order (assertions compare order-insensitively); `JsonObject` cast writes `{}` for an empty object and refuses a list or scalar; DB CHECKs keep `config`, `persona`, `voice`, `provider_state` objects |
+| 8.3 | `tests/Unit/LlmBindingResolverTest.php` | class not found (10 errors) | 10/10 | ported from BEAI `LlmBindingResolverTest` (unbound -> null, bound -> full binding, unresolvable -> null and never throws, undecryptable key -> null); the BEAI billing tri-state and `heygenConfigurationId` are not carried |
+
+### Work Unit Evidence (slice 8)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='HasPrefixedId|AvatarConfigModel|ProviderResource|LlmBinding'` : 57 passed; full suite 664 passed, 2052 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8) passed; `openapi.json` unchanged (no route) |
+| Runtime harness | N/A by task: persistence and value objects only. `migrate --force` applied both migrations to the local `hra` database, and a tinker create under a bound account produced `avc_01m5a523sxxc9exeb44yqzrdzy` (30 characters) with raw `config` `{}` (the row was deleted again) |
+| Rollback boundary | migrations 100005-100006, `AvatarConfig`, `ProviderResource`, `App\AvatarProviders\{SyncStatus,ResourceKind}`, `Casts\JsonObject`, `HasPrefixedId`, `App\Llm`, two factories, their tests |
+
+### Deviations and decisions (slice 8)
+
+- Authored size about 880 lines (about 442 are tests), above the 400 budget. Three cohesive persistence tasks; recommend `size:exception`.
+- Added beyond the task: a `JsonObject` cast and DB CHECKs (`jsonb_typeof = 'object'`) on the four structured columns. A plain `array` cast stores `{}` as `[]`, the defect BEAI's public API shipped and later fixed (AD13 names it for `metadata`); the config, persona, voice and provider state have the same exposure. Whoever renders these columns (slice 16) must turn an empty array back into an object.
+- `avatar_configs.id` is `string(31)`, ids are lowercase (as `HasUlids` produces), 30 characters for `avc_`.
+- `avatar_configs` has an `(account_id, external_ref)` index for the `external_ref` list filter (reconciliation item 38), added now because it is a table concern; the filter itself belongs to slice 16.
+- `LlmBindingResolver::resolve()` returns null for both "no model bound" and "no usable key"; connect (slice 26) checks `llm_model_id` first to answer `422 llm_credential_missing` only for a bound config.
+- `LlmBinding` keeps its key private (read through `apiKey()`), omits it from JSON and `get_object_vars`, and refuses `serialize()`, like `ProviderAuth` (BEAI only redacted `__debugInfo`). The Guardian Angel review caught the first version, whose public `apiKey` property was written out by `json_encode`: RED test first (2 failures), then the property went private. A cast to array still exposes private properties and `var_export` ignores `__debugInfo`; the architecture test banning `var_export`/`print_r` is slice 31's.
+- The enums live in `App\AvatarProviders` (`SyncStatus`, `ResourceKind`), next to the contract they serve.

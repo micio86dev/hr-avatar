@@ -314,15 +314,15 @@ Reconciliation: 29. Design AD5, credentials section.
 Commit: `feat(service): add avatar config and provider resource persistence with LLM binding resolution`
 Specs: avatar-configs (resource shape), credentials (LLM binding). Design AD6.
 
-- [ ] 8.1 Prefixed ids.
+- [x] 8.1 Prefixed ids.
   - RED: `service/tests/Unit/HasPrefixedIdTest.php`: `avc_` + ULID, 31-char string key, prefix is per model.
   - GREEN: `service/app/Accounts/HasPrefixedId.php`.
   - Verify: `cd service && php artisan test --filter=HasPrefixedIdTest`.
-- [ ] 8.2 `avatar_configs` and `provider_resources`.
+- [x] 8.2 `avatar_configs` and `provider_resources`.
   - RED: `service/tests/Feature/AvatarConfigModelTest.php` and `ProviderResourceTest.php`: columns and CHECKs from the design data model (`sync_status` values, soft delete, `llm_model_id` FK restrict), `provider_state` jsonb round-trip, unique `(account_id, provider, key_fingerprint, kind, natural_key)`, both models carry `BelongsToAccount`, cross-account read is impossible.
   - GREEN: migrations, `service/app/Models/{AvatarConfig,ProviderResource}.php`, factories.
   - Verify: `cd service && php artisan test --filter='AvatarConfigModelTest|ProviderResourceTest'`.
-- [ ] 8.3 `LlmBinding` and `LlmBindingResolver`.
+- [x] 8.3 `LlmBinding` and `LlmBindingResolver`.
   - RED: port BEAI `LlmBindingResolver` tests (locate: `rg -l 'LlmBindingResolver' ../api/tests`, read-only): binding resolved from `AvatarConfig` + account credential; no `heygenConfigurationId` (read from `provider_state` by the adapter); `LlmBinding::__debugInfo` redacts the key; missing credential -> null.
   - GREEN: `service/app/Llm/{LlmBinding,LlmBindingResolver}.php`.
   - Verify: `cd service && php artisan test --filter=LlmBinding`.
