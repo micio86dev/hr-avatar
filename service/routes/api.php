@@ -9,6 +9,7 @@ use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
 use App\Http\Controllers\V1\ProviderCredentialController;
 use App\Http\Controllers\V1\VoicePreviewController;
+use App\Http\Controllers\V1\WebhookEndpointController;
 use App\Http\Middleware\RejectKeyInQuery;
 use Illuminate\Support\Facades\Route;
 
@@ -49,6 +50,14 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::patch('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'update'])->name('avatar-configs.update');
         Route::post('avatar-configs/{avatarConfig}/sync', [AvatarConfigController::class, 'sync'])->name('avatar-configs.sync');
         Route::delete('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'destroy'])->name('avatar-configs.destroy');
+    });
+
+    Route::middleware('scope:webhook_endpoints:manage')->group(function () {
+        Route::get('webhook-endpoints', [WebhookEndpointController::class, 'index'])->name('webhook-endpoints.index');
+        Route::post('webhook-endpoints', [WebhookEndpointController::class, 'store'])->name('webhook-endpoints.store');
+        Route::get('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'show'])->name('webhook-endpoints.show');
+        Route::patch('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'update'])->name('webhook-endpoints.update');
+        Route::delete('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'destroy'])->name('webhook-endpoints.destroy');
     });
 
     Route::post('conversations', [ConversationController::class, 'store'])->middleware('scope:conversations:write')->name('conversations.store');

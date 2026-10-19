@@ -15,13 +15,14 @@
             <directory>tests/Arch</directory>
         </testsuite>
     </testsuites>
-    <!-- Same suite, narrower coverage source: the zones held to 95 %. Later slices add the webhook
-         signer and the conversation state machine. -->
+    <!-- Same suite, narrower coverage source: the zones held to 95 %. Later slices add the
+         conversation state machine. -->
     <source>
         <include>
             <directory>app/Keys</directory>
             <directory>app/Accounts</directory>
             <directory>app/Http/Middleware</directory>
+            <directory>app/Webhooks/Outbound</directory>
         </include>
     </source>
     <coverage>

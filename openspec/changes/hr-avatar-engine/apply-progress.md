@@ -798,6 +798,8 @@ Unit 0 commit: `37d4e5f`.
 
 ## Slice 20: Conversations (model, create, show, config in-use guard) (tasks 20.1-20.4) - complete
 
+Slice 20 commit: `3b0507c`.
+
 Commit subject: `feat(service): add conversations and events schema with create and read endpoints`
 
 | Task | Test file | RED (observed) | GREEN | Notes |
@@ -853,3 +855,60 @@ repeated refusals run in a savepoint (`refused()`), as in slice 7.
   aware `find`, so another account's config and a deleted one are indistinguishable from an unknown id.
 - `Conversation::avatarConfig()` includes soft-deleted configs (`withTrashed`), since a conversation outlives its config.
 - Common 401/403/429 Problem responses remain undocumented in `openapi.json` (slice 31).
+
+## Slice 21: Consumer webhooks - endpoints, signing, destination safety (tasks 21.1-21.3) - complete
+
+Commit subject: `feat(service): add webhook endpoint management, HMAC signing and verification, and destination guard`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 21.1 | `tests/Unit/Webhooks/WebhookSignerTest.php` (24 cases) | 0 of 151 passed with 21.2-21.3: `WebhookSigner` not found | green | ported from BEAI `WebhookSignerTest`; the vectors were computed outside the code with `openssl dgst -sha256 -hmac`; verify window boundaries (300 accepted, 301 refused, both directions), tampered body / timestamp / secret, 9 malformed headers, retry re-signing, `encode()` unescaped slashes and unicode and `{}`, `JsonException` on bad UTF-8 |
+| 21.2 | `tests/Unit/Webhooks/OutboundHostGuardTest.php` (about 90 cases) | same run | green | ported from BEAI `OutboundHostGuardTest` and extended: IPv4/IPv6 literal datasets (shared address space, benchmarking, multicast, NAT64, IPv4-mapped), numeric host spellings, injected resolver (every resolved address checked, unresolvable allowed), real resolver for `localhost`, not-enforced mode |
+| 21.3 | `tests/Feature/WebhookEndpointTest.php` (about 45 cases) | same run | green | every spec scenario plus patch, delete, pagination, scope, isolation, limit (and its account row lock), secret never in any response after create / never logged / encrypted at rest |
+
+Test defects fixed on the way (no assertion weakened): none beyond the dataset labels.
+
+### Work Unit Evidence (slice 21)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='WebhookSignerTest\|OutboundHostGuardTest\|WebhookEndpointTest'`: all passed, exit 0 |
+| Full suite | see the batch totals at the end of the slice 24 section |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: `Webhooks/Outbound` classes 100.0 % each, total 100.0 % (the file now includes `app/Webhooks/Outbound`) |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `scramble:export` regenerated (5 operations, tag `Webhook endpoints`, `EventType` schema); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `serve --port=8100`, bootstrap account, curl: `POST /v1/webhook-endpoints` -> 201 with `secret` (`hra_whsec_` + 64 hex); `GET /v1/webhook-endpoints/{id}` the same body without it; a URL with credentials -> 422 `errors.url`; `DELETE` -> 204. Harness rows deleted |
+| Rollback boundary | migration 100010, `WebhookEndpoint` + factory, `app/Webhooks/Outbound`, `WebhookEndpointController`, the three requests, the two resources, the route block, the `OutboundHostGuard` binding in `AppServiceProvider`, the `phpunit.high-integrity.xml` line, their tests, `openapi.json` |
+
+### Deviations and decisions (slice 21)
+
+- **`RetryClassifier` and `SecretRedactor` are not built** (task 21.2 names them). The spec has no permanent-failure class: every non-2xx,
+  timeout, connection error and blocked destination is a failed attempt that is retried on the same schedule, so a classifier reduces to
+  "2xx is success" and lives in `DeliverWebhook` (slice 22) with the closed error codes. A `last_error` is one of `timeout`,
+  `connection_failed`, `destination_not_allowed`, `http_<status>`: it can never hold a secret or a body, so there is nothing to redact (the
+  same reasoning as slice 17's `sync_error`). `DeliveryStatus` is created with its first use in slice 22.
+- **Signer API** follows the design: `sign($secret, $timestamp, $body)` returns the header value (`v1=<hex>`), `verify($secret, $header,
+  $timestamp, $body, $now)` checks the window then compares with `hash_equals` against a freshly computed signature (so an uppercase,
+  truncated or multi-valued header never verifies), and `encode()` stays the single place a payload becomes bytes (BEAI's hard rule).
+- **`OutboundHostGuard`** takes `enforced` (default true, fail closed) and an optional resolver closure. The container binding sets
+  `enforced = ! environment('local', 'testing')`, which is how both the https rule and the address vetting follow "outside local and
+  testing". `vettedAddresses()` returns the addresses the delivery must pin its connection to (empty when destinations are not enforced
+  or the host does not resolve) and throws `DestinationNotAllowed` (fixed message, never the URL or the address) otherwise.
+- Beyond PHP's private / reserved filter flags the guard also blocks 100.64.0.0/10 (shared address space, holds a cloud metadata
+  address), 192.0.0.0/24, 198.18.0.0/15, 224.0.0.0/4, 64:ff9b::/96 and ff00::/8, and every host written as a bare number (a resolver
+  reads `2130706433` or `0x7f.1` as an address). Hostname literals in these forms are refused whether or not the system resolver would
+  turn them into a private address. The numeric-host regex only matches names made entirely of numbers, so real names are unaffected.
+- A host that does not resolve is allowed at create / update (as BEAI), so an endpoint can be registered before its DNS exists; the
+  delivery pins to the addresses it vets and finds none (slice 22: `connection_failed`, no request sent).
+- The URL rule is a reusable `DestinationUrl` validation rule: https (or http where not enforced), a host, no control characters or
+  spaces, no user info, nothing the guard refuses. Messages are fixed sentences and never repeat the URL.
+- The 20-endpoint limit is checked inside a transaction holding the account row lock (`SELECT ... FOR UPDATE` on `accounts`), so two
+  concurrent creates cannot both take the last slot. The tests pin the mechanism (one connection cannot interleave two requests). The
+  answer is 422 `validation_failed` with a `detail` and no field error, since no single field is at fault.
+- `events` must be a non-empty list of distinct known names (an endpoint subscribed to nothing is useless and a DB CHECK keeps it that
+  way); `description` is limited to 255 characters (the spec gives no limit).
+- Route parameter is `{webhookEndpoint}` (implicit binding applies the account scope), not `{id}`.
+- `PATCH` ignores `secret`, `id` and `account_id` in the body; there is no secret rotation endpoint (not in the spec). Deleting an
+  endpoint cascades to its deliveries once slice 22 adds that table with `ON DELETE CASCADE`.
+- Authored size 1,265 lines (592 tests), above the 400 budget: signer, guard, the validation rule and the endpoint family
+  with the full matrices. Recommend `size:exception`.

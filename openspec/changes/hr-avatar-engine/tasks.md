@@ -537,15 +537,16 @@ Specs: conversations (create, read, config in-use). Reconciliation: 1, 15, 18.
 Commit: `feat(service): add webhook endpoint management, HMAC signing and verification, and destination guard`
 Specs: consumer-webhooks (endpoint management, SSRF, signing). Reconciliation: 26, 27, 28. High-integrity zone: `WebhookSigner`.
 
-- [ ] 21.1 `WebhookSigner` sign and verify.
+- [x] 21.1 `WebhookSigner` sign and verify.
   - RED: port BEAI `WebhookSigner` tests (read-only locate) to `service/tests/Unit/WebhookSignerTest.php`: scenarios "Known vector" (`v1=` + lowercase hex hmac_sha256 of `{ts}.{body}`), "Verifier accepts a fresh delivery", "Replay outside the window" (> 300 s), "Future timestamp outside the window", "Tampered body", "Wrong secret"; `hash_equals`.
   - GREEN: `service/app/Webhooks/Outbound/WebhookSigner.php`; add the file to the coverage source of `service/phpunit.high-integrity.xml`.
   - Verify: `cd service && php artisan test --filter=WebhookSignerTest`.
-- [ ] 21.2 `OutboundHostGuard`, `RetryClassifier`, `SecretRedactor`.
+- [x] 21.2 `OutboundHostGuard` (`RetryClassifier` and `SecretRedactor` dropped, see apply-progress slice 21).
   - RED: port BEAI tests (read-only locate: `OutboundHostGuard`, `RetryClassifier`, `SecretRedactor`): private, loopback and link-local literals refused ("Private address literal"), IPv6 and IPv4-mapped forms, every resolved address checked; retry classification; redaction of secrets in messages.
-  - GREEN: `service/app/Webhooks/Outbound/{OutboundHostGuard,RetryClassifier,SecretRedactor}.php`, `EventType`, `DeliveryStatus` enums.
+  - GREEN: `service/app/Webhooks/Outbound/{OutboundHostGuard,EventType}.php` (+ `DestinationNotAllowed`, `DestinationUrl`); `DeliveryStatus` lands with its first use in slice 22.
+  - Note (apply): the spec has no permanent-failure class (every non-2xx is retried) and a `last_error` from a closed set of codes can never hold a secret, so a retry classifier and a redactor would be dead code. Same reasoning as slice 17's `sync_error`.
   - Verify: `cd service && php artisan test --filter='OutboundHostGuard|RetryClassifier|SecretRedactor'`.
-- [ ] 21.3 Endpoint management.
+- [x] 21.3 Endpoint management.
   - RED: `service/tests/Feature/WebhookEndpointTest.php` scenarios "Create returns the secret once" (`hra_whsec_` + 64 hex, absent from GET/list), "Non-https URL" (allowed only in `local`/`testing`), "Embedded credentials", "Unknown event name", "Limit" (21st endpoint -> 422), "Account isolation", "Secret encrypted at rest", URL <= 2048, private-address URL -> 422 at create outside local/testing, PATCH (`url`, `events`, `enabled`, `description`), DELETE 204, paginated list, scope `webhook_endpoints:manage`.
   - GREEN: migration `webhook_endpoints`, `service/app/Models/WebhookEndpoint.php` (`secret` encrypted + hidden), `WebhookEndpointController`, requests, resource, routes.
   - Verify: `cd service && php artisan test --filter=WebhookEndpointTest && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`.

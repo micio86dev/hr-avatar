@@ -5,8 +5,10 @@ namespace App\Providers;
 use App\Accounts\CurrentAccount;
 use App\Http\OpenApi\DocumentIdentity;
 use App\Http\OpenApi\SecurityDocumentation;
+use App\Webhooks\Outbound\OutboundHostGuard;
 use Dedoc\Scramble\Scramble;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
@@ -25,6 +27,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(CurrentAccount::class);
+
+        // Webhook destinations are vetted everywhere except on a developer's machine and in tests.
+        $this->app->singleton(OutboundHostGuard::class, fn (Application $app) => new OutboundHostGuard(! $app->environment('local', 'testing')));
 
         // The documentation UI lives outside /v1; the committed openapi.json is the published contract.
         Scramble::ignoreDefaultRoutes();

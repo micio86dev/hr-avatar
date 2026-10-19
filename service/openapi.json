@@ -31,6 +31,9 @@
         },
         {
             "name": "Health"
+        },
+        {
+            "name": "Webhook endpoints"
         }
     ],
     "paths": {
@@ -1274,6 +1277,236 @@
                 ]
             }
         },
+        "/webhook-endpoints": {
+            "get": {
+                "operationId": "webhook-endpoints.index",
+                "description": "The account's endpoints, newest first. The secret is never returned after creation.",
+                "summary": "List webhook endpoints",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/WebhookEndpointResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "webhook-endpoints.store",
+                "description": "The response carries the signing `secret` once (`hra_whsec_` and 64 hex characters); it cannot be\nread afterwards. The URL must be https, at most 2048 characters, without credentials, and must not\npoint at a private or reserved address (plain http is accepted only in development environments).\nAn account holds at most 20 endpoints; the 21st is a 422.",
+                "summary": "Create a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateWebhookEndpointRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CreatedWebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreatedWebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/webhook-endpoints/{webhookEndpoint}": {
+            "get": {
+                "operationId": "webhook-endpoints.show",
+                "description": "One endpoint of the account, without its secret. An endpoint of another account is a 404.",
+                "summary": "Show a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "webhook-endpoints.update",
+                "description": "Each member sent replaces the stored one; members left out are kept. A new URL is checked like the\nURL of a new endpoint. The secret cannot be changed.",
+                "summary": "Update a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateWebhookEndpointRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "webhook-endpoints.destroy",
+                "description": "Deliveries still waiting for a retry stop with it.",
+                "summary": "Delete a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
         "/health": {
             "get": {
                 "operationId": "health.live",
@@ -1848,6 +2081,39 @@
                 ],
                 "title": "CreateConversationRequest"
             },
+            "CreateWebhookEndpointRequest": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Where the events are sent: an https URL of at most 2048 characters, without credentials and not on a private address.",
+                        "maxLength": 2048
+                    },
+                    "events": {
+                        "type": "array",
+                        "description": "The events to receive. All three when left out.",
+                        "items": {
+                            "$ref": "#/components/schemas/EventType"
+                        }
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether events are sent to this endpoint."
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A note of the host's own, up to 255 characters.",
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "url"
+                ],
+                "title": "CreateWebhookEndpointRequest"
+            },
             "CreatedConversationResource": {
                 "type": "object",
                 "properties": {
@@ -1939,6 +2205,50 @@
                 ],
                 "title": "CreatedConversationResource"
             },
+            "CreatedWebhookEndpointResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    },
+                    "secret": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "events",
+                    "enabled",
+                    "description",
+                    "created_at",
+                    "updated_at",
+                    "secret"
+                ],
+                "title": "CreatedWebhookEndpointResource"
+            },
             "CredentialSource": {
                 "type": "string",
                 "description": "Whose key a provider call would be made with, as the credential list reports it.\n",
@@ -1962,6 +2272,16 @@
                     "provider_capacity"
                 ],
                 "title": "EndedReason"
+            },
+            "EventType": {
+                "type": "string",
+                "description": "The events an endpoint can subscribe to. The values are the `type` of the delivered body.\n",
+                "enum": [
+                    "conversation.live",
+                    "conversation.ended",
+                    "transcript.ready"
+                ],
+                "title": "EventType"
             },
             "IssuedApiKeyResource": {
                 "type": "object",
@@ -2296,6 +2616,36 @@
                 },
                 "title": "UpdateAvatarConfigRequest"
             },
+            "UpdateWebhookEndpointRequest": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Where the events are sent: an https URL of at most 2048 characters, without credentials and not on a private address.",
+                        "maxLength": 2048
+                    },
+                    "events": {
+                        "type": "array",
+                        "description": "The events to receive. All three when left out.",
+                        "items": {
+                            "$ref": "#/components/schemas/EventType"
+                        }
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether events are sent to this endpoint."
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A note of the host's own, up to 255 characters.",
+                        "maxLength": 255
+                    }
+                },
+                "title": "UpdateWebhookEndpointRequest"
+            },
             "VoicePreviewRequest": {
                 "type": "object",
                 "description": "The body of a voice preview: which voice, and in which language to hear it. There is no member for the\nsentence and no way to add one: any key outside these four is refused. The voice id is placed in a\nvendor url, so it is limited to what an id is made of.",
@@ -2340,6 +2690,46 @@
                     "language"
                 ],
                 "title": "VoicePreviewRequest"
+            },
+            "WebhookEndpointResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "events",
+                    "enabled",
+                    "description",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "WebhookEndpointResource"
             }
         },
         "responses": {
