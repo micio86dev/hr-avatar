@@ -21,6 +21,9 @@
             "name": "Avatar configs"
         },
         {
+            "name": "Catalogue"
+        },
+        {
             "name": "Credentials"
         },
         {
@@ -532,6 +535,207 @@
                     },
                     "409": {
                         "description": "The config needs no provider-side objects (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/catalogue": {
+            "get": {
+                "operationId": "catalogue.index",
+                "description": "For every provider: the settings its avatar configs accept (`fields` for `config`,\n`persona_fields` for `persona`: key, type, whether required, limits and allowed values), the\nresources it can list, and the voice engines it speaks with. Makes no provider call.",
+                "summary": "Describe the providers",
+                "tags": [
+                    "Catalogue"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": {}
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/catalogue/{provider}/{resource}": {
+            "get": {
+                "operationId": "catalogue.show",
+                "description": "Fetches what the account can pick from at the provider (for example avatars, voices, replicas\nor personas) with the account's credential, else the platform's, and returns normalized\nentries. `language` is set only when the provider states it. The result is cached for five\nminutes per credential; `fresh=1` skips the cache. The provider's raw answer, errors and keys\nare never returned.",
+                "summary": "List a provider's inventory",
+                "tags": [
+                    "Catalogue"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "resource",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "language": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_audio_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_audio_via_api": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "preview_image_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_video_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "name",
+                                                    "language",
+                                                    "preview_audio_url",
+                                                    "preview_audio_via_api",
+                                                    "preview_image_url",
+                                                    "preview_video_url"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "No credential is available for the provider (`provider_credential_missing`).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Errors overview."
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "description": "A detailed description of each field that failed validation.",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The provider does not list that resource.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The provider failed or could not be reached (`provider_error`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {

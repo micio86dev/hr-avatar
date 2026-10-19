@@ -41,6 +41,7 @@ final class TavusProvider implements AvatarProvider
     public function __construct(
         private readonly TavusConcurrencyGuard $guard = new TavusConcurrencyGuard,
         private readonly TavusPersonaSync $personas = new TavusPersonaSync,
+        private readonly TavusCatalogue $catalogue = new TavusCatalogue,
     ) {}
 
     public function ingestion(): Ingestion
@@ -74,6 +75,11 @@ final class TavusProvider implements AvatarProvider
     public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult
     {
         return $this->personas->sync($config, $auth);
+    }
+
+    public function catalogue(string $resource, ProviderAuth $auth): array
+    {
+        return $this->catalogue->list($resource, $auth);
     }
 
     /**

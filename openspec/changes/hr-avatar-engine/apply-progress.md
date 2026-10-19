@@ -634,3 +634,50 @@ and the registrar spread it. `AvatarConfig` now declares the column defaults (`c
 - Guardian Angel findings fixed: the sync state (`sync_status`, `sync_error`, `synced_at`) and `provider_state` are no longer mass-assignable
   on `AvatarConfig` (written with `forceFill`; a test helper that relied on it was corrected), the controller docs no longer name providers,
   and two stray comments (`ponytail:` marker, an adapter named in the contract docblock) were reworded.
+
+## Slice 18: Catalogue (tasks 18.1-18.2) - complete
+
+Commit subject: `feat(service): add provider catalogue endpoints with cache`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 18.1 | `tests/Unit/AvatarProviders/Tavus/TavusCatalogueTest.php`, `LiveAvatar/LiveAvatarCatalogueTest.php`, `CatalogueEntryTest.php`, `MockCatalogueTest.php` | classes missing (`LiveAvatarCatalogue` not in the container, 31 failures of 71 on the first run, rest errors) | 56/56 | ported from BEAI `AvatarProviderCatalogueTest` and `TavusPalEditableCatalogueTest`: faces with thumbnails and untrained ones skipped, pals list id and name only (no prompt, no layers), pagination past ten and the page bound, LiveAvatar public plus own lists merged, expired and inactive avatars dropped, dedupe, private voices tolerated, language verbatim, failures carry the status only. Italian detection, the `editable` flag, `label`, `locale`, `accent` and the HR-Avatar-as-a-provider branch are dropped |
+| 18.2 | `tests/Feature/CatalogueEndpointTest.php` | 404 on both routes (all failures) | 22/22 | describe without any call; 404 for an unknown pair before any credential lookup; `422 provider_credential_missing`; `502 provider_error` for every provider failure including a provider 429; 300 s cache keyed by owner, key fingerprint, provider, resource; `fresh=1`; account A never served from B's entry |
+
+### Work Unit Evidence (slice 18)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='CatalogueEntryTest\|TavusCatalogueTest\|LiveAvatarCatalogueTest\|MockCatalogueTest\|CatalogueEndpointTest\|Scan'`: 122 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1480 passed, 3855 assertions; `--coverage --min=90`: total 100.0 %, exit 0 |
+| High integrity | `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 1480 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed |
+| OpenAPI | regenerated (`GET /catalogue`, `GET /catalogue/{provider}/{resource}`: 200, 404, 422, 502); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `serve --port=8100`, bootstrap account: `GET /v1/catalogue` lists `mock` (0 fields), `heygen` (avatar, voice; 9 fields), `tavus` (replica, pal; 4 fields); `GET /v1/catalogue/tavus/replica` with no key stored -> 422 `provider_credential_missing`; `.../tavus/voice` -> 404; the harness account was deleted |
+| Rollback boundary | `CatalogueEntry`, `TavusCatalogue`, `LiveAvatarCatalogue`, the `catalogue` interface method and adapter methods, the two constructor dependencies, `CatalogueController`, `CatalogueRequest`, the two routes, the scan-test allowance, `openapi.json`, their tests |
+
+### Deviations and decisions (slice 18)
+
+- Authored size about 1,152 lines (about 660 tests), above the 400 budget: two adapters' catalogues with their paging and failure
+  matrices, plus the endpoint and the cache; recommend `size:exception`.
+- `GET /v1/catalogue` answers `{data: [{provider, fields, persona_fields, resources, voice_engines}]}` for every registry provider
+  (Mock included, with nothing to list). Slice 19 appends the voice vendors (`cartesia`, `elevenlabs`) to the same list.
+- `GET /v1/catalogue/{provider}/{resource}` answers `{data: [entries]}` (not paginated: the adapter bounds the walk at 20 pages of 100).
+- A provider failure is always `502 provider_error`, including a provider 429: the renderer's mapping of a throttle to
+  `429 provider_concurrency_limited` is about starting conversations, not about reading an inventory.
+- Cache key `hra:catalogue:{owner}:{fingerprint}:{provider}:{resource}`, 300 s, failures never cached, an empty answer is cached like any
+  other (BEAI did not cache empties; with a five-minute lifetime and `fresh=1` that is not worth a branch). Accounts on the platform key
+  share one entry on purpose: it is the same inventory.
+- **Tavus personas: one list call, no `editable` flag.** BEAI made three calls per persona listing to mark which personas the account may
+  PATCH. The normalized entry has exactly the spec's members, so the flag cannot be returned; open item for the owner: a stock Tavus
+  persona is listed and a sync that has persona knobs to push to it fails with `Provider request failed (status 400)`.
+- `preview_audio_via_api` is true for LiveAvatar voices (the sample exists only behind `POST /v1/voice-preview`, slice 19); BEAI left it
+  false because its sample route was a different endpoint. Tavus voices are not a resource here (BEAI listed them; a Tavus voice is
+  picked through the external vendors).
+- The Tavus file scan allows exactly one more call: a GET built from `self::BASE_URL.$path` (the face and persona lists), and a new test
+  asserts that only `TavusCatalogue.php` does it and that it never mentions a conversation.
+- Guardian Angel finding fixed (RED first): the private-voice list of the **platform key** is not read. LiveAvatar holds every account's
+  bound third-party voices in the platform's one space, so listing them would have shown one account's voice ids to another (a
+  cross-account read). An account's own key still lists its private voices. The status filters stay fail-open for a row that states
+  no status (as BEAI had it), now stated in the class docs. The duplicated Tavus HTTP setup (a second `x-api-key` call next to
+  `TavusProvider::http()`) was left: the catalogue has its own base path and timeout, and sharing would couple the two classes.

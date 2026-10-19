@@ -12,7 +12,7 @@ use App\Models\AvatarConfig;
  *
  * Every network operation receives the resolved ProviderAuth (last, except that `start` is
  * followed by its optional callback URL). This interface grows slice by slice with the operations
- * that have an implementation; the catalogue operation arrives with its own.
+ * that have an implementation.
  */
 interface AvatarProvider
 {
@@ -46,6 +46,16 @@ interface AvatarProvider
      * @throws SyncBlocked something the sync needs is missing; nothing was sent
      */
     public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult;
+
+    /**
+     * What the account can pick from at the provider for one of the resources `describe()` lists
+     * (an avatar, a replica, a voice...), in the shared shape. Only called for a listed resource.
+     *
+     * @return list<CatalogueEntry>
+     *
+     * @throws ProviderException the provider refused the request or could not be reached
+     */
+    public function catalogue(string $resource, ProviderAuth $auth): array;
 
     /**
      * Starts a provider session for a conversation. Runs outside any database transaction.

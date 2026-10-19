@@ -58,6 +58,11 @@ final class MockProvider implements AvatarProvider
         return SyncResult::notRequired();
     }
 
+    public function catalogue(string $resource, ProviderAuth $auth): array
+    {
+        return [];
+    }
+
     public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession
     {
         $ref = "mock_{$conversationId}";

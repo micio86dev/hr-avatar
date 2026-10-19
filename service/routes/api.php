@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\V1\ApiKeyController;
 use App\Http\Controllers\V1\AvatarConfigController;
+use App\Http\Controllers\V1\CatalogueController;
 use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
@@ -36,6 +37,8 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
     Route::middleware('scope:avatar_configs:read')->group(function () {
         Route::get('avatar-configs', [AvatarConfigController::class, 'index'])->name('avatar-configs.index');
         Route::get('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'show'])->name('avatar-configs.show');
+        Route::get('catalogue', [CatalogueController::class, 'index'])->name('catalogue.index');
+        Route::get('catalogue/{provider}/{resource}', [CatalogueController::class, 'show'])->name('catalogue.show');
     });
 
     Route::middleware('scope:avatar_configs:write')->group(function () {

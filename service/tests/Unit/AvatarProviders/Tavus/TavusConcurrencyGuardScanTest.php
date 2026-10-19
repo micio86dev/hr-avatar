@@ -51,7 +51,7 @@ it('never reaches for a conversation list or an active status', function (string
         ->not->toMatch('/\/conversations\?/');
 })->with(fn () => array_map(fn (string $code, string $file) => [$file, $code], tavusAdapterCode(), array_keys(tavusAdapterCode())));
 
-it('only creates a conversation, addresses the one it was given, or updates the one persona it syncs', function (string $file, string $code) {
+it('only creates a conversation, addresses the one it was given, updates the one persona it syncs, or lists the inventory', function (string $file, string $code) {
     preg_match_all('/->(get|post|put|patch|delete|head)\(([^;]*)/', $code, $calls, PREG_SET_ORDER);
 
     $strangers = array_filter($calls, function (array $call): bool {
@@ -61,7 +61,10 @@ it('only creates a conversation, addresses the one it was given, or updates the 
         // The persona update of TavusPersonaSync: one PATCH on the persona id of the config being synced.
         $isPersonaUpdate = $verb === 'patch' && str_contains($arguments, 'rawurlencode($personaId)');
 
-        return ! $isCreate && ! $isPersonaUpdate && ! str_contains($arguments, '$sessionRef');
+        // The inventory listing of TavusCatalogue: a GET of a face or persona list, never of conversations.
+        $isInventoryList = $verb === 'get' && str_contains($arguments, 'self::BASE_URL.$path');
+
+        return ! $isCreate && ! $isPersonaUpdate && ! $isInventoryList && ! str_contains($arguments, '$sessionRef');
     });
 
     expect(array_column($strangers, 0))->toBe([], $file);
@@ -71,4 +74,12 @@ it('updates a persona from the persona sync alone', function () {
     $patchers = array_keys(array_filter(tavusAdapterCode(), fn (string $code) => preg_match('/->patch\(/', $code) === 1));
 
     expect($patchers)->toBe(['TavusPersonaSync.php']);
+});
+
+it('lists the inventory from the catalogue alone, and the catalogue never mentions a conversation', function () {
+    $code = tavusAdapterCode();
+    $listers = array_keys(array_filter($code, fn (string $source) => str_contains($source, 'self::BASE_URL.$path')));
+
+    expect($listers)->toBe(['TavusCatalogue.php'])
+        ->and(strtolower($code['TavusCatalogue.php']))->not->toContain('conversation');
 });

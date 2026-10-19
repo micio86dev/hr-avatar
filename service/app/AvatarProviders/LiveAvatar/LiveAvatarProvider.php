@@ -56,6 +56,7 @@ final class LiveAvatarProvider implements AvatarProvider
         private readonly LiveAvatarLlmRegistrar $llm,
         private readonly LlmBindingResolver $bindings,
         private readonly CredentialResolver $credentials,
+        private readonly LiveAvatarCatalogue $catalogue,
     ) {}
 
     public function ingestion(): Ingestion
@@ -120,6 +121,11 @@ final class LiveAvatarProvider implements AvatarProvider
         }
 
         return SyncResult::synced();
+    }
+
+    public function catalogue(string $resource, ProviderAuth $auth): array
+    {
+        return $this->catalogue->list($resource, $auth);
     }
 
     /**

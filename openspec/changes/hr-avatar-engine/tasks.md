@@ -482,11 +482,11 @@ Specs: avatar-configs (sync requirement). Reconciliation: 30, 33.
 Commit: `feat(service): add provider catalogue endpoints with cache`
 Specs: avatar-configs (catalogue). Reconciliation: 31.
 
-- [ ] 18.1 Adapter catalogues.
+- [x] 18.1 Adapter catalogues.
   - RED: port BEAI `AvatarProviderCatalogueTest`, `TavusPalEditableCatalogueTest` (locate by name in `../api/tests`, read-only) as `service/tests/Unit/AvatarProviders/{TavusCatalogue,LiveAvatarCatalogue}Test.php`; Italian-detection assertions dropped; entries normalized `{id, name, language|null, preview_audio_url|null, preview_audio_via_api, preview_image_url|null, preview_video_url|null}`, `language` only when the provider states it.
   - GREEN: `service/app/AvatarProviders/{CatalogueEntry}.php`, `Tavus/TavusCatalogue.php`, `LiveAvatar/LiveAvatarCatalogue.php`, `catalogue` on the interface and adapters (Mock returns `[]`).
   - Verify: `cd service && php artisan test --filter='TavusCatalogueTest|LiveAvatarCatalogueTest'`.
-- [ ] 18.2 Endpoints and cache.
+- [x] 18.2 Endpoints and cache.
   - RED: `service/tests/Feature/CatalogueEndpointTest.php`: `GET /v1/catalogue` returns `describe()` per provider with no provider call; `GET /v1/catalogue/{provider}/{resource}` unknown pair 404, missing credential `422 provider_credential_missing`, provider failure `502 provider_error`; cache key `(credential owner, key fingerprint, provider, resource)` TTL 300 s; `fresh=1` bypasses; account A's cache never serves account B (different fingerprint).
   - GREEN: `service/app/Http/Controllers/V1/CatalogueController.php`, routes (`avatar_configs:read`).
   - Verify: `cd service && php artisan test --filter=CatalogueEndpointTest && php artisan test --coverage --min=90`.

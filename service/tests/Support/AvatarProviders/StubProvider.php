@@ -43,6 +43,11 @@ abstract class StubProvider implements AvatarProvider
         return SyncResult::notRequired();
     }
 
+    public function catalogue(string $resource, ProviderAuth $auth): array
+    {
+        return [];
+    }
+
     public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession
     {
         return new ProviderSession('stub_'.$conversationId, null, new JoinMaterial('stub', 'mock', null, null, new \DateTimeImmutable));
