@@ -291,3 +291,38 @@ Commit subject: `feat(service): add avatar config and provider resource persiste
 - `LlmBindingResolver::resolve()` returns null for both "no model bound" and "no usable key"; connect (slice 26) checks `llm_model_id` first to answer `422 llm_credential_missing` only for a bound config.
 - `LlmBinding` keeps its key private (read through `apiKey()`), omits it from JSON and `get_object_vars`, and refuses `serialize()`, like `ProviderAuth` (BEAI only redacted `__debugInfo`). The Guardian Angel review caught the first version, whose public `apiKey` property was written out by `json_encode`: RED test first (2 failures), then the property went private. A cast to array still exposes private properties and `var_export` ignores `__debugInfo`; the architecture test banning `var_export`/`print_r` is slice 31's.
 - The enums live in `App\AvatarProviders` (`SyncStatus`, `ResourceKind`), next to the contract they serve.
+
+## Slice 9: Provider contract, registry, Mock (tasks 9.1-9.4) - complete
+
+Commit subject: `feat(service): add the provider contract, registry and Mock adapter`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 9.1 | `tests/Unit/AvatarProviders/ProviderSessionTest.php` (ported from BEAI `ProviderTokenTest`), `ProviderExceptionTest.php`, `ProblemRendererTest.php` additions | datasets could not load (value objects missing); the renderer cases answered 500 instead of 502/429 | 99/99 with 9.2-9.4 | the BEAI `fromRef` provider guard became a constructor guard on `JoinMaterial`; the renderer maps `ProviderException` to 502 `provider_error` or, for a throttle, 429 `provider_concurrency_limited` |
+| 9.2 | `ProviderRegistryTest.php` (+ `tests/Support/AvatarProviders/{StubProvider,CallbackStubProvider,PollStubProvider}`) | `ProviderRegistry` / `AvatarProvider` missing | green | ingestion modes per adapter come from stub adapters; registry data is `config('hr-avatar.providers')` only |
+| 9.3 | `MockProviderTest.php` | `MockProvider` missing | green | state (ended flag, opening text) lives in the shared cache; proven against the real Redis in the harness below |
+| 9.4 | `tests/Feature/AvatarProviders/StrayRequestsContractTest.php` | n/a (the guard is `Pest.php`'s `Http::preventStrayRequests()`); the test pins it for the adapter namespace | green | also asserts the shipped adapters make no request without a fake |
+
+Extra contract test: `JoinMaterial::toArray()` keys must equal the members of the SDK's `JoinMaterial` interface (read from `sdk/src/api.ts`), so service and SDK cannot drift on `provider`, `transport`, `conversation_url`, `session_token`, `expires_at` (see `apply-progress-sdk.md`).
+
+### Work Unit Evidence (slice 9)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='AvatarProviders|ProblemRenderer'` : 99 passed; full suite 741 passed, 2302 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8) passed; `openapi.json` unchanged; Spectral clean |
+| Runtime harness | N/A by task (internal contract). Exercised against the local Redis through the container: `ProviderRegistry` lists `mock` (no credential), `start` returned `{"provider":"mock","transport":"mock","conversation_url":"mock://conversation/conv_harness","session_token":"mock_token_conv_harness","expires_at":"..."}`, `fetchSession` ended false then true after `teardown`, transcript line `Hi!` |
+| Rollback boundary | `app/AvatarProviders` (everything in this slice, not `SyncStatus`/`ResourceKind`), the `providers` block in `config/hr-avatar.php`, the `ProviderException` branch in `ProblemRenderer`, `tests/Support/AvatarProviders`, and their tests |
+
+### Deviations and decisions (slice 9)
+
+- Authored size about 1,090 lines (about 545 are tests), above the 400 budget. Four cohesive tasks (value objects, registry, Mock, guard); recommend `size:exception`.
+- **Contract change needing owner sign-off:** `start` takes the conversation id as its first argument, `start(string $conversationId, ConversationSpec, AvatarConfig, ProviderAuth, ?string $callbackUrl)`. The spec and design give `start` no conversation id, yet the Mock must return `mock_{I}` / `mock://conversation/{I}` and the LiveAvatar context is named `hra-{conversationId}-{ulid}`. `ConversationSpec` is "exactly" five members, so the id could not live there. Slices 10-14 and 26 must pass it; Tavus ignores it.
+- `ProviderException` has a private constructor and three named constructors (`fromStatus`, `throttled`, `noResponse`) and no `previous` parameter: the exception that a failed HTTP call raised holds the request headers (the API key) and the response body, so it can never be attached. It implements `context()` so Laravel logs the status class only. A failure with no HTTP status reads `Provider request failed (no response)`, not the spec's `(status N)` form.
+- `JoinMaterial.transport` is a `Transport` enum (`daily`, `liveavatar`, `mock`) as the spec fixes; it lives in `App\AvatarProviders`, not in any core namespace. `sessionToken` stays a public member (it is what the browser receives) and is redacted in dumps.
+- Every adapter method takes a `ProviderAuth`, including the Mock, which has no credential. Slice 26 must hand a placeholder to a provider whose registry entry says `credential: false` (a `ProviderAuth::none()` or a nullable parameter; left open so that the real adapters keep a non-null type).
+- The interface still has only the six runtime operations; `describe`, `validateConfig`, `syncRequired` (slice 15), `sync` (17) and `catalogue` (18) are added with their implementations, as the task notes require.
+- The interface docblock says ProviderAuth comes last except that `start` is followed by its optional callback URL (the design's own signature; the review flagged the docblock, not the order). The config header comment now lists only what is still to come.
+- Mock opening text is stored in the shared cache for a day (the transcript operation has no other way to see it).
+- `LlmBindingResolver` docblock narrowed ("never throws" became "null instead of an exception, infrastructure failures still propagate") after the slice 8 review note.

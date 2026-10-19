@@ -1,9 +1,11 @@
 <?php
 
+use App\AvatarProviders\Mock\MockProvider;
+
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
- * Each later slice adds the keys it reads (token claims, publishable limit, release delay, duration
- * ceiling, provider registry, platform keys, voice vendors).
+ * A key is added by the slice that reads it. Still to come: the release delay, the duration ceiling,
+ * the Tavus retry settings, the catalogue cache lifetime and the voice vendor classes.
  */
 return [
 
@@ -17,7 +19,20 @@ return [
     */
     'jwt_secret' => env('HRA_JWT_SECRET'),
 
-    /* Providers an account may store a key for, in the order the credential list reports them. */
+    /*
+    | The provider registry: id => adapter class, whether the provider needs a credential, and
+    | optionally the prefix of its event keys (default: the id). This file is the only place,
+    | outside the adapters, where a provider's name appears.
+    */
+    'providers' => [
+        'mock' => ['adapter' => MockProvider::class, 'credential' => false],
+    ],
+
+    /*
+    | Providers an account may store a key for, in the order the credential list reports them: the
+    | two avatar providers and the two voice vendors, as the credentials spec fixes them. Read by
+    | CredentialResolver and the credential endpoints.
+    */
     'credential_providers' => ['tavus', 'heygen', 'cartesia', 'elevenlabs'],
 
     /*

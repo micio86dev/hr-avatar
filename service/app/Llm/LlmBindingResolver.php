@@ -7,9 +7,10 @@ use App\Models\AvatarConfig;
 use Illuminate\Contracts\Encryption\DecryptException;
 
 /**
- * Turns a config's bound model and the account's key into an LlmBinding. Never throws: it
- * returns null for a config with no model, for a model that no longer resolves, and for an
- * account with no usable key. Whoever needs to tell "unbound" from "key missing" checks
+ * Turns a config's bound model and the account's key into an LlmBinding. A binding that cannot
+ * be built is null, not an exception: that is the answer for a config with no model, for a model
+ * that no longer resolves, and for an account with no usable key (infrastructure failures, such as
+ * the database being down, still propagate). Whoever needs to tell "unbound" from "key missing" checks
  * `llm_model_id` first (connect does, to answer `llm_credential_missing`).
  *
  * A stored key that cannot be decrypted counts as missing: there is no platform fallback to

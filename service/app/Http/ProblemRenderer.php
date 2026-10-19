@@ -2,6 +2,8 @@
 
 namespace App\Http;
 
+use App\AvatarProviders\FailureClass;
+use App\AvatarProviders\ProviderException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +23,10 @@ final class ProblemRenderer
     {
         if ($e instanceof ApiProblem) {
             return Problem::make($request, $e->errorCode, $e->detail, $e->errors, $e->headers, $e->extra);
+        }
+
+        if ($e instanceof ProviderException) {
+            return Problem::make($request, $e->failureClass() === FailureClass::Throttle ? ErrorCode::ProviderConcurrencyLimited : ErrorCode::ProviderError);
         }
 
         if ($e instanceof ValidationException) {

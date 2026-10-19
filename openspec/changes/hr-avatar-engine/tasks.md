@@ -332,19 +332,19 @@ Specs: avatar-configs (resource shape), credentials (LLM binding). Design AD6.
 Commit: `feat(service): add the provider contract, registry and Mock adapter`
 Specs: provider-adapters (provider contract, mock adapter, error redaction, contract fixtures). Reconciliation: 22, 23, 24, 33.
 
-- [ ] 9.1 Value objects, enums, exceptions.
+- [x] 9.1 Value objects, enums, exceptions.
   - RED: port BEAI `ProviderTokenTest` (`../api/tests/Unit/C7a/ProviderTokenTest.php`, read-only) as `service/tests/Unit/AvatarProviders/ProviderSessionTest.php`: scenario "Join material shape" (non-empty guard, no key material, `expiresAt`); `ProviderExceptionTest`: scenario "Redacted message" (`Provider request failed (status N)`, no body/header/credential, status class only in logs), `FailureClass::Throttle|Upstream|ClientError`.
   - GREEN: `service/app/AvatarProviders/{ConversationSpec,JoinMaterial,ProviderSession,SessionStatus,TranscriptLine,TranscriptNotReady,TranscriptShapeError,ProviderEvent,ProviderEventKind,Ingestion,ProviderException,FailureClass}.php`.
   - Verify: `cd service && php artisan test --filter='ProviderSessionTest|ProviderExceptionTest'`.
-- [ ] 9.2 `AvatarProvider` (runtime methods) and `ProviderRegistry`.
+- [x] 9.2 `AvatarProvider` (runtime methods) and `ProviderRegistry`.
   - RED: `service/tests/Unit/AvatarProviders/ProviderRegistryTest.php` scenarios "Registry resolves adapters", "Unknown provider" (domain error before any call), "Ingestion mode per adapter", `ids()`, `withIngestion()`, `requiresCredential()`, `eventKeyPrefix()` (`heygen` -> `liveavatar`); registry data lives only in `config/hr-avatar.php`.
   - GREEN: `service/app/AvatarProviders/{AvatarProvider,ProviderRegistry}.php`, `providers` block in `service/config/hr-avatar.php` (only `mock` at this point; `tavus` in slice 10, `heygen` in slice 13).
   - Verify: `cd service && php artisan test --filter=ProviderRegistryTest`.
-- [ ] 9.3 Mock adapter.
+- [x] 9.3 Mock adapter.
   - RED: `service/tests/Unit/AvatarProviders/MockProviderTest.php` scenarios "Deterministic output" (`mock_{id}` refs, `mock://conversation/{id}`, `mock_token_{id}`, `expiresAt` now + 3600), "No network" (`Http::preventStrayRequests()`), "Session ends after teardown" (cache flag `hra:mock:ended:{ref}`; `fetchSession` ended once set), `fetchTranscript` returns one `avatar` line with the opening text, else `[]`, `parseCallback` `[]`, `ingestion` `None`.
   - GREEN: `service/app/AvatarProviders/Mock/MockProvider.php`.
   - Verify: `cd service && php artisan test --filter=MockProviderTest`.
-- [ ] 9.4 Contract-fixture guard.
+- [x] 9.4 Contract-fixture guard.
   - RED: `service/tests/Feature/AvatarProviders/StrayRequestsContractTest.php` scenario "Stray requests blocked": a provider call without `Http::fake` throws.
   - GREEN: already provided by `Pest.php`; assert it for the adapter namespace.
   - Verify: `cd service && php artisan test --filter=StrayRequestsContractTest && php artisan test --coverage --min=90`.

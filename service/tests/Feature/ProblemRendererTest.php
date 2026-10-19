@@ -1,11 +1,13 @@
 <?php
 
+use App\AvatarProviders\ProviderException;
 use App\Http\ApiProblem;
 use App\Http\ErrorCode;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Exceptions\PostTooLargeException;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
@@ -158,3 +160,36 @@ it('answers a server error without a catalogue entry as an opaque internal_error
     'internal' => [500],
     'bad gateway' => [502],
 ]);
+
+it('renders a provider failure as 502 provider_error without the provider\'s words', function (int $status) {
+    Route::get('/v1/_probe', fn () => throw ProviderException::fromStatus($status));
+
+    $response = $this->getJson('/v1/_probe');
+
+    expectProblem($response, 502, 'provider_error');
+    expect($response->json('detail'))->toBe('The avatar provider request failed.')
+        ->and($response->getContent())->not->toContain((string) $status);
+})->with([400, 401, 404, 500, 503]);
+
+it('renders a provider throttle as 429 provider_concurrency_limited', function () {
+    Route::get('/v1/_probe', fn () => throw ProviderException::throttled(409));
+
+    expectProblem($this->getJson('/v1/_probe'), 429, 'provider_concurrency_limited');
+});
+
+it('never lets a provider\'s body, header or key reach the response or the log', function () {
+    $logged = captureLogs();
+    Http::fake(['*' => Http::response('{"error":"bad key secret-token-123"}', 500)]);
+    Route::get('/v1/_probe', function () {
+        $response = Http::withToken('secret-token-123')->get('https://api.provider.example.test/v1/x');
+
+        // What an adapter does with a failed call: keep the status, drop the response and the request.
+        throw ProviderException::fromStatus($response->status());
+    });
+
+    $response = $this->getJson('/v1/_probe');
+
+    expectProblem($response, 502, 'provider_error');
+    expect($response->getContent())->not->toContain('secret-token-123')
+        ->and(implode("\n", $logged->getArrayCopy()))->not->toContain('secret-token-123');
+});
