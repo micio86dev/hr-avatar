@@ -37,8 +37,11 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->guardJwtSecret();
 
-        RateLimiter::for('secret', fn (Request $request) => Limit::perMinute((int) config('hr-avatar.rate_limits.secret'))
-            ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
+        // One budget per key, whichever kind it is: the authentication middleware records the key id.
+        foreach (['secret', 'publishable'] as $limiter) {
+            RateLimiter::for($limiter, fn (Request $request) => Limit::perMinute((int) config("hr-avatar.rate_limits.{$limiter}"))
+                ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
+        }
 
         Scramble::configure()
             ->withDocumentTransformers(DocumentIdentity::apply(...))

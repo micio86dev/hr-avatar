@@ -17,9 +17,10 @@ return [
     */
     'jwt_secret' => env('HRA_JWT_SECRET'),
 
-    /* Requests per minute. A secret key's budget is its own; failed authentications are counted per address. */
+    /* Requests per minute. Every key has a budget of its own; failed authentications are counted per address. */
     'rate_limits' => [
         'secret' => (int) env('HRA_RATE_LIMIT_SECRET', 600),
+        'publishable' => (int) env('HRA_RATE_LIMIT_PUBLISHABLE', 300),
         'failed_auth' => 30,
     ],
 

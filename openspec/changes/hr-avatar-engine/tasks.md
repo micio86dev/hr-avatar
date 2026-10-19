@@ -265,19 +265,19 @@ Specs: api-keys (per-conversation client_secret, publishable key grants nothing 
 Reconciliation: 11, 12, 13, 14. High-integrity zone.
 Note: the real client routes arrive in slices 26-27; here the tests register a temporary route under the full chain with a plain `{conversation}` string parameter.
 
-- [ ] 6.1 `ClientSecret` mint and parse.
+- [x] 6.1 `ClientSecret` mint and parse.
   - RED: `service/tests/Unit/ClientSecretTest.php`: claims `iss hr-avatar`, `aud hr-avatar-client`, `sub conv_...`, `acc`, `jti` (ULID), `iat`, `exp = created + 900 + max_duration_seconds`, no `mode` claim; "Algorithm none" and tampered claims -> invalid; wrong `iss`/`aud` -> invalid; "Expired token" via `Carbon::setTestNow`; HS256 only. Port BEAI `SessionTokenMinter` tests (locate: `rg -l 'SessionTokenMinter' ../api/tests`, read-only).
   - GREEN: `service/app/Keys/ClientSecret.php`, `service/app/Keys/VerifiedClientSecret.php` (lcobucci/jwt, `Configuration::forSymmetricSigner(new Sha256, ...)`, manual `iss`/`aud`/`exp` checks).
   - Verify: `cd service && php artisan test --filter=ClientSecretTest`.
-- [ ] 6.2 `AuthenticateClient`.
+- [x] 6.2 `AuthenticateClient`.
   - RED: `service/tests/Feature/AuthenticateClientTest.php` and `ClientSecretBindingTest.php`: "Publishable alone" (401 `unauthenticated`), "Secret key in the publishable header" (401), missing/other `Origin` -> `403 origin_not_allowed`, "Valid token", "Token for another conversation" and "Publishable key of another account" (403 `forbidden`), tampered/`alg none` -> `401 client_secret_invalid`, expired -> `401 client_secret_expired`, missing bearer -> 401 `unauthenticated`, every 401 counts on the failed-auth limiter, binds `CurrentAccount`.
   - GREEN: `service/app/Http/Middleware/AuthenticateClient.php`, alias `auth.client`, priority entry.
   - Verify: `cd service && php artisan test --filter='AuthenticateClientTest|ClientSecretBindingTest'`.
-- [ ] 6.3 `ClientCors`.
+- [x] 6.3 `ClientCors`.
   - RED: `service/tests/Feature/ClientCorsTest.php`: OPTIONS -> 204 echoing `Origin`, `Access-Control-Allow-Methods: POST`, headers including `X-HRA-Publishable-Key` and `X-Request-Id`, `Access-Control-Max-Age: 600`, `Vary: Origin`; a real request gets `Access-Control-Allow-Origin` only after the allowlist passed; a rejected origin gets none; `HandleCors` is not in the global stack; limited to `v1/client/*`.
   - GREEN: `service/app/Http/Middleware/ClientCors.php`, registration in `service/bootstrap/app.php`.
   - Verify: `cd service && php artisan test --filter=ClientCorsTest`.
-- [ ] 6.4 Publishable limiter.
+- [x] 6.4 Publishable limiter.
   - RED: extend `service/tests/Feature/RateLimitTest.php`: 301st request/min per publishable key -> 429; "Separate budgets" between secret and publishable; env `HRA_RATE_LIMIT_PUBLISHABLE`.
   - GREEN: `RateLimiter::for('publishable')` in `service/app/Providers/AppServiceProvider.php`.
   - Verify: `cd service && php artisan test --filter=RateLimitTest && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`.

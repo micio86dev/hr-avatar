@@ -189,3 +189,36 @@ Triangulation: scopes, modes, overlaps, malformed origins and cursors are datase
 - Error responses other than the ones listed above (401/404/429) are not yet documented in `openapi.json`; only the success shape, 422 and the per-operation 403/409 are. A shared Problem documentation transformer is a candidate for slice 31.
 - `SecretExposureTest` gained the management-API case instead of a new file.
 - Guardian Angel advisories: the rotate and revoke docblocks (and so the OpenAPI descriptions) now state that the successor inherits no expiry and that revoke needs no scope comparison (it only removes access); `hra:issue-key` de-duplicates `--scopes` like the endpoint (RED test first: 1 failed). Full suite after the amend: 431 passed, 1343 assertions.
+
+## Slice 6: Client authentication and CORS (tasks 6.1-6.4) - complete
+
+Commit subject: `feat(service): add client_secret JWT, client authentication chain and per-key CORS`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 6.1 | `tests/Unit/ClientSecretTest.php` | `App\Keys\ClientSecret` not found (23 errors) | 23/23 | ported from BEAI `SessionTokenMinterTest` (wrong secret/issuer/audience, missing claim, alg none, expired still parses); added HS512 with the same secret, tampered payload, exact claim set (no `mode`), the expiry instant, a redacting `__debugInfo` |
+| 6.2 | `AuthenticateClientTest.php`, `ClientSecretBindingTest.php` | `Target class [auth.client] does not exist` (35 errors); later "authenticates before a route binding" got 404, not 401 | 36/36 | the priority-list RED: `appendToPriorityList` runs before the prepends, so `AuthenticateClient` landed after `SubstituteBindings`; it is now `prependToPriorityList(before: ThrottleRequests)` like the secret chain |
+| 6.3 | `tests/Feature/ClientCorsTest.php` | preflight answered 404, no allow headers (11 failures) | 22/22 | `HandleCors` is replaced in place by `ClientCors` (so it stays behind `AssignRequestId` and a preflight carries a request id) |
+| 6.4 | extends `RateLimitTest.php` | `Rate limiter [publishable] is not defined`, config null (4 failures) | 9/9 | one `foreach` registers both limiters, keyed by the key id the authentication middleware records |
+
+Triangulation: origins, bearer shapes, key states and forged tokens are datasets; each refusal also asserts the status class it must have (a 401 feeds the failed-auth budget, a 403 does not).
+
+### Work Unit Evidence (slice 6)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ClientSecret|AuthenticateClient|ClientCors|RateLimit'` : 90 passed; full suite 516 passed, 1595 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % (AuthenticateClient, ClientCors, ClientSecret, VerifiedClientSecret, MintedClientSecret all 100 %) |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8) passed; `openapi.json` unchanged (no real client route until slice 26) |
+| Runtime harness | temporary `POST /v1/client/conversations/{conversation}/probe` under `auth.client` + `throttle:publishable` (reverted): preflight 204 with `Access-Control-Allow-Origin`, `-Methods: POST`, `-Headers`, `-Max-Age: 600`, `Vary: Origin`, `X-Request-Id`; real call 200 with `X-RateLimit-Limit: 300`, allow + expose headers; other origin 403 `origin_not_allowed` with no allow header; other conversation 403 `forbidden`; no bearer 401 `unauthenticated` |
+| Rollback boundary | `ClientSecret`, `VerifiedClientSecret`, `MintedClientSecret`, `AuthenticateClient`, `ClientCors`, the `auth.client` alias and priority entry, the `HandleCors` replacement in `bootstrap/app.php`, the limiter loop and `publishable` limit, and their tests |
+
+### Deviations and decisions (slice 6)
+
+- Authored size about 965 lines (about 616 are tests), above the 400 budget. Four cohesive tasks over one security chain; recommend `size:exception`.
+- `iss` and `aud` are class constants of `ClientSecret`, not `config('hr-avatar.jwt_issuer'|'jwt_audience')` as the design lists: nothing varies them, and the Guardian Angel review rejects configuration with no consumer. `config/hr-avatar.php` gains only `rate_limits.publishable`.
+- `mint()` returns a small `MintedClientSecret` (token, jti, expiry) so slice 20 can put `client_secret_expires_at` in the response without recomputing the expiry; it is an extra class beside the two the task names.
+- `aud` must be exactly `["hr-avatar-client"]` (a token with an extra audience is refused).
+- Origin comparison is exact on the raw header (the stored list is canonical and browsers send canonical origins); the preflight echoes only a canonical origin, so `null` or a value with a path gets a 204 with no allow header.
+- A request that fails before the allowlist (unknown publishable key, rate limit) carries no `Access-Control-Allow-Origin`, so a browser cannot read that 401/429; this follows the spec ("only after the allowlist check").
+- `Vary: Origin` is set on every `v1/client/*` response, allowed or not.
