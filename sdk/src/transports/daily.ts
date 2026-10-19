@@ -1,4 +1,5 @@
-import { HrAvatarError } from '../errors'
+import { connectionNotOpen, providerUnavailable } from './failures'
+import { createSpeechTracker } from './speech'
 import type { Adapter, Transport, TransportEvents, TransportStartOptions } from './types'
 
 type Data = Record<string, unknown>
@@ -20,28 +21,11 @@ export interface DailyLibrary {
   default: { createCallObject(options: Record<string, unknown>): DailyCall }
 }
 
-/**
- * How long an avatar utterance counts as speaking while its audio has not started. The utterance
- * can arrive before the audio's `started_speaking`; the bound keeps a lost audio edge from ever
- * leaving the avatar "speaking".
- */
-export const AVATAR_UTTERANCE_PENDING_MS = 2_000
-
 /** How many avatar utterance keys are remembered for duplicate suppression. */
 const SEEN_AVATAR_LIMIT = 50
 
 /** Twin window for avatar utterances that carry no `inference_id`. */
 const TWIN_WINDOW_MS = 2_000
-
-const unavailable = () =>
-  new HrAvatarError({
-    code: 'provider_unavailable',
-    message: 'The avatar provider is unavailable',
-    recoverable: true,
-  })
-
-const notOpen = () =>
-  new HrAvatarError({ code: 'transport_error', message: 'The avatar connection is not open' })
 
 /**
  * The provider's conversation id is the last segment of its conversation url. Any other shape
@@ -69,10 +53,7 @@ export function createDailyTransport(library: DailyLibrary): Transport {
   let ending = false
   let readySent = false
 
-  let audioPlaying = false
-  let utterancePending = false
-  let pendingTimer: ReturnType<typeof setTimeout> | null = null
-  let speakingSent = false
+  const voice = createSpeechTracker((speaking) => events?.speaking(speaking))
 
   /** Avatar utterances already reported (key -> time seen), oldest first. */
   const seen = new Map<string, number>()
@@ -81,30 +62,6 @@ export function createDailyTransport(library: DailyLibrary): Transport {
     if (readySent) return
     readySent = true
     events?.ready()
-  }
-
-  /** Reports the avatar as speaking while its audio plays or an utterance still awaits its audio. */
-  const syncSpeaking = (): void => {
-    const speaking = audioPlaying || utterancePending
-    if (speaking === speakingSent) return
-    speakingSent = speaking
-    events?.speaking(speaking)
-  }
-
-  const clearPending = (): void => {
-    utterancePending = false
-    if (pendingTimer !== null) clearTimeout(pendingTimer)
-    pendingTimer = null
-  }
-
-  const markPending = (): void => {
-    if (pendingTimer !== null) clearTimeout(pendingTimer)
-    utterancePending = true
-    pendingTimer = setTimeout(() => {
-      clearPending()
-      syncSpeaking()
-    }, AVATAR_UTTERANCE_PENDING_MS)
-    syncSpeaking()
   }
 
   /**
@@ -138,7 +95,7 @@ export function createDailyTransport(library: DailyLibrary): Transport {
       if (isDuplicate(data, speech)) return
       // Speaking from now, before the line is reported: a completion phrase waits for silence, and
       // the line can arrive ahead of its audio.
-      markPending()
+      voice.expectAudio()
     }
     events?.transcript({ role: avatar ? 'avatar' : 'user', text: speech, final: true })
   }
@@ -146,14 +103,10 @@ export function createDailyTransport(library: DailyLibrary): Transport {
   function onMessage(data: Data | undefined): void {
     switch (data?.event_type) {
       case 'conversation.replica.started_speaking':
-        audioPlaying = true
-        clearPending()
-        syncSpeaking()
+        voice.audio(true)
         return
       case 'conversation.replica.stopped_speaking':
-        audioPlaying = false
-        clearPending()
-        syncSpeaking()
+        voice.audio(false)
         return
       case 'conversation.utterance':
         onUtterance(data)
@@ -173,17 +126,21 @@ export function createDailyTransport(library: DailyLibrary): Transport {
     daily.on('joined-meeting', ready)
     daily.on('track-started', (event) => {
       if (ending) return
-      const owner = event?.participant as { local?: boolean } | undefined
       const track = event?.track as MediaStreamTrack | undefined
       // A local track is the user's own microphone: rendering it plays their voice back at them.
-      if (owner?.local === true || track === undefined) return
+      // The payload marks it with a `local` flag on the object that names the track's owner, which
+      // is read structurally instead of by that object's key.
+      const local = Object.values(event ?? {}).some(
+        (value) => (value as { local?: unknown } | null)?.local === true,
+      )
+      if (local || track === undefined) return
       attachTrack(track)
     })
     daily.on('left-meeting', () => {
       // The provider ended the call (its ceiling, a dropped connection). Our own leave is not news.
       if (ending) return
       ending = true
-      clearPending()
+      voice.cancel()
       events?.closed()
     })
     daily.on('app-message', (event) => {
@@ -193,11 +150,11 @@ export function createDailyTransport(library: DailyLibrary): Transport {
 
   /** The only outbound data-channel site. */
   function send(message: Data): void {
-    if (call === null || call.meetingState() !== 'joined-meeting') throw notOpen()
+    if (call === null || call.meetingState() !== 'joined-meeting') throw connectionNotOpen()
     try {
       call.sendAppMessage({ message_type: 'conversation', ...message, conversation_id: conversationId }, '*')
     } catch {
-      throw notOpen()
+      throw connectionNotOpen()
     }
   }
 
@@ -217,16 +174,17 @@ export function createDailyTransport(library: DailyLibrary): Transport {
         ready()
       } catch {
         // A stable code, never the library's text: it names the vendor and its hosts.
+        ending = true
         const failed = call
         call = null
         await failed?.destroy().catch(() => undefined)
-        throw unavailable()
+        throw providerUnavailable()
       }
     },
 
     async stop(): Promise<void> {
       ending = true
-      clearPending()
+      voice.cancel()
       const leaving = call
       call = null
       if (leaving) {
@@ -242,9 +200,13 @@ export function createDailyTransport(library: DailyLibrary): Transport {
     },
 
     async setMicMuted(muted: boolean): Promise<void> {
-      if (call === null) throw notOpen()
-      // Daily takes ENABLED, so the flag is inverted.
-      call.setLocalAudio(!muted)
+      if (call === null) throw connectionNotOpen()
+      try {
+        // Daily takes ENABLED, so the flag is inverted.
+        call.setLocalAudio(!muted)
+      } catch {
+        throw connectionNotOpen()
+      }
     },
 
     async say(text: string): Promise<void> {

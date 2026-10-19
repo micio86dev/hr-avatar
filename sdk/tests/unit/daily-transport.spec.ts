@@ -154,6 +154,19 @@ describe('start failures', () => {
     },
   )
 
+  it('reports no close when the failed call leaves while it is being destroyed', async () => {
+    const daily = fakeDaily()
+    const events = transportEvents()
+    daily.call.join.mockRejectedValue(new Error('boom'))
+    daily.call.destroy.mockImplementation(async () => daily.fire('left-meeting'))
+
+    await createDailyTransport(daily.library)
+      .start({ join, mount: document.createElement('video') }, events.handlers)
+      .catch(() => undefined)
+
+    expect(events.handlers.closed).not.toHaveBeenCalled()
+  })
+
   it('a failed start leaves a later stop() with nothing to tear down twice', async () => {
     const daily = fakeDaily()
     daily.call.join.mockRejectedValue(new Error('boom'))
@@ -190,6 +203,23 @@ describe('rendering into the mount', () => {
     fire('track-started', { participant: { local: true }, track: track('mic') })
 
     expect(mount.srcObject == null).toBe(true)
+  })
+
+  it('ignores a local track however the payload names its owner', async () => {
+    const { mount, fire } = await startedDaily()
+
+    fire('track-started', { owner: { local: true }, track: track('mic') })
+
+    expect(mount.srcObject == null).toBe(true)
+  })
+
+  it('renders a remote track whose payload carries other values', async () => {
+    const { mount, fire } = await startedDaily()
+
+    fire('track-started', { action: 'track-started', type: 'audio', participant: { local: false }, track: track('a') })
+    fire('track-started', { participant: null, track: track('b') })
+
+    expect((mount.srcObject as unknown as FakeStream).tracks).toHaveLength(2)
   })
 
   it('ignores a track-started event that carries no track', async () => {
@@ -247,6 +277,18 @@ describe('microphone', () => {
     await transport.setMicMuted(false)
 
     expect(call.setLocalAudio.mock.calls).toEqual([[false], [true]])
+  })
+
+  it('rejects with a stable error when the call refuses', async () => {
+    const { transport, call } = await startedDaily()
+    call.setLocalAudio.mockImplementation(() => {
+      throw new Error('daily.co refused')
+    })
+
+    const error = await rejection(transport.setMicMuted(true))
+
+    expect(error.code).toBe('transport_error')
+    expect(error.message).not.toMatch(/daily/i)
   })
 
   it('rejects before start and after stop, like every other control', async () => {

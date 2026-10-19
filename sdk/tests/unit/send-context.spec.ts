@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HrAvatar, HrAvatarError } from '../../src'
 import { CONVERSATION_URL, fakeDaily, startedDaily } from './helpers/daily'
+import { SESSION_TOKEN, fakeLiveAvatar } from './helpers/liveavatar'
 import { BASE_URL, CLIENT_SECRET, PUBLISHABLE_KEY, fakeService } from './helpers/service'
 
 class FakeStream {
@@ -97,5 +98,41 @@ describe('through a Daily conversation', () => {
 
     expect(daily.library.default.createCallObject).toHaveBeenCalledTimes(1)
     expect(daily.call.join).toHaveBeenCalledWith({ url: CONVERSATION_URL, startVideoOff: true })
+  })
+})
+
+describe('through a LiveAvatar conversation', () => {
+  it('rejects with unsupported_operation: that provider cannot take extra context', async () => {
+    const live = fakeLiveAvatar()
+    fakeService({
+      respond: (suffix) =>
+        suffix === 'connect'
+          ? new Response(
+              JSON.stringify({
+                provider: 'heygen',
+                transport: 'liveavatar',
+                session_token: SESSION_TOKEN,
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            )
+          : undefined,
+    })
+    const conversation = await HrAvatar.connect({
+      baseUrl: BASE_URL,
+      publishableKey: PUBLISHABLE_KEY,
+      clientSecret: CLIENT_SECRET,
+      mount: document.createElement('div'),
+      loaders: { liveavatar: async () => live.library },
+    })
+
+    const error = await conversation.sendContext({ a: 1 }).then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+
+    expect(error).toBeInstanceOf(HrAvatarError)
+    expect((error as HrAvatarError).code).toBe('unsupported_operation')
+    await conversation.say('Still works.')
+    expect(live.session.repeat).toHaveBeenCalledWith('Still works.')
   })
 })

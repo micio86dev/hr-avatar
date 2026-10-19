@@ -5,7 +5,7 @@
  * when an audio edge is lost.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AVATAR_UTTERANCE_PENDING_MS } from '../../src/transports/daily'
+import { SPEECH_PENDING_MS as AVATAR_UTTERANCE_PENDING_MS } from '../../src/transports/speech'
 import { startedDaily } from './helpers/daily'
 
 let ctx: Awaited<ReturnType<typeof startedDaily>>

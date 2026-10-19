@@ -835,7 +835,7 @@ Specs: client-sdk (provider transports). Port map: `app/providers/tavus.ts` -> `
 Commit: `feat(sdk): add the LiveAvatar transport harvested from the BEAI HeyGen provider`
 Specs: client-sdk (provider transports). Port map: `app/providers/heygen.ts` -> `src/transports/liveavatar.ts`.
 
-- [ ] 38.1 Port specs first.
+- [x] 38.1 Port specs first.
   - RED: port `../frontend/tests/unit/heygen-provider.spec.ts` (read-only) to `sdk/tests/unit/liveavatar-transport.spec.ts` with an injected fake SDK: `voiceChat` config contract incl. `deviceId`, transcription events (interim vs final), `repeat()` for `say`, `interrupt`, speaking signals, disconnect -> transport close. Absent-phrase guard removed.
   - GREEN: `sdk/src/transports/liveavatar.ts`, register in `loadTransport`.
   - Verify: `cd sdk && bun run test -- liveavatar-transport && bun run test:coverage`.

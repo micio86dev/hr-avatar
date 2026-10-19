@@ -42,8 +42,7 @@ export async function loadTransport(name: string, options: LoadOptions = {}): Pr
   if (factory) return factory()
 
   const adapter = own(ADAPTERS, name)
-  // Until the provider transports land (slices 37 and 38) their adapters only carry the peer, so
-  // the library is still resolved and a missing package is reported precisely.
+  // A provider adapter resolves its peer library first, so a missing package is reported precisely.
   const library = adapter?.peer
     ? await importPeer(adapter.peer, own(options.loaders, name))
     : undefined

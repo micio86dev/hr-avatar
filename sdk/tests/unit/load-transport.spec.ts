@@ -106,20 +106,15 @@ describe('provider libraries', () => {
     expect(error.recoverable).toBe(false)
   })
 
-  it('imports the installed library for daily by default and builds the Daily transport', async () => {
+  it.each([
+    ['daily', 'function'],
+    ['liveavatar', 'undefined'],
+  ])('imports the installed library for %s by default and builds its transport', async (name, sendContext) => {
     // The default loader resolves the (mocked) package; nothing is joined until `start`.
-    const transport = await loadTransport('daily')
+    const transport = await loadTransport(name)
 
     expect(transport.start).toBeTypeOf('function')
-    expect(transport.sendContext).toBeTypeOf('function')
-  })
-
-  it('imports the installed library for liveavatar by default', async () => {
-    // The default loader resolves the (mocked) package, so the failure is the transport that is
-    // not registered yet, never a missing library.
-    const error = await rejection(loadTransport('liveavatar'))
-
-    expect(error.code).not.toBe('provider_library_missing')
+    expect(typeof transport.sendContext).toBe(sendContext)
   })
 })
 
