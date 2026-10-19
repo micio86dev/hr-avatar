@@ -1061,6 +1061,8 @@ this batch: 2073 tests passing serially (`DB_PORT=55442 php artisan test`). From
 
 Commit subject: `fix(service): serialize config sync runs per config and make the database check parallel-safe`
 
+Commit: `7c37563`.
+
 | Item | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
 | 45 | n/a (documentation) | n/a | n/a | the slice 23 behaviour stays; `specs/conversations/spec.md` and design AD9 amended in the same commit |
@@ -1101,6 +1103,8 @@ Mutation check (not committed): making the lock always succeed failed the "secon
 
 Commit subject: `feat(service): add the conversation state machine, webhook emission and the secret-key end endpoint`
 
+Commit: `86eff30`.
+
 | Task | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
 | 25.1 | `tests/Unit/ConversationLifecycleTest.php` (about 45 cases), `tests/Feature/ConversationLifecycleRaceTest.php` (9) | 79 of 81 failed with 25.2-25.3 (`ConversationLifecycle` / `IllegalTransition` not found; 2 refusal checks of the end route pass while the route is absent) | green | every edge of the table (7 legal, 13 illegal incl. `created -> failed`, out of a terminal state, `-> created`), terminal immutable and the second writer, idempotent same-state (no second `conversation.live`), argument guard (reason must fit the target), `end()` on open / terminal / failed, timestamps per state, provider reason kept beside the stable reason, the model passed in is refreshed, `conversation.live` / `conversation.ended` rows, `failed` reported as `conversation.ended`, immediate empty `ready` transcript + `transcript.ready` when there is no session (created -> ended, expired, failed at connect), delayed release at the configured / default delay otherwise; race: two stale copies end one conversation (first reason wins, loser's reason and time untouched, one `conversation.ended`, one release), failure vs end both orders, the UPDATE is one conditional statement naming the source states, release only after commit (real sync queue: the teardown does not run inside the transaction), nothing on rollback, reconciliation runs with no provider callback |
@@ -1134,6 +1138,8 @@ Mutation checks (not committed): removing the `status IN (...)` source condition
 ## Slice 26: Client connect (tasks 26.1-26.4) - complete
 
 Commit subject: `feat(service): add client connect with credential pre-checks, single-use CAS and callback token`
+
+Commit: `386b7a4`.
 
 | Task | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
@@ -1171,6 +1177,8 @@ Mutation checks (not committed): removing the `! $won` branch, the claim itself,
 
 Commit subject: `feat(service): add idempotent client event ingestion, client end and the transcript endpoint`
 
+Commit: `e5db7e5`.
+
 | Task | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
 | 27.1 | `tests/Feature/ClientEventsTest.php` (53 cases) | 70 of 76 failed with 27.2-27.4 (404 on the routes; 5 refusal checks pass while the routes are absent) | green | batch stored in order with server-assigned sequence, numbering continues after provider and lifecycle rows, body cannot set `sequence` / `source` / `account_id`, time kept in UTC to the millisecond and none when none was given, `data` kept as an object (`{}` stays `{}`), same key in another conversation is independent, the conversation row is locked (`for update`), replay (0 accepted, N duplicates, count unchanged), partial overlap, a key repeated inside one batch, atomic validation (one bad event: 422 naming `events.N.field`, nothing stored; 21 malformed shapes), non-list bodies, 100 accepted / 101 refused, 8000 characters and 2048 bytes of data accepted, accepted while connecting, grace window (30 s and exactly 60 s accepted, 61 s `conversation_closed`, ended and failed), utterance before connect `invalid_state` for the whole batch, `live` in `created` stored without effect, `live` makes a connecting conversation live with one `conversation.live` (replays and later signals do nothing), `error` stored with data and no effect, `live` after the end stored without effect, form-encoded bodies (accepted without data, `data` refused), foreign conversation 404, other conversation's secret 403, no secret 401 |
@@ -1207,6 +1215,8 @@ Mutation checks (not committed): removing the row lock, the grace window, the du
 
 Commit subject: `feat(service): add the conversation sweeper and schedule`
 
+Commit: `6d4596f`.
+
 | Task | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
 | 28.1 | `tests/Feature/SweepConversationsTest.php` (24 cases) | see the note below: 0 of 24 passed with the command and the schedule absent | 24/24 | overrun live and connecting conversations -> `max_duration`, release queued, one `conversation.ended`; boundary (1829 and exactly 1830 s left alone, 1831 ended), the maximum is read per conversation, within limits byte-identical, no session -> ended with an immediate `ready` transcript and no release; never connected -> `expired` at 901 s with `transcript.ready` and no release, 899 and exactly 900 s left alone, a connecting conversation is not "never connected"; ended / failed conversations untouched; two sweepers (one after the other, and one that was already reading a conversation another process ended first: the first reason stands, one event); each account swept under itself with webhooks to its own endpoints only and a quiet account untouched; no conversation is read without its account (every statement carries the account predicate); 103 conversations in chunks; one conversation that cannot be ended (a trigger refuses its update) does not stop the others, is logged by id and exception class (not message) and the command exits 1; output; the schedule is every minute and without overlapping |
@@ -1236,6 +1246,8 @@ Commit subject: `feat(service): add the conversation sweeper and schedule`
 ## Slice 29: Provider event ingestion and polling (tasks 29.1-29.3) - complete
 
 Commit subject: `feat(service): add idempotent provider event ingestion, event processing and the LiveAvatar poller`
+
+Commit: `b33c6ce`.
 
 | Task | Test file | RED (observed, tests written first) | GREEN | Notes |
 |---|---|---|---|---|
@@ -1270,3 +1282,37 @@ Mutation checks (not committed; two surviving mutants led to stronger tests): re
 - A conversation whose credential cannot be resolved is skipped and named in the log (`no_credential`) rather than treated as a provider error; polled events are keyed `{event_key_prefix}:{session_ref}:ended` (`liveavatar:...` for Heygen) and their payload is `{source: poll, end_reason}`.
 - Polled and callback receipts share the table and the pipeline; the `ignored` kind exists only for callbacks the service takes no action on (stored as processed). The receipts table has no retention (the conversations spec's retention note covers it: nothing is purged in this change).
 - RED was observed before GREEN for every file in this slice (tests written first). Two test-side mistakes found in the first GREEN run were corrected (the fake queue ignores `afterCommit`, so commit ordering is proven with the real synchronous queue, as in slices 22 and 25).
+
+## Batch 2 summary (unit 0b and slices 25-29)
+
+| Unit | Commit | Full suite after | Authored lines (tests) |
+|---|---|---|---|
+| 0b rulings 45-49, sync serialization, parallel-safe database check | `7c37563` | 2082 | 227 (154) |
+| 25 conversation lifecycle, webhook emission, secret-key end | `86eff30` | 2163 | 1,002 (782) |
+| 26 client connect, callback token | `386b7a4` | 2208 | 926 (675) |
+| 27 client events, client end, transcript endpoint, Mock flow | `e5db7e5` | 2287 | 1,217 (814) |
+| 28 sweeper | `6d4596f` | 2311 | 434 (315) |
+| 29 provider event ingestion, processing, poller | `b33c6ce` | 2407 | 1,729 (1,251) |
+| CI: memory for the covered run (follow-up) | `cce6cfa` | 2408 | 12 |
+| chore: duplicated variable in `.env.example` | `ab3d5cb` | 2408 | 1 |
+
+Batch gates at the final state (`ab3d5cb`): `DB_PORT=55442 php -d memory_limit=1G artisan test --coverage --min=90` exit 0, 2407 passed at the time of the run, total 100.0 %; `DB_PORT=55442 php artisan test --parallel --processes=4` exit 0, 2408 passed, 6620 assertions; `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` exit 0, 2408 passed, `ConnectConversation`, `ConversationLifecycle`, `IllegalTransition` and every other zone class 100.0 %; `vendor/bin/pint --test` passed; `composer run analyse` (level 8) 0 errors; `scramble:export` clean against the committed `openapi.json` (the drift test is in the suite); Spectral: no results at `warn` or higher.
+
+### Existing tests edited in this batch
+
+Only mechanical moves, no assertion changed: `ConversationCreateTest` lost the definition of `CONVERSATION_MEMBERS`, which moved to `tests/Pest.php` so `ConversationShowTest` finds it on any parallel worker (unit 0b). `DatabaseConnectionTest` was changed on request (parallel-safe database name, still compared exactly). Test support (`ScriptedProvider`, `StubProvider`) gained scripting and the `callbackTranscript` method; no behaviour the older tests rely on changed. No reconciliation ruling changed an existing assertion (ruling 45 keeps slice 23's behaviour; the spec wording was amended instead).
+
+### Open decisions (for the owner / next batches)
+
+1. **Contract: `AvatarProvider::callbackTranscript`** (slice 29). Needed by ruling 47 (the job reads the receipt's payload); makes the contract one method longer than reconciliation item 22 lists. Confirm, or fall back to always fetching the provider's copy and drop the receipt rows.
+2. **Receipt uniqueness is per account** (slice 29, Guardian Angel finding): `(account_id, provider, idempotency_key)` instead of the spec's `(provider, idempotency_key)`. More secure, same idempotency in practice; the spec text and task 29.1 still say the shorter key.
+3. **Sweeper and poller walk every account** (slices 28-29, Guardian Angel finding): two scoped queries per account per run each minute. Fine for a modest number of accounts; a platform-level index of due conversations would need the boundary rule extended first (a documented third exception to the two permitted unscoped reads).
+4. **`Conversation::reload()` instead of `refresh()`** (slice 28): keeps the account scope on every re-read of a conversation.
+5. **`occurred_at` precision** (slice 27): widened to microseconds, and the transcript shows milliseconds, unlike the whole-second timestamps of the other resources, because the sub-second part decides the order.
+6. **A conversation that ends while its session is starting** (slice 26): the connect answers 409 `invalid_state` and the session is released through the delayed job.
+7. **`TavusProvider::fetchSession` reads any status other than `active` as ended** (slice 11, raised again by the review): an allow-list of Tavus's ended statuses would be safer; the status vocabulary is not in `research.md`. Owner to confirm.
+8. **A missing credential in `ReconcileTranscript` is a retryable provider failure** (slice 23, raised again by the review): it burns the five attempts and ends as `partial`. Could be a distinct, immediate `partial`; left as decided.
+9. **`HRA_PUBLIC_BASE_URL` unset**: connecting a provider that calls back fails the conversation (provider_error) instead of sending a broken target; Railway documentation is slice 32.
+10. **CI memory**: the covered test run needs more than PHP's default 128 MB at this suite size; the workflow now sets `memory_limit=1G` in `setup-php` (follow-up commit `cce6cfa`).
+11. **Client end returns the full conversation resource to the browser**, including the host's `external_ref` and `metadata`, as the spec says.
+12. **Contract notes still pending from earlier batches** (not touched here): `liveavatar` provider-token security scheme wording, LiveAvatar session-token lifetime, Tavus persona `editable` flag; the earlier open decisions 6 and 7 of batch 1 (`trimStrings` exception, endpoint limit answer).
