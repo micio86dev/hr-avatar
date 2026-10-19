@@ -160,17 +160,17 @@ final class TavusProvider implements AvatarProvider
             throw new TranscriptNotReady('Tavus has not delivered the transcript yet.');
         }
 
-        $lines = [];
+        return $this->lines($rows);
+    }
 
-        foreach ($rows as $row) {
-            $line = $this->line($row);
+    /**
+     * A `transcription_ready` callback carries the same rows a fetched conversation lists.
+     */
+    public function callbackTranscript(array $payload): array
+    {
+        $rows = data_get($payload, 'properties.transcript');
 
-            if ($line !== null) {
-                $lines[] = $line;
-            }
-        }
-
-        return $lines;
+        return is_array($rows) ? $this->lines($rows) : [];
     }
 
     /**
@@ -243,6 +243,29 @@ final class TavusProvider implements AvatarProvider
         $events = $conversation['events'] ?? null;
 
         return is_array($events) ? array_values(array_filter($events, 'is_array')) : [];
+    }
+
+    /**
+     * The rows of a transcript as lines, in the provider's order.
+     *
+     * @param  array<array-key, mixed>  $rows
+     * @return list<TranscriptLine>
+     *
+     * @throws TranscriptShapeError
+     */
+    private function lines(array $rows): array
+    {
+        $lines = [];
+
+        foreach ($rows as $row) {
+            $line = $this->line($row);
+
+            if ($line !== null) {
+                $lines[] = $line;
+            }
+        }
+
+        return $lines;
     }
 
     /**

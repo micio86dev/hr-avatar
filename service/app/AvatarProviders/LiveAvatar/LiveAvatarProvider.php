@@ -232,6 +232,11 @@ final class LiveAvatarProvider implements AvatarProvider
         return new SessionStatus($ended, $ended ? (is_string($reason) && $reason !== '' ? $reason : 'unknown') : null);
     }
 
+    public function callbackTranscript(array $payload): array
+    {
+        return [];
+    }
+
     public function parseCallback(array $payload): array
     {
         return [];

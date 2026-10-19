@@ -28,6 +28,9 @@ final class ScriptedProvider extends StubProvider
     /** @var list<Closure(string, ConversationSpec, AvatarConfig, ProviderAuth, ?string): ProviderSession|null> */
     public static array $starts = [];
 
+    /** @var list<SessionStatus|Closure(string, ProviderAuth): SessionStatus> what the next session lookups answer; a closure may throw */
+    public static array $sessions = [];
+
     /** @var list<array{0: string, 1: string, 2: string|null, 3: string}> operation, session ref (conversation id for a start), context ref (callback url for a start), auth owner */
     public static array $calls = [];
 
@@ -36,15 +39,16 @@ final class ScriptedProvider extends StubProvider
     /** The last spec a start was given. */
     public static ?ConversationSpec $lastSpec = null;
 
-    public static function register(string $id = 'scripted'): void
+    public static function register(string $id = 'scripted', ?string $eventKeyPrefix = null): void
     {
         self::$transcripts = [];
         self::$teardowns = [];
         self::$starts = [];
+        self::$sessions = [];
         self::$calls = [];
         self::$ingestion = Ingestion::None;
         self::$lastSpec = null;
-        config()->set("hr-avatar.providers.{$id}", ['adapter' => self::class, 'credential' => false]);
+        config()->set("hr-avatar.providers.{$id}", ['adapter' => self::class, 'credential' => false, ...($eventKeyPrefix === null ? [] : ['event_key_prefix' => $eventKeyPrefix])]);
     }
 
     public function ingestion(): Ingestion
@@ -81,7 +85,8 @@ final class ScriptedProvider extends StubProvider
     public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus
     {
         self::$calls[] = ['fetchSession', $sessionRef, null, $auth->owner];
+        $next = array_shift(self::$sessions) ?? new SessionStatus(false, null);
 
-        return new SessionStatus(false, null);
+        return $next instanceof Closure ? $next($sessionRef, $auth) : $next;
     }
 }

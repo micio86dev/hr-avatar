@@ -68,6 +68,11 @@ abstract class StubProvider implements AvatarProvider
         return new SessionStatus(false, null);
     }
 
+    public function callbackTranscript(array $payload): array
+    {
+        return [];
+    }
+
     public function parseCallback(array $payload): array
     {
         return [];

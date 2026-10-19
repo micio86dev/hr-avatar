@@ -688,17 +688,20 @@ Specs: conversations (max-duration sweeper). Reconciliation: 16.
 Commit: `feat(service): add idempotent provider event ingestion, event processing and the LiveAvatar poller`
 Specs: provider-webhooks (normalized event, receipts, mapping onto state, LiveAvatar polling, end independent of webhooks). Reconciliation: 24, 25.
 
-- [ ] 29.1 Receipts and `ProviderEventIngestor`.
+- [x] 29.1 Receipts and `ProviderEventIngestor`.
   - RED: `service/tests/Feature/ProviderEventIngestorTest.php` scenarios "Persist then ack", "Duplicate delivery is a no-op", "Concurrent duplicates" (unique `(provider, idempotency_key)`), "Unknown event type" (`ignored` receipt, `processed_at` set, nothing dispatched), `account_id` NOT NULL from the authenticated conversation, `insertOrIgnore`, only inserted non-`ignored` rows dispatch.
   - GREEN: migration `provider_webhook_receipts`, `service/app/Models/ProviderWebhookReceipt.php` (`payload` hidden), `service/app/Conversations/ProviderEventIngestor.php`.
+  - Note (apply): `ingest($conversation, list<ProviderEvent>)` returns how many receipts were stored; a duplicate stores nothing and queues nothing (decided by the unique key, in the same statement); an `ignored` event is stored with `processed_at` set.
   - Verify: `cd service && php artisan test --filter=ProviderEventIngestorTest`.
-- [ ] 29.2 `ProcessProviderEvent`.
+- [x] 29.2 `ProcessProviderEvent`.
   - RED: `service/tests/Feature/ProcessProviderEventTest.php` scenarios "Joined makes live", "Shutdown ends with parsed reason (primary key)", "Shutdown reason from the alternate key", "Shutdown with no reason" (`unknown`), "First writer wins", "Transcript ready merges", "Transcript ready before shutdown" (ends first with reason `provider`), "Joined after end" (no-op), "Legacy duplicate joined" (CAS absorbs), `processed_at` set, `CurrentAccount::runAs`.
   - GREEN: `service/app/Jobs/ProcessProviderEvent.php`.
+  - Note (apply): carries the account id and the receipt id. `transcript_ready` queues `ReconcileTranscript` with the receipt id (ruling 47, which now reads the receipt's rows where it runs); this adds `AvatarProvider::callbackTranscript(array $payload): list<TranscriptLine>` to the contract (Tavus implements it, the others return `[]`).
   - Verify: `cd service && php artisan test --filter=ProcessProviderEventTest`.
-- [ ] 29.3 `hra:conversations:poll`.
+- [x] 29.3 `hra:conversations:poll`.
   - RED: `service/tests/Feature/PollProviderSessionsTest.php` scenarios "Provider reports end" (event key `liveavatar:{session_ref}:ended`), "Still active", "Idempotent across runs", "Provider error is not an end" (logged by status class, changes nothing), "Terminal conversations skipped", "Other providers untouched" (Tavus and Mock never polled), chunks of 100, selection via `ProviderRegistry::withIngestion(Ingestion::Poll)`; "Silent provider" end independence (sweeper still ends it).
   - GREEN: `service/app/Console/Commands/PollProviderSessions.php`, schedule entry.
+  - Note (apply): like the sweeper, the command walks the accounts and reads every conversation under its account.
   - Verify: `cd service && php artisan test --filter=PollProviderSessionsTest && php artisan test --coverage --min=90`.
 
 ## Slice 30: Inbound provider webhook endpoint

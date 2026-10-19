@@ -3,13 +3,17 @@
 namespace App\Jobs;
 
 use App\Accounts\CurrentAccount;
+use App\AvatarProviders\AvatarProvider;
+use App\AvatarProviders\ProviderEventKind;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderRegistry;
+use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptShapeError;
 use App\Conversations\ConversationProviderAuth;
 use App\Conversations\TranscriptReconciler;
 use App\Conversations\TranscriptStatus;
 use App\Models\Conversation;
+use App\Models\ProviderWebhookReceipt;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -23,8 +27,12 @@ use Throwable;
  * will not improve, so the job fails itself at once. When the attempts run out (or the job fails
  * itself) the transcript is finished as `partial`, with the lines the browser forwarded.
  *
- * It carries the account id and the conversation id and nothing else: the credential is resolved where
- * the job runs, and neither a key nor a transcript line rides on the queue.
+ * A `transcription_ready` callback already carries the transcript. The job is then given the id of its
+ * receipt and reads the rows where it runs, without a provider call or a credential; with no receipt, or
+ * none that carries rows, it fetches the provider's copy.
+ *
+ * It carries the ids and nothing else: the credential is resolved where the job runs, and neither a key
+ * nor a transcript line rides on the queue.
  */
 final class ReconcileTranscript implements ShouldQueue
 {
@@ -32,7 +40,7 @@ final class ReconcileTranscript implements ShouldQueue
 
     public int $tries = 5;
 
-    public function __construct(public readonly string $accountId, public readonly string $conversationId) {}
+    public function __construct(public readonly string $accountId, public readonly string $conversationId, public readonly ?string $receiptId = null) {}
 
     /**
      * @return list<int>
@@ -59,10 +67,15 @@ final class ReconcileTranscript implements ShouldQueue
                 return;
             }
 
-            $auth = $auths->for($conversation) ?? throw ProviderException::noResponse();
+            $adapter = $providers->get($conversation->provider);
 
             try {
-                $lines = $providers->get($conversation->provider)->fetchTranscript($conversation->provider_session_ref, $auth);
+                $lines = $this->receiptLines($adapter, $conversation);
+
+                if ($lines === []) {
+                    $auth = $auths->for($conversation) ?? throw ProviderException::noResponse();
+                    $lines = $adapter->fetchTranscript($conversation->provider_session_ref, $auth);
+                }
             } catch (TranscriptShapeError $unreadable) {
                 $this->fail($unreadable);
 
@@ -88,5 +101,26 @@ final class ReconcileTranscript implements ShouldQueue
                 app(TranscriptReconciler::class)->reconcile($conversation, [], TranscriptStatus::Partial);
             }
         });
+    }
+
+    /**
+     * The lines of the transcript_ready receipt this job was given, when it is the conversation's own and carries any.
+     *
+     * @return list<TranscriptLine>
+     *
+     * @throws TranscriptShapeError
+     */
+    private function receiptLines(AvatarProvider $adapter, Conversation $conversation): array
+    {
+        if ($this->receiptId === null) {
+            return [];
+        }
+
+        $receipt = ProviderWebhookReceipt::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('kind', ProviderEventKind::TranscriptReady->value)
+            ->find($this->receiptId);
+
+        return $receipt === null ? [] : $adapter->callbackTranscript($receipt->payload);
     }
 }

@@ -85,6 +85,17 @@ interface AvatarProvider
     public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array;
 
     /**
+     * The transcript a callback payload carries, read the way `fetchTranscript` reads a fetched one. Empty
+     * when the payload carries none, and for an adapter that has no callbacks.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<TranscriptLine>
+     *
+     * @throws TranscriptShapeError
+     */
+    public function callbackTranscript(array $payload): array;
+
+    /**
      * @throws ProviderException an error is never reported as "ended"
      */
     public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus;

@@ -99,6 +99,11 @@ final class MockProvider implements AvatarProvider
         return new SessionStatus($ended, $ended ? 'teardown' : null);
     }
 
+    public function callbackTranscript(array $payload): array
+    {
+        return [];
+    }
+
     public function parseCallback(array $payload): array
     {
         return [];

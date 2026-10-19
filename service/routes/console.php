@@ -2,5 +2,6 @@
 
 use Illuminate\Support\Facades\Schedule;
 
-// Every minute, and never two runs at once. The polling of providers that have no webhooks is added by its own slice.
+// Every minute, and never two runs at once.
 Schedule::command('hra:conversations:sweep')->everyMinute()->withoutOverlapping();
+Schedule::command('hra:conversations:poll')->everyMinute()->withoutOverlapping();
