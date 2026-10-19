@@ -1096,3 +1096,37 @@ Mutation check (not committed): making the lock always succeed failed the "secon
   middleware instead queues a fresh copy a few seconds later and lets the waiting job finish normally, so it spends no attempt. The lock is
   the cache lock `hra:sync-config:{account_id}:{config_id}` (300 s expiry; the array store in tests, Redis in production).
 - Authored size 227 lines (154 tests): within the budget.
+
+## Slice 25: Conversation lifecycle and end (tasks 25.1-25.3) - complete
+
+Commit subject: `feat(service): add the conversation state machine, webhook emission and the secret-key end endpoint`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 25.1 | `tests/Unit/ConversationLifecycleTest.php` (about 45 cases), `tests/Feature/ConversationLifecycleRaceTest.php` (9) | 79 of 81 failed with 25.2-25.3 (`ConversationLifecycle` / `IllegalTransition` not found; 2 refusal checks of the end route pass while the route is absent) | green | every edge of the table (7 legal, 13 illegal incl. `created -> failed`, out of a terminal state, `-> created`), terminal immutable and the second writer, idempotent same-state (no second `conversation.live`), argument guard (reason must fit the target), `end()` on open / terminal / failed, timestamps per state, provider reason kept beside the stable reason, the model passed in is refreshed, `conversation.live` / `conversation.ended` rows, `failed` reported as `conversation.ended`, immediate empty `ready` transcript + `transcript.ready` when there is no session (created -> ended, expired, failed at connect), delayed release at the configured / default delay otherwise; race: two stale copies end one conversation (first reason wins, loser's reason and time untouched, one `conversation.ended`, one release), failure vs end both orders, the UPDATE is one conditional statement naming the source states, release only after commit (real sync queue: the teardown does not run inside the transaction), nothing on rollback, reconciliation runs with no provider callback |
+| 25.2 | `tests/Feature/ConversationWebhookEmissionTest.php` (7) | same run | green | live once, failure payload (`status failed`, reason, `ended_at`), ended once whoever asks, `transcript.ready` payload (`{status, utterance_count}` and no text, `data` keys exactly `conversation`, `transcript`), the count of utterances, subscribed-only / enabled-only / own-account-only fan-out, one `evt_` per emission shared across endpoints |
+| 25.3 | `tests/Feature/ConversationEndTest.php` (11) | same run | green | end live (`api`, release queued), end connecting, end twice (200, identical body, one event, no second release), already ended by another cause (reason kept), failed stays failed, end before connect (no release, transcript `ready`, `transcript.ready` once), foreign 404, unknown 404, `conversations:write` scope (403 `insufficient_scope`), no key 401, body cannot choose the reason |
+
+Mutation checks (not committed): removing the `status IN (...)` source condition from the conditional UPDATE failed 26 cases; removing
+`afterCommit()` from the release job dispatch failed the commit-ordering cases.
+
+### Work Unit Evidence (slice 25)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ConversationLifecycleTest\|ConversationLifecycleRaceTest\|ConversationWebhookEmissionTest\|ConversationEndTest'`: 81 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2163 passed, 5847 assertions, exit 0; line coverage 100.0 % |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 2163 passed, `ConversationLifecycle` and `IllegalTransition` 100.0 %, exit 0 (the file now includes both) |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `scramble:export` regenerated (`POST /conversations/{conversation}/end`); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | the end route is exercised through the full HTTP stack by `ConversationEndTest`; the full curl harness of the whole flow is slice 27's `MockConversationFlowTest` (the connect route does not exist yet, so no live conversation can be made over HTTP) |
+| Rollback boundary | `ConversationLifecycle`, `IllegalTransition`, the `end` action and route, the `release_delay_seconds` config key, the high-integrity file entries, their four test files, `openapi.json` |
+
+### Deviations and decisions (slice 25)
+
+- Authored size 1,002 lines (782 tests), above the 400 budget: the state machine's table, the race and ordering proofs and the two surfaces it feeds (webhooks, end route) are one cohesive unit and sit in the 95 % zone. Recommend `size:exception`.
+- `transition()` returns `bool` (changed or not) and refreshes the model it was given; the task text only said "transition". A same-target call is the idempotent no-op, a different terminal state is `IllegalTransition`. `end()` is an addition: every ending cause (api, client, sweeper, provider) shares "end if open, otherwise leave it", including a conversation that failed in between.
+- `IllegalTransition` extends `ApiProblem` (409 `invalid_state`) so a request-driven illegal change answers per the spec without a mapping layer; event-driven callers catch it.
+- A conversation that becomes terminal while `start()` is still running (state `connecting`, no session ref yet) is finalized at once as if it had no session, because nothing is known to release. Slice 26 must release a session whose refs arrive after the conversation is already terminal (recorded as a slice 26 requirement).
+- The release job is dispatched `afterCommit()` with a delay of `hr-avatar.release_delay_seconds` (default 20, `HRA_RELEASE_DELAY_SECONDS`, already in `.env.example`).
+- `transcript.ready` for a conversation finalized at once is recorded by `TranscriptReconciler::reconcile($conversation, [])` inside the lifecycle's transaction, after `conversation.ended`.

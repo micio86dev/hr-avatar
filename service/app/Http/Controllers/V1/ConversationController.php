@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\V1;
 
 use App\AvatarProviders\SyncStatus;
+use App\Conversations\ConversationLifecycle;
+use App\Conversations\EndedReason;
 use App\Http\ApiProblem;
 use App\Http\ErrorCode;
 use App\Http\Problem;
@@ -68,6 +70,22 @@ class ConversationController
      */
     public function show(Conversation $conversation): ConversationResource
     {
+        return new ConversationResource($conversation);
+    }
+
+    /**
+     * End a conversation
+     *
+     * Ends a conversation that is not over yet, with the reason `api`, and answers 200 with it. Its provider
+     * session is released a few seconds later and its transcript is completed from the provider's. A
+     * conversation that was never connected has no session: it ends at once and its transcript is final
+     * (`ready`, empty). A conversation that is already over (ended or failed) is answered 200 as it is,
+     * with nothing changed and nothing emitted, so ending twice is safe.
+     */
+    public function end(Conversation $conversation, ConversationLifecycle $lifecycle): ConversationResource
+    {
+        $lifecycle->end($conversation, EndedReason::Api);
+
         return new ConversationResource($conversation);
     }
 }

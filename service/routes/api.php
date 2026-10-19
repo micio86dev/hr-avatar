@@ -63,6 +63,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
     });
 
     Route::post('conversations', [ConversationController::class, 'store'])->middleware('scope:conversations:write')->name('conversations.store');
+    Route::post('conversations/{conversation}/end', [ConversationController::class, 'end'])->middleware('scope:conversations:write')->name('conversations.end');
     Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->middleware('scope:conversations:read')->name('conversations.show');
 
     Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');

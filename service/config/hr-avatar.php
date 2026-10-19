@@ -9,7 +9,7 @@ use App\Voices\ElevenLabsVoices;
 
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
- * A key is added by the slice that reads it. Still to come: the release delay.
+ * A key is added by the slice that reads it.
  */
 return [
 
@@ -100,6 +100,12 @@ return [
         'cartesia' => env('CARTESIA_API_KEY'),
         'elevenlabs' => env('ELEVENLABS_API_KEY'),
     ],
+
+    /*
+    | How long after a conversation ends its provider session is released, in seconds. The browser may still
+    | be closing the call, and a provider may still be writing the transcript.
+    */
+    'release_delay_seconds' => (int) env('HRA_RELEASE_DELAY_SECONDS', 20),
 
     /* The longest a conversation may be asked to last, in seconds; a create asking for more is refused. */
     'max_duration_ceiling' => (int) env('HRA_MAX_DURATION_CEILING', 3600),

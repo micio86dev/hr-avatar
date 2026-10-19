@@ -937,6 +937,47 @@
                 ]
             }
         },
+        "/conversations/{conversation}/end": {
+            "post": {
+                "operationId": "conversations.end",
+                "description": "Ends a conversation that is not over yet, with the reason `api`, and answers 200 with it. Its provider\nsession is released a few seconds later and its transcript is completed from the provider's. A\nconversation that was never connected has no session: it ends at once and its transcript is final\n(`ready`, empty). A conversation that is already over (ended or failed) is answered 200 as it is,\nwith nothing changed and nothing emitted, so ending twice is safe.",
+                "summary": "End a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
         "/conversations/{conversation}": {
             "get": {
                 "operationId": "conversations.show",

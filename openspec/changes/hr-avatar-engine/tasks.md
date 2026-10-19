@@ -612,15 +612,16 @@ Reconciliation: 45, 46, 47, 48, 49.
 Commit: `feat(service): add the conversation state machine, webhook emission and the secret-key end endpoint`
 Specs: conversations (state machine, becoming live, end a conversation). Reconciliation: 15, 16, 19, 21, 27. High-integrity zone (coverage >= 95).
 
-- [ ] 25.1 `ConversationLifecycle::transition`.
+- [x] 25.1 `ConversationLifecycle::transition`.
   - RED: `service/tests/Unit/ConversationLifecycleTest.php` plus `service/tests/Feature/ConversationLifecycleRaceTest.php` for every row of the design transition table: "Terminal is immutable", "Illegal transition" (409 `invalid_state` when request-driven), "Idempotent live", "Race between end causes" (conditional UPDATE, first writer wins, exactly one `conversation.ended`), no `created -> failed`, `connecting -> failed` with `provider_error`/`provider_capacity` and `ended_at` set, `created -> ended` finalizes immediately as an empty `ready` and emits `transcript.ready`, `connecting|live -> ended` dispatches `ReleaseProviderSession` delayed by `HRA_RELEASE_DELAY_SECONDS`, `conversation.live` on `connecting -> live`, delivery rows recorded in the same transaction, jobs `afterCommit`.
   - GREEN: `service/app/Conversations/ConversationLifecycle.php`; add it to the coverage source of `service/phpunit.high-integrity.xml`.
+  - Note (apply): `transition()` returns whether it changed the row (false = already in the target, the idempotent no-op) and throws `IllegalTransition` (an `ApiProblem`, 409 `invalid_state`) otherwise; `end()` is the entry point for every cause that ends a conversation and leaves a terminal one untouched. A conversation with no provider session at the moment it becomes terminal is finalized at once (`created` -> `ended`, failed at connect); one with a session gets the delayed `ReleaseProviderSession`. `hr-avatar.release_delay_seconds` (`HRA_RELEASE_DELAY_SECONDS`) is added.
   - Verify: `cd service && php artisan test --filter='ConversationLifecycle' && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`.
-- [ ] 25.2 Webhook emission end to end.
+- [x] 25.2 Webhook emission end to end.
   - RED: `service/tests/Feature/ConversationWebhookEmissionTest.php` scenarios "Live event", "Ended for failure" (`failed` conversation emits `conversation.ended` with status `failed`), "Transcript ready payload", subscribed-only delivery.
   - GREEN: wiring already in `transition()`; fix gaps.
   - Verify: `cd service && php artisan test --filter=ConversationWebhookEmissionTest`.
-- [ ] 25.3 `POST /v1/conversations/{id}/end`.
+- [x] 25.3 `POST /v1/conversations/{id}/end`.
   - RED: `service/tests/Feature/ConversationEndTest.php` (rewrite of BEAI `InterviewEndTest`) scenarios "End live" (`ended_reason api`), "End twice" (idempotent 200, resource unchanged), "End before connect", cross-account 404, scope `conversations:write`.
   - GREEN: end action on `ConversationController`.
   - Verify: `cd service && php artisan test --filter=ConversationEndTest && php artisan test --coverage --min=90`.

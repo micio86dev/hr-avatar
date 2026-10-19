@@ -15,14 +15,16 @@
             <directory>tests/Arch</directory>
         </testsuite>
     </testsuites>
-    <!-- Same suite, narrower coverage source: the zones held to 95 %. Later slices add the
-         conversation state machine. -->
+    <!-- Same suite, narrower coverage source: the zones held to 95 %. Slice 25 adds the conversation
+         state machine; slice 26 adds the connect compare-and-set. -->
     <source>
         <include>
             <directory>app/Keys</directory>
             <directory>app/Accounts</directory>
             <directory>app/Http/Middleware</directory>
             <directory>app/Webhooks/Outbound</directory>
+            <file>app/Conversations/ConversationLifecycle.php</file>
+            <file>app/Conversations/IllegalTransition.php</file>
         </include>
     </source>
     <coverage>
