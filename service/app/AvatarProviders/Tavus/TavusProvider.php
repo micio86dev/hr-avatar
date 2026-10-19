@@ -4,14 +4,17 @@ namespace App\AvatarProviders\Tavus;
 
 use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\FieldSpecValidator;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
 use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptNotReady;
 use App\AvatarProviders\TranscriptShapeError;
+use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 use Illuminate\Http\Client\ConnectionException;
@@ -39,6 +42,29 @@ final class TavusProvider implements AvatarProvider
     public function ingestion(): Ingestion
     {
         return Ingestion::Callback;
+    }
+
+    public function describe(): ProviderDescription
+    {
+        return new ProviderDescription(
+            fields: TavusFieldSpecs::config(),
+            personaFields: TavusFieldSpecs::persona(),
+            resources: ['replica', 'pal'],
+            voiceEngines: VoiceBinding::ENGINES,
+        );
+    }
+
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array
+    {
+        return FieldSpecValidator::validateConfig($this->describe(), $config, $voice, $persona);
+    }
+
+    /**
+     * Always: the Tavus persona is where the persona knobs, the voice and the language-model binding live.
+     */
+    public function syncRequired(AvatarConfig $config): bool
+    {
+        return true;
     }
 
     /**

@@ -12,12 +12,31 @@ use App\Models\AvatarConfig;
  *
  * Every network operation receives the resolved ProviderAuth (last, except that `start` is
  * followed by its optional callback URL). This interface grows slice by slice with the operations
- * that have an implementation; the field specs, sync and catalogue operations arrive with theirs.
+ * that have an implementation; the sync and catalogue operations arrive with theirs.
  */
 interface AvatarProvider
 {
     /** How this provider's events reach the service. */
     public function ingestion(): Ingestion;
+
+    /** What a client can configure and look up for this provider. Makes no provider call. */
+    public function describe(): ProviderDescription;
+
+    /**
+     * The problems of an avatar config's `config`, `persona` and voice for this provider, empty when
+     * there are none. Pure: nothing is sent to the provider.
+     *
+     * @param  array<array-key, mixed>  $config
+     * @param  array<array-key, mixed>  $persona
+     * @return list<FieldError>
+     */
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array;
+
+    /**
+     * Whether the provider needs objects created for this config before a conversation can start,
+     * which decides its initial sync status.
+     */
+    public function syncRequired(AvatarConfig $config): bool;
 
     /**
      * Starts a provider session for a conversation. Runs outside any database transaction.

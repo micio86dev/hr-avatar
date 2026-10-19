@@ -4,10 +4,13 @@ namespace Tests\Support\AvatarProviders;
 
 use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\FieldSpecValidator;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 
@@ -18,6 +21,21 @@ use App\Models\AvatarConfig;
 abstract class StubProvider implements AvatarProvider
 {
     abstract public function ingestion(): Ingestion;
+
+    public function describe(): ProviderDescription
+    {
+        return new ProviderDescription(fields: [], personaFields: [], resources: [], voiceEngines: []);
+    }
+
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array
+    {
+        return FieldSpecValidator::validateConfig($this->describe(), $config, $voice, $persona);
+    }
+
+    public function syncRequired(AvatarConfig $config): bool
+    {
+        return false;
+    }
 
     public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession
     {

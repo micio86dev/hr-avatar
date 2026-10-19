@@ -4,14 +4,17 @@ namespace App\AvatarProviders\LiveAvatar;
 
 use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\FieldSpecValidator;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
 use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptNotReady;
 use App\AvatarProviders\TranscriptShapeError;
+use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 use Carbon\CarbonImmutable;
@@ -48,6 +51,33 @@ final class LiveAvatarProvider implements AvatarProvider
     public function ingestion(): Ingestion
     {
         return Ingestion::Poll;
+    }
+
+    public function describe(): ProviderDescription
+    {
+        return new ProviderDescription(
+            fields: LiveAvatarFieldSpecs::config(),
+            personaFields: LiveAvatarFieldSpecs::persona(),
+            resources: ['avatar', 'voice'],
+            voiceEngines: VoiceBinding::ENGINES,
+        );
+    }
+
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array
+    {
+        return FieldSpecValidator::validateConfig($this->describe(), $config, $voice, $persona);
+    }
+
+    /**
+     * Only a config that needs a LiveAvatar object: a language-model configuration (bound, or left
+     * over from a binding that was removed, so the sync can delete it) or an external voice to bind.
+     * A plain config, or one with the stock voice, starts a session with nothing prepared.
+     */
+    public function syncRequired(AvatarConfig $config): bool
+    {
+        return $config->llm_model_id !== null
+            || VoiceBinding::fromArray($config->voice)?->isExternal() === true
+            || is_string($config->provider_state['llm_configuration_id'] ?? null);
     }
 
     /**

@@ -4,11 +4,14 @@ namespace App\AvatarProviders\Mock;
 
 use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\FieldSpecValidator;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
 use App\AvatarProviders\TranscriptLine;
+use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 use Illuminate\Support\Facades\Cache;
@@ -29,6 +32,24 @@ final class MockProvider implements AvatarProvider
     public function ingestion(): Ingestion
     {
         return Ingestion::None;
+    }
+
+    public function describe(): ProviderDescription
+    {
+        return new ProviderDescription(fields: [], personaFields: [], resources: [], voiceEngines: [VoiceBinding::PROVIDER_ENGINE]);
+    }
+
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array
+    {
+        return FieldSpecValidator::validateConfig($this->describe(), $config, $voice, $persona);
+    }
+
+    /**
+     * Never: there is no provider-side object to create.
+     */
+    public function syncRequired(AvatarConfig $config): bool
+    {
+        return false;
     }
 
     public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession

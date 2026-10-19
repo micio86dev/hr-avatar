@@ -481,3 +481,56 @@ Triangulation: roles, timestamp shapes, malformed rows and answers, end reasons 
 - A transcript shape error message never quotes the row (no text, no role).
 - Nothing in the adapter calls `LiveAvatarApi::call` without catching `ProviderException` where the contract says "never throws"
   (`teardown`, the context delete); `fetchTranscript` and `fetchSession` let it propagate as the contract says.
+
+## Slice 15: Field specs, config validation, voice binding (tasks 15.1-15.2) - complete (slices 15-19 batch)
+
+Commit subject: `feat(service): add provider field specs, config validation, describe and syncRequired`
+
+Batch note: slices 15-19 ran on the merged tracker branch (Tavus and LiveAvatar lanes already merged), single writer,
+`DB_PORT=55442` with `hra_test`. Baseline before the batch: 1098 tests passing.
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 15.1 | `tests/Unit/AvatarProviders/FieldSpecValidatorTest.php` | the suite could not load: `DatasetMissing` (the dataset builds `new VoiceBinding`, class not found) | green with 15.2 | ported from BEAI `ProviderFieldSpecTest` / `ProviderFieldSpecsEngineKnobsTest` (unknown, required, type, range, enum, null = absent, int accepted for a number, all errors at once) |
+| 15.2 | `Tavus/TavusFieldSpecsTest`, `LiveAvatar/LiveAvatarFieldSpecsTest`, `MockValidateConfigTest`, `SyncRequiredTest` | `validateConfig` / `describe` / `syncRequired` undefined on all three adapters (140 tests, 0 passed) | 140/140 | two test defects fixed on the way: a message assertion that tripped on the word "external", and `toBe` on arrays of objects (identity) became `toEqual` |
+
+### Work Unit Evidence (slice 15)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='FieldSpecValidatorTest\|TavusFieldSpecsTest\|LiveAvatarFieldSpecsTest\|MockValidateConfigTest\|SyncRequiredTest'`: 141 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1241 passed, 3228 assertions; `--coverage --min=90`: total 100.0 %, exit 0 |
+| High integrity | `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 1241 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed; `openapi.json` unchanged (no route) |
+| Runtime harness | N/A by task: pure validation, exercised through the config endpoints of slice 16 |
+| Rollback boundary | `FieldType`, `FieldSpec`, `FieldError`, `FieldSpecValidator`, `VoiceBinding`, `ProviderDescription`, `Tavus/TavusFieldSpecs`, `LiveAvatar/LiveAvatarFieldSpecs`, the `describe`/`validateConfig`/`syncRequired` methods on the interface and the three adapters, the `StubProvider` additions, and their tests |
+
+### Deviations and decisions (slice 15)
+
+- Authored size about 1,176 lines (about 540 app, 636 tests), above the 400 budget: the framework, three adapters and the
+  per-provider specs are one cohesive unit; recommend `size:exception`.
+- **`validateConfig` takes a third, optional `persona` argument** (`validateConfig(array $config, ?VoiceBinding $voice, array $persona = [])`).
+  The design signature has two. The `persona` object is stored and its Tavus knobs are pushed to the provider, so it needs the same
+  allow-list as `config`; without it a client could store arbitrary keys that slice 17 would copy into a third-party request.
+  Persona errors are named `persona.<key>`, config errors `config.<key>`, the voice engine `voice.engine`.
+- **Tavus keys** (decision for slices 16-17): `config` = `replica_id`, `persona_id` (both required, as BEAI's `faceId`/`palId`),
+  `participant_left_timeout` (integer 0-3600) and `tts_model_name` (only with a Cartesia or ElevenLabs voice, models per engine).
+  `persona` = `llm_temperature`, `llm_speculative_inference`, `turn_taking_patience`, `interruptibility`, `voice_isolation`,
+  `idle_engagement` (snake_case like the other Tavus wire keys). BEAI's recording, captions, audio-only, call duration, `ttsEngine`
+  and `ttsExternalVoiceId` are not carried: nothing sends the first four, and the voice engine/id come from the config's `voice`.
+  The LLM model is deliberately not a knob (the `llm_model_id` binding writes that persona path, as BEAI decided).
+- **LiveAvatar keys**: exactly the camelCase keys `LiveAvatarPayload` reads (`avatarId` required). `maxSessionDurationSec`,
+  `videoEncoding`, `voiceId`, `ttsEngine` are unknown keys. The voice settings are refused unless a matching external voice is bound
+  (`requires_voice_engine`): `voiceSpeed` and `ttsModelName` for Cartesia or ElevenLabs, the four ElevenLabs knobs for ElevenLabs only
+  (LiveAvatar's Cartesia object has `speed` and `model`). This replaces BEAI's `tts_setting_unsupported` / `superseded_by_*` codes.
+- New field type `integer` (BEAI had none): `TavusPayload` drops a non-integer left-timeout, so a float would have been accepted and
+  never sent.
+- Error codes: `required`, `type`, `range`, `enum`, `unknown`, `requires_voice_engine`, and `unsupported` for a voice engine the
+  provider does not speak. The sentences are fixed English and never quote the value.
+- `LiveAvatarProvider::syncRequired` is also true when `provider_state.llm_configuration_id` is stored without a bound model: the
+  sync job of slice 17 is what deletes that stale LiveAvatar configuration (slice 12 left "forget" to it), and a job is only
+  dispatched for a config that needs one.
+- Guardian Angel finding fixed (RED test first): when the provider refuses the voice engine, a voice-gated setting is no longer also
+  reported as `requires_voice_engine`; the `voice.engine` error stands alone for it.
+- Mock accepts the `provider` voice engine only; Tavus and LiveAvatar accept `provider|cartesia|elevenlabs`. The catalogue's
+  `resources` are `replica`, `pal` (Tavus) and `avatar`, `voice` (LiveAvatar); Mock lists none.

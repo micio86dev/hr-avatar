@@ -436,11 +436,11 @@ Specs: provider-adapters (teardown, transcript reconciliation, session status po
 Commit: `feat(service): add provider field specs, config validation, describe and syncRequired`
 Specs: avatar-configs (config validation, voice, sync gate). Reconciliation: 30, 31.
 
-- [ ] 15.1 Field spec framework.
+- [x] 15.1 Field spec framework.
   - RED: `service/tests/Unit/AvatarProviders/FieldSpecValidatorTest.php` (port BEAI `ConfigValidator`/`ProviderFieldSpecs` tests: `rg -l 'ConfigValidator' ../api/tests`, read-only): unknown key -> `config.<key>` error, required keys, types, enums, limits.
   - GREEN: `service/app/AvatarProviders/{FieldSpec,FieldType,FieldError,FieldSpecValidator,VoiceBinding,ProviderDescription}.php`.
   - Verify: `cd service && php artisan test --filter=FieldSpecValidatorTest`.
-- [ ] 15.2 Per-provider specs and `describe`/`validateConfig`/`syncRequired`.
+- [x] 15.2 Per-provider specs and `describe`/`validateConfig`/`syncRequired`.
   - RED: `TavusFieldSpecsTest`, `LiveAvatarFieldSpecsTest`, `MockValidateConfigTest` (`mock` accepts `{}`): voice engine must be in the adapter's `describe()->voiceEngines`, otherwise a field error; `syncRequired` true for Tavus and for LiveAvatar with an LLM or an external voice, false for Mock and plain LiveAvatar. Back-office labels dropped.
   - GREEN: add `describe`, `validateConfig`, `syncRequired` to the `AvatarProvider` interface and to `MockProvider`, `TavusProvider`, `LiveAvatarProvider`; `service/app/AvatarProviders/Tavus/TavusFieldSpecs.php`, `service/app/AvatarProviders/LiveAvatar/LiveAvatarFieldSpecs.php`.
   - Verify: `cd service && php artisan test --filter='FieldSpecsTest|MockValidateConfigTest|SyncRequired' && php artisan test --coverage --min=90`.
