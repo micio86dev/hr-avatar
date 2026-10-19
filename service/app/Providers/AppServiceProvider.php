@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Accounts\CurrentAccount;
 use App\Http\OpenApi\DocumentIdentity;
+use App\Http\OpenApi\ProblemDocumentation;
 use App\Http\OpenApi\SecurityDocumentation;
 use App\Webhooks\Outbound\OutboundHostGuard;
 use Dedoc\Scramble\Scramble;
@@ -20,6 +21,9 @@ use RuntimeException;
 class AppServiceProvider extends ServiceProvider
 {
     private const MIN_JWT_SECRET_BYTES = 32;
+
+    /** A minute's callbacks from one address. Fixed by the provider-webhooks spec, hence not configuration. */
+    private const PROVIDER_WEBHOOK_PER_MINUTE = 120;
 
     /**
      * Register any application services.
@@ -48,12 +52,13 @@ class AppServiceProvider extends ServiceProvider
                 ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
         }
 
-        // Provider callbacks carry no key, so their budget is the caller's address (120 a minute, fixed by the spec).
-        RateLimiter::for('provider-webhook', fn (Request $request) => Limit::perMinute(120)->by((string) $request->ip()));
+        // Provider callbacks carry no key, so their budget is the caller's address.
+        RateLimiter::for('provider-webhook', fn (Request $request) => Limit::perMinute(self::PROVIDER_WEBHOOK_PER_MINUTE)->by((string) $request->ip()));
 
         Scramble::configure()
             ->withDocumentTransformers(DocumentIdentity::apply(...))
             ->withDocumentTransformers(SecurityDocumentation::document(...))
+            ->withDocumentTransformers(ProblemDocumentation::document(...))
             ->withOperationTransformers(SecurityDocumentation::operation(...));
 
         Event::listen(RouteMatched::class, fn (RouteMatched $event) => Log::shareContext(['route' => $event->route->getName()]));

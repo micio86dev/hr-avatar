@@ -146,8 +146,11 @@ jobs:
         run: php artisan scramble:export --path=openapi.json
         working-directory: service
 
+      # `git diff` ignores a file git does not track; marking it intent-to-add makes a missing or new one a diff.
       - name: Fail on drift
-        run: git diff --exit-code -- service/openapi.json
+        run: |
+          git add --intent-to-add -- service/openapi.json
+          git diff --exit-code -- service/openapi.json
 
       - name: Lint the OpenAPI document
         working-directory: tools/spectral

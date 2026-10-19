@@ -101,7 +101,13 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -139,17 +145,23 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
                     },
                     "403": {
                         "description": "The caller lacks a requested scope (`insufficient_scope`) or asked for the other mode (`forbidden`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -190,7 +202,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -240,17 +258,17 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
                     },
                     "403": {
                         "description": "The key carries a scope the caller lacks (`insufficient_scope`) or is of the other mode (`forbidden`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -260,10 +278,16 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -340,7 +364,13 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -378,7 +408,13 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -419,7 +455,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -467,10 +509,16 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -502,17 +550,23 @@
                         "description": "No content"
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "409": {
                         "description": "A conversation that has not finished uses the config (`config_in_use`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -553,17 +607,23 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "409": {
                         "description": "The config needs no provider-side objects (`invalid_state`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -603,6 +663,12 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -714,34 +780,9 @@
                     "422": {
                         "description": "No credential is available for the provider (`provider_credential_missing`).",
                         "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "description": "Errors overview."
-                                        },
-                                        "errors": {
-                                            "type": "object",
-                                            "description": "A detailed description of each field that failed validation.",
-                                            "additionalProperties": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    },
-                                    "required": [
-                                        "message",
-                                        "errors"
-                                    ]
-                                }
-                            },
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -751,7 +792,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -761,10 +802,16 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -823,34 +870,9 @@
                     "422": {
                         "description": "The body is not valid, the voice has no vendor to preview it, or no credential is available for the vendor (`provider_credential_missing`).",
                         "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "description": "Errors overview."
-                                        },
-                                        "errors": {
-                                            "type": "object",
-                                            "description": "A detailed description of each field that failed validation.",
-                                            "additionalProperties": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    },
-                                    "required": [
-                                        "message",
-                                        "errors"
-                                    ]
-                                }
-                            },
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -860,7 +882,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -870,10 +892,16 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -914,14 +942,14 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "409": {
                         "description": "The conversation is already connected (`already_connected`), or is over (`invalid_state`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -931,17 +959,17 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
                     },
                     "429": {
-                        "description": "The provider is at its concurrency limit (`provider_concurrency_limited`).",
+                        "description": "The provider is at its concurrency limit (`provider_concurrency_limited`). It is also `rate_limited` when the budget of the key, or of the address for failed authentications, is spent; `Retry-After` says when to retry.",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -951,10 +979,13 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
                     }
                 },
                 "security": [
@@ -1018,20 +1049,26 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
                     },
                     "409": {
                         "description": "The conversation closed more than a minute ago (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1073,7 +1110,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1114,14 +1157,14 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
                     },
                     "404": {
                         "description": "The avatar config does not exist, belongs to another account or was deleted (`not_found`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -1131,10 +1174,16 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1175,7 +1224,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1216,7 +1271,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1257,17 +1318,23 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "409": {
                         "description": "The conversation was never connected (`invalid_state`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1325,6 +1392,12 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1374,7 +1447,16 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1403,6 +1485,15 @@
                 "responses": {
                     "204": {
                         "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1441,6 +1532,12 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1490,17 +1587,23 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
                     },
                     "404": {
                         "description": "The provider does not appear in the model catalogue.",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1529,6 +1632,15 @@
                 "responses": {
                     "204": {
                         "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1567,6 +1679,12 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1634,34 +1752,9 @@
                     "422": {
                         "description": "The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp` (`validation_failed`).",
                         "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "description": "Errors overview."
-                                        },
-                                        "errors": {
-                                            "type": "object",
-                                            "description": "A detailed description of each field that failed validation.",
-                                            "additionalProperties": {
-                                                "type": "array",
-                                                "items": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    },
-                                    "required": [
-                                        "message",
-                                        "errors"
-                                    ]
-                                }
-                            },
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -1671,7 +1764,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -1681,7 +1774,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -1691,7 +1784,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -1758,7 +1851,13 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1796,7 +1895,13 @@
                         }
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1837,7 +1942,13 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1885,10 +1996,16 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -1920,7 +2037,13 @@
                         "description": "No content"
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -2004,10 +2127,16 @@
                         }
                     },
                     "404": {
-                        "$ref": "#/components/responses/ModelNotFoundException"
+                        "$ref": "#/components/responses/NotFound"
                     },
                     "422": {
-                        "$ref": "#/components/responses/ValidationException"
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
                     }
                 },
                 "security": [
@@ -2121,7 +2250,7 @@
                         "content": {
                             "application/problem+json": {
                                 "schema": {
-                                    "type": "string"
+                                    "$ref": "#/components/schemas/Problem"
                                 }
                             }
                         }
@@ -3070,6 +3199,54 @@
                 ],
                 "title": "LlmModelResource"
             },
+            "Problem": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "Always `about:blank`."
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "The HTTP status text."
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "The HTTP status."
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "A sentence about this occurrence, in English; never a secret or a provider's message."
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "The stable machine-readable error code; it is never localized."
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "description": "The request id, also sent as `X-Request-Id`; quote it when asking about a request."
+                    },
+                    "errors": {
+                        "type": "object",
+                        "description": "Only on `validation_failed`: each invalid field and its messages.",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "code",
+                    "request_id"
+                ],
+                "title": "Problem"
+            },
             "ProviderCallbackRequest": {
                 "type": "object",
                 "description": "The envelope of a provider callback: a JSON object with the conversation, the event and its time. What a\nprovider adds beyond that is kept as sent. The callback address carries the credential, and a provider may\necho it, so the token is taken out of the body before anything reads it.",
@@ -3477,51 +3654,42 @@
             }
         },
         "responses": {
-            "ValidationException": {
-                "description": "Validation error",
+            "Unauthenticated": {
+                "description": "The credential is missing or wrong (`unauthenticated`), has expired (`key_expired`) or was revoked (`key_revoked`); on a browser call also an invalid or expired client secret (`client_secret_invalid`, `client_secret_expired`).",
                 "content": {
-                    "application/json": {
+                    "application/problem+json": {
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string",
-                                    "description": "Errors overview."
-                                },
-                                "errors": {
-                                    "type": "object",
-                                    "description": "A detailed description of each field that failed validation.",
-                                    "additionalProperties": {
-                                        "type": "array",
-                                        "items": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            },
-                            "required": [
-                                "message",
-                                "errors"
-                            ]
+                            "$ref": "#/components/schemas/Problem"
                         }
                     }
                 }
             },
-            "ModelNotFoundException": {
-                "description": "Not found",
+            "NotFound": {
+                "description": "There is no such resource in this account (`not_found`). A resource of another account is not found either.",
                 "content": {
-                    "application/json": {
+                    "application/problem+json": {
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": {
-                                    "type": "string",
-                                    "description": "Error overview."
-                                }
-                            },
-                            "required": [
-                                "message"
-                            ]
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "ValidationFailed": {
+                "description": "The request is not valid (`validation_failed`); `errors` maps each field to its messages.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "RateLimited": {
+                "description": "Too many requests (`rate_limited`): the budget of the key, or of the address for failed authentications, is spent. `Retry-After` says when to retry.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
                         }
                     }
                 }

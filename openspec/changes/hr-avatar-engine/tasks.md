@@ -749,25 +749,30 @@ Specs: provider-webhooks (inbound endpoint authentication, receipt confidentiali
 Commit: `test(service): enforce provider-agnostic core, all-routes account isolation, secret non-disclosure and coverage gates`
 Specs: service-foundation (boundary rules, account scoping, coverage gates), api-keys/credentials/consumer-webhooks (non-disclosure). Expected to add tests only; any production fix it forces is part of the same commit and recorded.
 
-- [ ] 31.1 Provider branching and literal scan.
+- [x] 31.1 Provider branching and literal scan.
   - RED: `service/tests/Arch/ProviderBranchingTest.php` scenario "Provider branching outside adapters is rejected": scanner fixture with `if ($provider === 'tavus')` outside `App\AvatarProviders\*` fails and names the class; the literals `tavus`, `heygen`, `liveavatar` appear only under `app/AvatarProviders` and in `config/hr-avatar.php`; "Clean tree passes".
   - GREEN: move any stray literal behind the registry.
+  - Note (apply): a token-based scanner (`tests/Arch/SourceScanner.php`) reads code, so a comment or a docblock that names a provider is not a finding; database factories are exempt (test support). Also here: `TransportValuesTest` (the transports the service names are exactly `daily`, `liveavatar`, `mock`).
   - Verify: `cd service && php artisan test --filter=ProviderBranchingTest`.
-- [ ] 31.2 Model and serialization arch rules.
+- [x] 31.2 Model and serialization arch rules.
   - RED: `service/tests/Arch/ModelRulesTest.php`: every model except `LlmModel` (and `Account`) uses `BelongsToAccount`; credential, key, secret and payload columns are `$hidden`; no `var_export`/`print_r`/`dd(` in `app/`.
   - GREEN: fix offenders.
+  - Note (apply): also asserts that no model mass-assigns `account_id` and that every encrypted attribute is hidden; the `var_export`/`print_r`/`var_dump`/`dd`/`dump` ban reads tokens.
   - Verify: `cd service && php artisan test --filter=ModelRulesTest`.
-- [ ] 31.3 All-routes isolation dataset.
+- [x] 31.3 All-routes isolation dataset.
   - RED: `service/tests/Feature/AccountIsolationTest.php` (security row "Cross-account"): a dataset over every authenticated `/v1` route using a resource of account A under account B's key -> 404; plus a meta-test that fails when a registered authenticated route is missing from the dataset.
   - GREEN: add missing coverage.
+  - Note (apply): deleting a credential B does not have is an idempotent 204 (A's stays); a catalogue read and a voice preview without B's own credential are refused (422), never served with A's.
   - Verify: `cd service && php artisan test --filter=AccountIsolationTest`.
-- [ ] 31.4 Secret-exposure sweep.
+- [x] 31.4 Secret-exposure sweep.
   - RED: `service/tests/Feature/SecretExposureTest.php` per resource: provider, LLM, key, webhook secret and callback token never appear in any response, `Log::spy`, failed-job record or exception message.
   - GREEN: fix leaks.
+  - Note (apply): no leak was found; the sweep also covers a failing provider that echoes the keys back.
   - Verify: `cd service && php artisan test --filter=SecretExposureTest`.
-- [ ] 31.5 Coverage gates and OpenAPI refresh.
+- [x] 31.5 Coverage gates and OpenAPI refresh.
   - RED: run `cd service && php artisan test --coverage --min=90` and `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`; fill gaps with tests, never lower thresholds. Run `php artisan scramble:export --path=openapi.json` and `cd ../tools/spectral && bun run lint`; fix drift in code, not the ruleset. Extend `OpenApiTest` so every route is documented with the right security scheme.
   - GREEN: commit refreshed `service/openapi.json`.
+  - Note (apply), open items closed here: `ProblemDocumentation` documents the `Problem` body once and 401/404/429 (and 422) on every endpoint, replacing the framework's own `{message}` shapes, which were wrong for this service; `OpenApiDriftTest` fails when `openapi.json` is untracked and the CI step marks it intent-to-add before `git diff`; `config/trustedproxy.php` reads `HRA_TRUSTED_PROXIES` so the failed-authentication and callback limiters can count the caller, not the proxy.
   - Verify: `cd service && php artisan test --coverage --min=90 && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95 && composer run analyse && composer run lint && git diff --exit-code service/openapi.json`.
 
 ## Slice 32: Railway configuration as code

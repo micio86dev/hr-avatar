@@ -53,6 +53,16 @@ it('exports the OpenAPI document, fails on drift, then lints it', function () {
     expect($steps)->toBe(collect($steps)->sort()->values()->all());
 });
 
+it('makes an untracked openapi.json count as drift: git diff alone never reports a file git does not know', function () {
+    $steps = array_map('position', [
+        'php artisan scramble:export --path=openapi.json',
+        'git add --intent-to-add -- service/openapi.json',
+        'git diff --exit-code -- service/openapi.json',
+    ]);
+
+    expect($steps)->toBe(collect($steps)->sort()->values()->all());
+});
+
 it('sets up Bun before any step that uses it', function () {
     expect(position('oven-sh/setup-bun@v2'))->toBeLessThan(position('bun install --frozen-lockfile'))
         ->and(position('bun install --frozen-lockfile'))->toBeLessThan(position('bun run lint'));
