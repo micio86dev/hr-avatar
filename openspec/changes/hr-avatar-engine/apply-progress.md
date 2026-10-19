@@ -1452,7 +1452,7 @@ Commit subject: `build(service): add Railway config files and deployment topolog
 
 | Task | Test file | RED (observed) | GREEN | Notes |
 |---|---|---|---|---|
-| 32.1 | `RailwayFilesTest` (22) | 15 failed (files absent) | green | three files, `$schema`, the Dockerfile build, pre-deploy `migrate` then `LlmModelSeeder`, healthcheck `/v1/health`, the two start commands matching the compose file, the scheduler on one replica, every key within the Railway schema |
+| 32.1 | `RailwayFilesTest` (18) | 15 failed (files absent) | green | three files, `$schema`, the Dockerfile build, pre-deploy `migrate` then `LlmModelSeeder`, healthcheck `/v1/health`, the two start commands matching the compose file, the scheduler on one replica, every key within the Railway schema |
 | 32.2 | `Arch/DocsBoundaryTest` | 20 errors (document absent) | green | the variable table parsed and compared with every setting the configuration reads; required/optional marks; host vocabulary; nothing in the repository calls Railway |
 
 ### Work Unit Evidence (slice 32)
