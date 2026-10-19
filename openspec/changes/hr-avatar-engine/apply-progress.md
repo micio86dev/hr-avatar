@@ -1025,6 +1025,8 @@ Commit subject: `feat(service): add delayed provider session release job`
 - The release delay (`HRA_RELEASE_DELAY_SECONDS`, 20) is configuration read by whoever queues this job, which is slice 25's lifecycle; nothing in the job reads it, so the key is added there (`config/hr-avatar.php` still lists it as to come).
 - A conversation with no provider session (never connected, or failed at connect) is a no-op: its transcript is finished immediately by the lifecycle (slice 25), not by this job.
 
+Slice 24 commit: `c064a9f`.
+
 ## Batch summary (unit 0 and slices 20-24)
 
 | Unit | Commit | Full suite after |
@@ -1034,7 +1036,7 @@ Commit subject: `feat(service): add delayed provider session release job`
 | 21 webhook endpoints, signer, guard | `8d7d203` | 1894 |
 | 22 dispatch, delivery, log | `863d32d` | 1987 |
 | 23 transcript reconciler | `f81aa8d` | 2047 |
-| 24 release job | see `git log` (commit after `f81aa8d`) | 2073 |
+| 24 release job | `c064a9f` | 2073 |
 
 ### Open decisions (for the owner / next batches)
 
