@@ -554,7 +554,7 @@
         "/catalogue": {
             "get": {
                 "operationId": "catalogue.index",
-                "description": "For every provider: the settings its avatar configs accept (`fields` for `config`,\n`persona_fields` for `persona`: key, type, whether required, limits and allowed values), the\nresources it can list, and the voice engines it speaks with. Makes no provider call.",
+                "description": "For every provider: the settings its avatar configs accept (`fields` for `config`,\n`persona_fields` for `persona`: key, type, whether required, limits and allowed values), the\nresources it can list, and the voice engines it speaks with. The voice vendors that are not\navatar providers follow, each with the one resource `voice`. Makes no provider call.",
                 "summary": "Describe the providers",
                 "tags": [
                     "Catalogue"
@@ -736,6 +736,115 @@
                     },
                     "502": {
                         "description": "The provider failed or could not be reached (`provider_error`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/voice-preview": {
+            "post": {
+                "operationId": "voice-preview.store",
+                "description": "Returns a short audio sample of one voice as base64. The sentence is the platform's own for the\n`language`; the request cannot supply text (any member beyond the four is a 422). A voice vendor\nsynthesizes that sentence; LiveAvatar returns its own generic clip. A provider that has no voices\nof its own is previewed through the external vendor named in `tts_engine`; without one there is\nnothing to preview (422). The vendor is called with the account's credential, else the platform's,\nand a repeat is served from a cache without a vendor call.",
+                "summary": "Preview a voice",
+                "tags": [
+                    "Catalogue"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VoicePreviewRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "content_type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "audio/wav",
+                                                "audio/ogg",
+                                                "audio/mpeg"
+                                            ]
+                                        },
+                                        "audio_base64": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "content_type",
+                                        "audio_base64"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The body is not valid, the voice has no vendor to preview it, or no credential is available for the vendor (`provider_credential_missing`).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Errors overview."
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "description": "A detailed description of each field that failed validation.",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The vendor does not know the voice.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The vendor failed or could not be reached (`provider_error`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
@@ -1804,6 +1913,51 @@
                     }
                 },
                 "title": "UpdateAvatarConfigRequest"
+            },
+            "VoicePreviewRequest": {
+                "type": "object",
+                "description": "The body of a voice preview: which voice, and in which language to hear it. There is no member for the\nsentence and no way to add one: any key outside these four is refused. The voice id is placed in a\nvendor url, so it is limited to what an id is made of.",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "enum": [
+                            "tavus",
+                            "heygen",
+                            "cartesia",
+                            "elevenlabs"
+                        ]
+                    },
+                    "voice_id": {
+                        "type": "string",
+                        "description": "The vendor's id of the voice: 1 to 128 letters, digits, `_` or `-`.",
+                        "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                    },
+                    "tts_engine": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The external engine the provider routes its voice through, or null. Needed to preview the voice of a provider\nthat has no voices of its own.",
+                        "enum": [
+                            "cartesia",
+                            "elevenlabs",
+                            null
+                        ]
+                    },
+                    "language": {
+                        "type": "string",
+                        "enum": [
+                            "en",
+                            "it"
+                        ]
+                    }
+                },
+                "required": [
+                    "provider",
+                    "voice_id",
+                    "language"
+                ],
+                "title": "VoicePreviewRequest"
             }
         },
         "responses": {

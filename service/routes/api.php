@@ -7,6 +7,7 @@ use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
 use App\Http\Controllers\V1\ProviderCredentialController;
+use App\Http\Controllers\V1\VoicePreviewController;
 use App\Http\Middleware\RejectKeyInQuery;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::get('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'show'])->name('avatar-configs.show');
         Route::get('catalogue', [CatalogueController::class, 'index'])->name('catalogue.index');
         Route::get('catalogue/{provider}/{resource}', [CatalogueController::class, 'show'])->name('catalogue.show');
+        Route::post('voice-preview', [VoicePreviewController::class, 'store'])->name('voice-preview.store');
     });
 
     Route::middleware('scope:avatar_configs:write')->group(function () {

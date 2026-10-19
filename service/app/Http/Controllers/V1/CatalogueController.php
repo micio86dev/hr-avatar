@@ -11,6 +11,7 @@ use App\Http\ApiProblem;
 use App\Http\ErrorCode;
 use App\Http\Problem;
 use App\Http\Requests\CatalogueRequest;
+use App\Voices\VoiceVendorRegistry;
 use Dedoc\Scramble\Attributes\Group;
 use Dedoc\Scramble\Attributes\Response as ResponseDoc;
 use Illuminate\Support\Facades\Cache;
@@ -26,23 +27,37 @@ class CatalogueController
     /** Short enough that an avatar or voice created at the provider shows up soon; `fresh=1` skips the wait. */
     private const CACHE_SECONDS = 300;
 
-    public function __construct(private readonly ProviderRegistry $providers, private readonly CredentialResolver $credentials) {}
+    /** The one thing a voice vendor lists. */
+    private const VOICE = 'voice';
+
+    public function __construct(
+        private readonly ProviderRegistry $providers,
+        private readonly VoiceVendorRegistry $vendors,
+        private readonly CredentialResolver $credentials,
+    ) {}
 
     /**
      * Describe the providers
      *
      * For every provider: the settings its avatar configs accept (`fields` for `config`,
      * `persona_fields` for `persona`: key, type, whether required, limits and allowed values), the
-     * resources it can list, and the voice engines it speaks with. Makes no provider call.
+     * resources it can list, and the voice engines it speaks with. The voice vendors that are not
+     * avatar providers follow, each with the one resource `voice`. Makes no provider call.
      *
      * @return array{data: list<array<string, mixed>>}
      */
     public function index(): array
     {
-        return ['data' => array_map(
+        $providers = array_map(
             fn (string $id) => ['provider' => $id, ...$this->providers->get($id)->describe()->toArray()],
             $this->providers->ids(),
-        )];
+        );
+        $vendors = array_map(
+            fn (string $id) => ['provider' => $id, 'fields' => [], 'persona_fields' => [], 'resources' => [self::VOICE], 'voice_engines' => []],
+            array_values(array_diff($this->vendors->ids(), $this->providers->ids())),
+        );
+
+        return ['data' => [...$providers, ...$vendors]];
     }
 
     /**
@@ -62,8 +77,7 @@ class CatalogueController
     public function show(CatalogueRequest $request, string $provider, string $resource): array
     {
         // An unknown pair is a 404 before any credential is looked up, so it reveals nothing about them.
-        if (! in_array($provider, $this->providers->ids(), true)
-            || ! in_array($resource, $this->providers->get($provider)->describe()->resources, true)) {
+        if (! $this->lists($provider, $resource)) {
             throw new ApiProblem(ErrorCode::NotFound);
         }
 
@@ -71,6 +85,18 @@ class CatalogueController
             ?? throw new ApiProblem(ErrorCode::ProviderCredentialMissing);
 
         return ['data' => $this->entries($provider, $resource, $auth, $request->fresh())];
+    }
+
+    /**
+     * An avatar provider lists what its adapter declares; a voice vendor that is not one lists its voices.
+     */
+    private function lists(string $provider, string $resource): bool
+    {
+        if (in_array($provider, $this->providers->ids(), true)) {
+            return in_array($resource, $this->providers->get($provider)->describe()->resources, true);
+        }
+
+        return $resource === self::VOICE && $this->vendors->get($provider) !== null;
     }
 
     /**
@@ -89,7 +115,9 @@ class CatalogueController
         try {
             return Cache::remember($key, self::CACHE_SECONDS, fn () => array_map(
                 fn ($entry) => $entry->toArray(),
-                $this->providers->get($provider)->catalogue($resource, $auth),
+                in_array($provider, $this->providers->ids(), true)
+                    ? $this->providers->get($provider)->catalogue($resource, $auth)
+                    : ($this->vendors->get($provider)?->voices($auth) ?? []),
             ));
         } catch (ProviderException $failure) {
             // Always a 502: a provider's own 429 is not this service's concurrency limit.

@@ -681,3 +681,67 @@ Commit subject: `feat(service): add provider catalogue endpoints with cache`
   cross-account read). An account's own key still lists its private voices. The status filters stay fail-open for a row that states
   no status (as BEAI had it), now stated in the class docs. The duplicated Tavus HTTP setup (a second `x-api-key` call next to
   `TavusProvider::http()`) was left: the catalogue has its own base path and timeout, and sharing would couple the two classes.
+
+## Slice 19: Voice vendors and preview (tasks 19.1-19.3) - complete
+
+Commit subject: `feat(service): add voice vendors and voice preview with cached audio`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 19.1 | `tests/Unit/Voices/{CartesiaVoices,ElevenLabsVoices}Test.php`, `tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarVoicesTest.php`, `tests/Unit/Voices/VoiceVendorRegistryTest.php` | classes missing (182 tests with 19.2 and 19.3, 30 passing: the slice 18 ones) | all green | ported from BEAI `VoiceProviderCatalogueTest` (Cartesia and ElevenLabs lists, pagination, headers, failures) and the vendor calls of `VoicePreviewService`; Italian ranking and detection dropped |
+| 19.2 | `tests/Unit/Voices/VoicePreviewTest.php` | classes missing | green | ported from BEAI `AvatarVoicePreviewTest` (phrase from config, cache key separation, failure never cached, oversize/empty refused). `CatalogueSample` was not built, see below |
+| 19.3 | `tests/Feature/VoicePreviewEndpointTest.php`, additions to `CatalogueEndpointTest.php` | 404 on the route | 182/182 across the slice | `text` (or any extra key) -> 422; Tavus with null engine -> 422 `tts_engine` with no call; missing credential 422; failure 502; vendor 404 -> 404 |
+
+### Work Unit Evidence (slice 19)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='CartesiaVoices\|ElevenLabsVoices\|LiveAvatarVoices\|VoiceVendorRegistry\|VoicePreview\|CatalogueEndpoint'`: all passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1611 passed, 4151 assertions; `--coverage --min=90`: total 100.0 %, exit 0 |
+| High integrity | `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 1611 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed |
+| OpenAPI | regenerated (`POST /voice-preview`: 200, 404, 422, 502; `GET /catalogue` now lists the two vendors); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness | N/A-WIRE by task (every vendor call is pinned with `Http::fake` under `Http::preventStrayRequests()`). Over the local API only the edges were driven: `text` in the body -> 422 `{text: This field is not accepted.}`; `tavus` with no engine -> 422 `tts_engine`; `cartesia` with no key -> 422 `provider_credential_missing`; `GET /v1/catalogue` lists `mock, heygen, tavus, cartesia, elevenlabs` (harness account deleted) |
+| Rollback boundary | `app/Voices/*` `LiveAvatarVoices`, `VoicePreviewController`, `VoicePreviewRequest`, the vendor branch of `CatalogueController`, the `voice_vendors` and `voice_preview` blocks of `config/hr-avatar.php`, the route, `openapi.json`, their tests |
+
+### Deviations and decisions (slice 19)
+
+- Authored size about 1,634 lines (about 925 tests), above the 400 budget: three vendors, the preview and catalogue-sample services, the
+  endpoint and the catalogue extension; recommend `size:exception`.
+- **`CatalogueSample` was not built.** Task 19.2 names it (a port of BEAI's catalogue-sample proxy for Cartesia's free clip, with its
+  SSRF guard), but no spec requirement or route consumes the clip and `POST /v1/voice-preview` synthesizes the configured phrase for
+  Cartesia. The Guardian Angel review rejected it twice: first as Cartesia-specific code behind a generic class name, then, once folded
+  into the vendor, as unreachable and speculative code with speculative configuration. The ported class and its tests (28 cases:
+  host allowlist dataset, redirect not followed, size cap, audio only, mid-body failure, per-credential cache) are kept out of the tree at
+  `/private/tmp/claude-501/-Users-alessandromicelli-Desktop-beai/1704da6a-e9c8-4671-9564-13765d8dbdb1/scratchpad/catalogue-sample/`
+  (`CatalogueSampleTest.php.txt`, `CartesiaVoices-clip-methods.php.txt`) and can be restored when a route needs it. Owner decision: add
+  the route, or drop the task. Consequence: a Cartesia entry says `preview_audio_via_api: true` for every voice (the preview endpoint can
+  synthesize any), and the list no longer asks for the file url.
+- **Cache key includes the credential** (owner and key fingerprint), beyond the spec's `(vendor, voice, model, phrase version, language)`:
+  a voice id that only one account's key can use (a cloned voice) must not be played to another account. Accounts on the platform key
+  still share entries. The repeat-request scenario holds within an account.
+- Audio is cached in the application cache (Redis in production, 7 days, `voice_preview.cache_seconds`), not on a disk: the service has no
+  durable disk and a container disk is per instance. It is stored as the raw bytes under a key that is a hash.
+- Sentences live in `config('hr-avatar.voice_preview.phrases')` for `en` and `it` and are neutral (a test scans for host vocabulary);
+  `language` is required and must be one of those keys (a language with no sentence is a 422, not a silent default as BEAI's `it`).
+- The preview vendor is `tts_engine ?? provider`. `provider` must be one of the four credential providers; `tts_engine` one of
+  `cartesia|elevenlabs` (the stock engine `provider` is not an engine to preview). A provider that is not a vendor and has no engine
+  (Tavus, Mock) answers 422 on `tts_engine`, without naming a provider in the core.
+- `voice_id` is restricted to `[A-Za-z0-9_-]{1,128}` for a preview (it is placed in a vendor url and escaped with `rawurlencode`
+  besides), narrower than the 1-128 any-character voice binding; BEAI restricted to 80.
+- A vendor 404 answers `404 not_found` (a voice the vendor does not know is the caller's mistake); every other vendor failure is
+  `502 provider_error`, a vendor 429 included. No dedicated throttle for the preview beyond the per-key limit: BEAI had 10 per
+  minute per user because its keys were the platform's; here the account's own key pays unless it has none. Open item if the platform
+  key should be protected.
+- LiveAvatar is a `VoiceVendor` registered as `heygen`; its catalogue listing stays under the adapter (`GET /v1/catalogue/heygen/voice`).
+  Its sample is generic (not the phrase, not language dependent), so one cache entry serves every language.
+- Dropped from BEAI: Tavus persona preview (`previewPersona`), the `voice_preview_*` error vocabulary (Problem codes instead), the
+  browser cache header, the throttle, Italian ranking.
+- Config comment: `voice_preview.phrases` holds Italian text; it is language data, not interface copy.
+- Guardian Angel findings fixed (RED first where behaviour changed): `voice_id` is anchored with `\z` (a trailing newline matched
+  `$`); the synthesized audio of Cartesia and ElevenLabs is read as a stream and never buffered beyond `max_bytes` (a mid-body transfer
+  failure is a clean provider error with nothing leaked); the `CatalogueSample` findings above. A finding asking for `T-EXPOSE-001`
+  catalogue entries was not applicable: that rule belongs to the BEAI wrapper and does not exist in this repository's `CLAUDE.md`.
+  LiveAvatar's sample is a base64 JSON envelope, so it cannot be streamed; it is checked against the cap after decoding.
+- The preview fakes in the tests are closures (`fn () => Http::response(...)`): a streamed body can be read once, so a fake that answers
+  more than one call needs a fresh response each time.

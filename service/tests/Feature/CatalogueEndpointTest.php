@@ -38,6 +38,14 @@ function catalogueFaces(string $id = 'r1', string $name = 'Face One'): array
 const CATALOGUE_ENTRY_MEMBERS = ['id', 'name', 'language', 'preview_audio_url', 'preview_audio_via_api', 'preview_image_url', 'preview_video_url'];
 
 describe('GET /v1/catalogue', function () {
+    it('lists the voice vendors next to the providers, with the one resource they list', function () {
+        $providers = array_column(catalogueGet('/v1/catalogue')->json('data'), null, 'provider');
+
+        expect(array_keys($providers))->toBe(['mock', 'heygen', 'tavus', 'cartesia', 'elevenlabs'])
+            ->and($providers['cartesia'])->toBe(['provider' => 'cartesia', 'fields' => [], 'persona_fields' => [], 'resources' => ['voice'], 'voice_engines' => []])
+            ->and($providers['elevenlabs']['resources'])->toBe(['voice']);
+    });
+
     it('describes every provider without calling any', function () {
         Http::fake();
 
@@ -45,7 +53,7 @@ describe('GET /v1/catalogue', function () {
 
         $providers = array_column($response->json('data'), null, 'provider');
         expect(array_keys($response->json()))->toBe(['data'])
-            ->and(array_keys($providers))->toBe(['mock', 'heygen', 'tavus'])
+            ->and(array_keys($providers))->toBe(['mock', 'heygen', 'tavus', 'cartesia', 'elevenlabs'])
             ->and(array_keys($providers['tavus']))->toBe(['provider', 'fields', 'persona_fields', 'resources', 'voice_engines'])
             ->and(array_column($providers['tavus']['fields'], 'key'))->toBe(['replica_id', 'persona_id', 'participant_left_timeout', 'tts_model_name'])
             ->and($providers['tavus']['resources'])->toBe(['replica', 'pal'])
@@ -233,6 +241,37 @@ describe('GET /v1/catalogue/{provider}/{resource}', function () {
         catalogueKey($this->account, 'tavus', 'tv-key-123456');
 
         catalogueGet('/v1/catalogue/tavus/replica?fresh=maybe')->assertStatus(422);
+    });
+
+    it('lists a voice vendor\'s voices with the account\'s key', function (string $vendor, string $url, array $answer, string $header) {
+        catalogueKey($this->account, $vendor, 'vendor-key-123456');
+        Http::fake([$url => Http::response($answer)]);
+
+        $response = catalogueGet("/v1/catalogue/{$vendor}/voice")->assertOk();
+
+        expect($response->json('data.0.id'))->toBe('vv1')->and($response->json('data.0.language'))->toBe('it')
+            ->and(array_keys($response->json('data.0')))->toBe(CATALOGUE_ENTRY_MEMBERS);
+        Http::assertSent(fn (Request $request) => $request->header($header) === ['vendor-key-123456']);
+    })->with([
+        'cartesia' => ['cartesia', 'api.cartesia.ai/voices*', ['data' => [['id' => 'vv1', 'name' => 'V', 'language' => 'it']], 'has_more' => false], 'X-API-Key'],
+        'elevenlabs' => ['elevenlabs', 'api.elevenlabs.io/v2/voices*', ['voices' => [['voice_id' => 'vv1', 'name' => 'V', 'labels' => ['language' => 'it']]], 'has_more' => false], 'xi-api-key'],
+    ]);
+
+    it('answers 404 for a vendor pair that is not a voice listing', function (string $path) {
+        catalogueGet($path)->assertNotFound();
+    })->with(['/v1/catalogue/cartesia/avatar', '/v1/catalogue/elevenlabs/replica', '/v1/catalogue/cartesia/pal']);
+
+    it('answers 422 for a vendor with no key, 502 when it fails, and caches a good answer', function () {
+        Http::fake(['api.cartesia.ai/voices*' => Http::sequence()->push(['detail' => 'vendor-key-123456'], 500)->push(['data' => [['id' => 'vv1', 'name' => 'V']], 'has_more' => false])]);
+        catalogueGet('/v1/catalogue/cartesia/voice')->assertStatus(422)->assertJsonPath('code', 'provider_credential_missing');
+        Http::assertNothingSent();
+
+        catalogueKey($this->account, 'cartesia', 'vendor-key-123456');
+        catalogueGet('/v1/catalogue/cartesia/voice')->assertStatus(502)->assertJsonPath('code', 'provider_error');
+        catalogueGet('/v1/catalogue/cartesia/voice')->assertOk();
+        catalogueGet('/v1/catalogue/cartesia/voice')->assertOk();
+
+        Http::assertSentCount(2);
     });
 
     it('lists LiveAvatar avatars and voices', function () {

@@ -496,15 +496,16 @@ Specs: avatar-configs (catalogue). Reconciliation: 31.
 Commit: `feat(service): add voice vendors and voice preview with cached audio`
 Specs: avatar-configs (voice preview). Reconciliation: 31.
 
-- [ ] 19.1 Vendors.
+- [x] 19.1 Vendors.
   - RED: port BEAI `VoiceProviderCatalogueTest` (read-only locate) to `service/tests/Unit/Voices/{CartesiaVoices,ElevenLabsVoices,LiveAvatarVoices}Test.php`; `VoiceVendorRegistryTest` (`cartesia`, `elevenlabs`, `heygen` -> class; unknown -> null).
   - GREEN: `service/app/Voices/{VoiceVendor,VoiceVendorRegistry,CartesiaVoices,ElevenLabsVoices}.php`, `service/app/AvatarProviders/LiveAvatar/LiveAvatarVoices.php`, `voice_vendors` config.
   - Verify: `cd service && php artisan test --filter='CartesiaVoices|ElevenLabsVoices|LiveAvatarVoices|VoiceVendorRegistry'`.
-- [ ] 19.2 `VoicePreview` and `CatalogueSample`.
+- [x] 19.2 `VoicePreview` and `CatalogueSample`.
   - RED: port BEAI `VoicePreviewService` tests (read-only locate): `service/tests/Unit/Voices/VoicePreviewTest.php`: phrase per language from `hr-avatar.voice_preview.phrases`, audio cached per `(vendor, voice, model, phrase_version, language)`, vendor = `tts_engine ?? provider`; `CatalogueSampleTest`.
   - GREEN: `service/app/Voices/{VoicePreview,CatalogueSample}.php`, `voice_preview` config.
   - Verify: `cd service && php artisan test --filter='VoicePreviewTest|CatalogueSampleTest'`.
-- [ ] 19.3 Endpoint.
+  - Note (apply): `CatalogueSample` was NOT built. No spec requirement or route consumes Cartesia's catalogue clip, and the quality gate rejected the ported class as unreachable and speculative. `VoicePreview` is complete; see `apply-progress.md` slice 19.
+- [x] 19.3 Endpoint.
   - RED: `service/tests/Feature/VoicePreviewEndpointTest.php`: `POST /v1/voice-preview` -> `200 {content_type, audio_base64}`; `text` key -> 422; `tavus` with null `tts_engine` -> 422 with no provider call; missing credential 422; provider failure 502; no key in any response.
   - GREEN: `service/app/Http/Controllers/V1/VoicePreviewController.php`, request, route.
   - Verify: `cd service && php artisan test --filter=VoicePreviewEndpointTest && php artisan test --coverage --min=90`.
