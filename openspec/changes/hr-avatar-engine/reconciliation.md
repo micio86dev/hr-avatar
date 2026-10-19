@@ -116,3 +116,8 @@ match this list; where they still differ, this file wins.
     `migrate --force` then `LlmModelSeeder`; `railway.md` lists `HRA_PUBLIC_BASE_URL`.
 37. Arch vocabulary ban: CLAUDE.md superset with word boundaries. Mock `fetchSession` state lives
     in cache (worker and api are separate processes).
+
+## Additions from the BEAI adapter design validation (2026-10-19)
+
+38. `GET /v1/avatar-configs` accepts an optional exact-match `external_ref` query filter (applied server-side before pagination), so a host sharing one account across its own tenants never loses configs to the page cap. Scope `avatar_configs:read`.
+39. SDK `forwardTranscript: false` suppresses **utterance** forwarding only. Lifecycle events (`live`, `error`) are always forwarded, because for `mock` and `heygen` (no provider callback) the client `live` event is the only `connecting → live` transition.

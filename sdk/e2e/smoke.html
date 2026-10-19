@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SDK smoke</title>
+  </head>
+  <body>
+    <main>
+      <div id="mount"></div>
+      <p>State: <span id="state">idle</span></p>
+      <ul id="transcript"></ul>
+      <p id="error" role="alert"></p>
+      <button id="end" type="button" disabled>End</button>
+    </main>
+
+    <!-- The script-tag build, exactly as a host page would load it. -->
+    <script src="/hr-avatar.global.js"></script>
+    <script>
+      const { connect, createMockTransport } = window.HrAvatar
+      const $ = (id) => document.getElementById(id)
+
+      connect({
+        baseUrl: location.origin,
+        publishableKey: 'hra_pk_test_smoke',
+        // A JWT-shaped secret whose `sub` is conv_smoke. The SDK only decodes it.
+        clientSecret:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjb252X3Ntb2tlIn0.signature',
+        mount: $('mount'),
+        transports: {
+          mock: () => createMockTransport({ script: { avatarLines: ['Hello from the mock avatar'] } }),
+        },
+      })
+        .then((conversation) => {
+          conversation.on('state', (state) => ($('state').textContent = state))
+          conversation.on('transcript', (line) => {
+            if (!line.final) return
+            const item = document.createElement('li')
+            item.textContent = line.text
+            $('transcript').appendChild(item)
+          })
+          conversation.on('error', (error) => ($('error').textContent = error.code))
+          $('end').disabled = false
+          $('end').addEventListener('click', () => conversation.end())
+        })
+        .catch((error) => ($('error').textContent = error.code))
+    </script>
+  </body>
+</html>

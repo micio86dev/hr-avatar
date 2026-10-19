@@ -745,23 +745,23 @@ Specs: service-foundation (documentation and deployment config as code). Reconci
 Commit: `feat(sdk): scaffold the TypeScript SDK with Bun, tsup, Vitest, error type and API client`
 Specs: client-sdk (connect - error surface and secrets stay private, test gates). Reconciliation: 34.
 
-- [ ] 33.1 Toolchain preflight (STOP gate).
+- [x] 33.1 Toolchain preflight (STOP gate). Local Bun is 1.4.2 (pin 1.4.0); see apply-progress-sdk.md.
   - RED: `bun --version` must print `1.4.0`; `bunx tsc --version` must print `5.9.3` after install. Missing Bun -> STOP and report.
   - GREEN: none.
   - Verify: `bun --version`.
-- [ ] 33.2 Package pins test, then package files.
+- [x] 33.2 Package pins test, then package files.
   - RED: `sdk/tests/unit/package-pins.spec.ts` asserts `name @hr-avatar/sdk`, `type module`, `exports` for `.` and `./mock`, optional peers `@daily-co/daily-js 0.91.0` and `@heygen/liveavatar-web-sdk 0.0.18`, exact `typescript 5.9.3`, `@playwright/test 1.61.1`, `vitest ^3`, `tsup ^8`; fails (no package).
   - GREEN: `sdk/package.json` (scripts `build`, `test`, `test:coverage`, `size`), `sdk/tsconfig.json` (strict), `sdk/tsup.config.ts` (entries `src/index.ts`, `src/mock.ts`; ESM + CJS + dts; IIFE added in slice 39), `sdk/vitest.config.ts` (jsdom, thresholds 90 for lines, branches, functions), `sdk/.gitignore`; `cd sdk && bun install`. Unresolved pin -> STOP.
   - Verify: `cd sdk && bun run test -- package-pins`.
-- [ ] 33.3 `HrAvatarError`.
+- [x] 33.3 `HrAvatarError`.
   - RED: `sdk/tests/unit/errors.spec.ts`: fields `code`, `message`, `recoverable`, `status`, `request_id`; `instanceof Error`.
   - GREEN: `sdk/src/errors.ts`.
   - Verify: `cd sdk && bun run test -- errors`.
-- [ ] 33.4 API client.
+- [x] 33.4 API client.
   - RED: `sdk/tests/unit/api.spec.ts` scenarios "Service error is surfaced" (Problem+JSON -> `HrAvatarError{code,status,request_id}`; 401 `client_secret_expired` etc. mapped), "Secrets stay private" (publishable key and client secret sent only to `baseUrl`, never logged or stored on the returned object), network failure -> recoverable error.
   - GREEN: `sdk/src/api.ts`.
   - Verify: `cd sdk && bun run test -- api`.
-- [ ] 33.5 Anonymity scan.
+- [x] 33.5 Anonymity scan.
   - RED: port `provider-anonymity.spec.ts` (`../frontend/tests/unit/provider-anonymity.spec.ts`, read-only) as `sdk/tests/unit/anonymity.spec.ts`: a file scan of `sdk/src` for the host vocabulary ban list; fails if any term appears.
   - GREEN: keep `sdk/src` clean.
   - Verify: `cd sdk && bun run test -- anonymity && bunx tsc --noEmit && bun run build`.
@@ -771,11 +771,11 @@ Specs: client-sdk (connect - error surface and secrets stay private, test gates)
 Commit: `feat(sdk): add the transcript outbox with batching and retry, and completion phrase matching`
 Specs: client-sdk (transcript auto-forwarding outbox, completion phrases). Reconciliation: 34.
 
-- [ ] 34.1 Port outbox specs first.
+- [x] 34.1 Port outbox specs first.
   - RED: port `../frontend/tests/unit/utterance-outbox.spec.ts` (read-only) to `sdk/tests/unit/outbox.spec.ts` with the new semantics: scenarios "Batching by count" (flush at 20), "Batching by time" (2 s after the first queued event), "Retry keeps keys" (`crypto.randomUUID()` at capture, same keys on retry), "Backoff growth" (1 s doubling, cap 30 s), "Closed stops forwarding" (409 `conversation_closed` or 401 -> stop and emit error), "Opt-out" (`forwardTranscript: false`), "Final flush on end", "Interim ignored", `pagehide` keepalive flush; conversation id is a string, role `user`.
   - GREEN: `sdk/src/outbox.ts` (in-memory, ported `UtteranceOutbox`).
   - Verify: `cd sdk && bun run test -- outbox`.
-- [ ] 34.2 Completion phrases.
+- [x] 34.2 Completion phrases.
   - RED: `sdk/tests/unit/completion.spec.ts` scenarios "Phrase triggers end" (case-insensitive substring on avatar speech, then 1500 ms silence settle), "User speech ignored", "Not configured" (no-op).
   - GREEN: `sdk/src/completion.ts`.
   - Verify: `cd sdk && bun run test -- completion && bun run test:coverage`.
@@ -785,15 +785,15 @@ Specs: client-sdk (transcript auto-forwarding outbox, completion phrases). Recon
 Commit: `feat(sdk): add transport loading, the scripted mock transport and the ./mock export`
 Specs: client-sdk (provider transports and peer dependencies, exported mock provider). Reconciliation: 34. Design AD12.
 
-- [ ] 35.1 Transport interface and `loadTransport`.
+- [x] 35.1 Transport interface and `loadTransport`.
   - RED: rewrite `../frontend/tests/unit/provider-factory.spec.ts` and `interview-provider-types.spec.ts` (read-only) as `sdk/tests/unit/load-transport.spec.ts` and `types.spec.ts`: scenarios "Lazy import" (library imported only when its transport is chosen), "Missing library" (`HrAvatarError('provider_library_missing')` naming the package), "Override" (`transports` replaces a whole factory, `loaders` replaces only the import), the single switch on `daily|liveavatar|mock`; no `window.__mock*` globals.
   - GREEN: `sdk/src/transports/types.ts`, `sdk/src/transports/index.ts`.
   - Verify: `cd sdk && bun run test -- load-transport types`.
-- [ ] 35.2 Mount resolution.
+- [x] 35.2 Mount resolution.
   - RED: `sdk/tests/unit/media.spec.ts`: a `<video>` mount is used as-is; any other element gets a created `<video>`.
   - GREEN: `sdk/src/media.ts`.
   - Verify: `cd sdk && bun run test -- media`.
-- [ ] 35.3 Mock transport and `./mock` export.
+- [x] 35.3 Mock transport and `./mock` export.
   - RED: `sdk/tests/unit/mock-transport.spec.ts` scenarios "Scripted line" (avatar lines emitted as final `avatar` transcripts once live), simulated avatar speech start/stop, "Simulated close" (transport close -> reason `provider` handled by the conversation in slice 36), every control supported, no network or media I/O.
   - GREEN: `sdk/src/transports/mock.ts`, `sdk/src/mock.ts` (`createMockTransport`, `MockScript`, `MockControls`).
   - Verify: `cd sdk && bun run test -- mock-transport && bun run build && bun run test:coverage`.
@@ -803,19 +803,19 @@ Specs: client-sdk (provider transports and peer dependencies, exported mock prov
 Commit: `feat(sdk): add connect, the conversation object, controls, events and ended reasons`
 Specs: client-sdk (connect, events, controls). Reconciliation: 34. Design SDK architecture.
 
-- [ ] 36.1 `connect`.
+- [x] 36.1 `connect`.
   - RED: `sdk/tests/unit/connect.spec.ts` scenarios "Happy path on the mock transport" (`POST connect` then transport start, state `connecting`), "Id derived from the token" (decode `sub` without verification), "Malformed secret" (`invalid_client_secret`, no request sent), "Service error is surfaced", "Secrets stay private".
   - GREEN: `sdk/src/connect.ts`, types and exports in `sdk/src/index.ts` (`HrAvatar`, `HrAvatarError`, `createMockTransport`).
   - Verify: `cd sdk && bun run test -- connect`.
-- [ ] 36.2 Events and state.
+- [x] 36.2 Events and state.
   - RED: `sdk/tests/unit/conversation-events.spec.ts` scenarios "State sequence" (`connecting` -> `live` -> `ended`; lifecycle `live` sent once when the transport reports ready), "Unsubscribe", "Ended once", interim transcripts delivered with `final: false` and never forwarded.
   - GREEN: `sdk/src/conversation.ts` (emitter).
   - Verify: `cd sdk && bun run test -- conversation-events`.
-- [ ] 36.3 Controls.
+- [x] 36.3 Controls.
   - RED: `sdk/tests/unit/conversation-controls.spec.ts` scenarios "Toggle returns new state" (synchronous boolean), "Say", "Silence already satisfied", "Silence waits", "Ended while waiting", "Control after end" (`conversation_ended`), "End is idempotent and calls the service", "Unsupported control" (`unsupported_operation`), `sendContext(string|object)`.
   - GREEN: controls in `sdk/src/conversation.ts`.
   - Verify: `cd sdk && bun run test -- conversation-controls`.
-- [ ] 36.4 Ended reasons.
+- [x] 36.4 Ended reasons.
   - RED: `sdk/tests/unit/ended-reasons.spec.ts`: `end()` -> `user`; completion phrase -> `completion_phrase`; fatal transport error -> `error`; remote close -> flush outbox, call client end (idempotent 200), then `provider` when the resource's `ended_reason` is `provider` or was set by this call and `server` when it was already `api`, `max_duration` or `expired`.
   - GREEN: remote-close handling in `sdk/src/conversation.ts`.
   - Verify: `cd sdk && bun run test -- ended-reasons && bun run test:coverage`.
@@ -825,7 +825,7 @@ Specs: client-sdk (connect, events, controls). Reconciliation: 34. Design SDK ar
 Commit: `feat(sdk): add the Daily transport harvested from the BEAI Tavus provider`
 Specs: client-sdk (provider transports). Port map: `app/providers/tavus.ts` -> `src/transports/daily.ts`.
 
-- [ ] 37.1 Port specs first.
+- [x] 37.1 Port specs first.
   - RED: port `../frontend/tests/unit/tavus-provider.spec.ts` and `tavus-provider-ended.spec.ts` (read-only) to `sdk/tests/unit/daily-transport.spec.ts` and `daily-transport-ended.spec.ts` with an injected fake `daily-js`; rewrite `tavus-provider-steering.spec.ts` as `sdk/tests/unit/send-context.spec.ts` (`append_llm_context`, other transports reject `unsupported_operation`). Cases: replica/pal utterance dedupe, call object rendered into the mount's `<video>`, speaking signals, mic mute with `audioDeviceId`, echo via `conversation.echo`, ended handling. Removed: boundary steering ack, echo filter, `end_interview` tool call.
   - GREEN: `sdk/src/transports/daily.ts`, register in `loadTransport`.
   - Verify: `cd sdk && bun run test -- daily-transport send-context && bun run test:coverage`.
@@ -835,7 +835,7 @@ Specs: client-sdk (provider transports). Port map: `app/providers/tavus.ts` -> `
 Commit: `feat(sdk): add the LiveAvatar transport harvested from the BEAI HeyGen provider`
 Specs: client-sdk (provider transports). Port map: `app/providers/heygen.ts` -> `src/transports/liveavatar.ts`.
 
-- [ ] 38.1 Port specs first.
+- [x] 38.1 Port specs first.
   - RED: port `../frontend/tests/unit/heygen-provider.spec.ts` (read-only) to `sdk/tests/unit/liveavatar-transport.spec.ts` with an injected fake SDK: `voiceChat` config contract incl. `deviceId`, transcription events (interim vs final), `repeat()` for `say`, `interrupt`, speaking signals, disconnect -> transport close. Absent-phrase guard removed.
   - GREEN: `sdk/src/transports/liveavatar.ts`, register in `loadTransport`.
   - Verify: `cd sdk && bun run test -- liveavatar-transport && bun run test:coverage`.
@@ -845,22 +845,22 @@ Specs: client-sdk (provider transports). Port map: `app/providers/heygen.ts` -> 
 Commit: `build(sdk): add the IIFE bundle, size budget, Playwright smoke on Chromium and WebKit, and SDK CI`
 Specs: client-sdk (build outputs and size budget, SDK test gates). Reconciliation: 34, 36.
 
-- [ ] 39.1 Build outputs and IIFE.
+- [x] 39.1 Build outputs and IIFE.
   - RED: `sdk/tests/unit/build-outputs.spec.ts` scenarios "Outputs exist" (`dist/index.{js,cjs,d.ts}`, `dist/mock.*`, `dist/hr-avatar.global.js`), "IIFE global" (`window.HrAvatar.connect` is a function), "Peers excluded" (neither provider library inlined); fails until the IIFE is configured.
   - GREEN: extend `sdk/tsup.config.ts` (IIFE, `globalName HrAvatar`, file `dist/hr-avatar.global.js`, provider libraries external).
   - Verify: `cd sdk && bun run build && bun run test -- build-outputs`.
-- [ ] 39.2 Size gate.
+- [x] 39.2 Size gate.
   - RED: `sdk/tests/unit/size-script.spec.ts` scenario "Size gate": `scripts/size.ts` exits non-zero when the ESM core entry or the IIFE exceeds 20 KB minified + gzip (fixture over budget fails, under passes).
-  - GREEN: `sdk/scripts/size.ts` (`Bun.gzipSync`), script `size`.
+  - GREEN: `sdk/scripts/size.ts` (`node:zlib` gzip, run by Bun, so it is type-checked without a new dependency), script `size`.
   - Verify: `cd sdk && bun run build && bun run size`.
-- [ ] 39.3 Playwright smoke.
+- [x] 39.3 Playwright smoke.
   - RED: `sdk/e2e/smoke.spec.ts` (Chromium + WebKit): on `sdk/e2e/smoke.html` loading the IIFE with `page.route`-faked API responses, connect returns transport `mock`, a scripted avatar line is shown, the transcript is forwarded to `/events` with batch shape and stable idempotency keys, and the end call is made; fails until the page, server and config exist.
-  - GREEN: `sdk/e2e/smoke.html`, `sdk/e2e/serve.ts` (`Bun.serve` of `dist/` and the page), `sdk/playwright.config.ts` (projects `chromium`, `webkit`; Playwright `1.61.1`).
+  - GREEN: `sdk/e2e/smoke.html`, `sdk/e2e/serve.ts` (`node:http` server of `dist/` and the page, run by Bun), `sdk/playwright.config.ts` (projects `chromium`, `webkit`; Playwright `1.61.1`).
   - Verify: `cd sdk && bunx playwright install --with-deps chromium webkit && bunx playwright test`.
-- [ ] 39.4 SDK CI workflow.
-  - RED: `service/tests/Feature/SdkWorkflowTest.php` (or an SDK-side spec) parses `.github/workflows/sdk.yml`: every `uses:` pinned to a 40-hex SHA, steps `bun install --frozen-lockfile`, `bunx tsc --noEmit`, `bun run test:coverage`, `bun run build`, `bun run size`, `bunx playwright install --with-deps chromium webkit`, `bunx playwright test`. SHAs come from an authorized source (see task 2.7).
+- [x] 39.4 SDK CI workflow.
+  - RED: `sdk/tests/unit/ci-workflow.spec.ts` (SDK-side; the session brief pins by release tag, not SHA) parses `.github/workflows/sdk.yml`: every `uses:` pinned to a release tag (`@v4`, `@v2`), steps `bun install --frozen-lockfile`, `bunx tsc --noEmit`, `bun run test:coverage`, `bun run build`, `bun run size`, `bunx playwright install --with-deps chromium webkit`, `bunx playwright test`. Tags need no lookup, so no remote is contacted.
   - GREEN: `.github/workflows/sdk.yml`.
-  - Verify: `cd service && php artisan test --filter=SdkWorkflowTest && cd ../sdk && bun run test:coverage && bun run size`.
+  - Verify: `cd sdk && bun run test -- ci-workflow && bun run test:coverage && bun run size`.
 
 ## Slice 40: Documentation
 
