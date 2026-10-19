@@ -534,3 +534,46 @@ Batch note: slices 15-19 ran on the merged tracker branch (Tavus and LiveAvatar 
   reported as `requires_voice_engine`; the `voice.engine` error stands alone for it.
 - Mock accepts the `provider` voice engine only; Tavus and LiveAvatar accept `provider|cartesia|elevenlabs`. The catalogue's
   `resources` are `replica`, `pal` (Tavus) and `avatar`, `voice` (LiveAvatar); Mock lists none.
+
+## Slice 16: Avatar config endpoints (tasks 16.1-16.2) - complete
+
+Commit subject: `feat(service): add avatar config CRUD endpoints with soft delete`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 16.1 | `tests/Feature/AvatarConfigEndpointTest.php` (create, list, show, scopes, isolation) | 81 of 85 failed: 404 on every route | 85/85 with 16.2 | includes reconciliation item 38: exact-match `external_ref` filter applied before the cursor page is cut (three pages over 3 matching of 9 rows) |
+| 16.2 | same file (patch, delete) | same run | green | the provider-immutable and sync-reset scenarios; soft delete keeps the row |
+
+Test defects fixed on the way (no assertion weakened): `jsonb` reorders object keys, so the stored-vs-sent comparison became
+`toEqual`; and the same reordering made `isDirty()` report a change for an identical PATCH, which was a real defect (a no-op
+PATCH of a synced config reset it to `pending`): the controller now compares the members as data (`canonical()`), RED first.
+
+### Work Unit Evidence (slice 16)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter=AvatarConfigEndpointTest`: 85 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1326 passed, 3484 assertions; `--coverage --min=90`: total 100.0 %, exit 0 |
+| High integrity | `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 1326 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed |
+| OpenAPI | `DB_PORT=55442 php artisan scramble:export` regenerated `openapi.json` (5 new operations, tag `Avatar configs`); `OpenApiDriftTest` green; `cd tools/spectral && bun run lint`: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `php artisan serve --port=8100`, `hra:bootstrap-account`, curl: `POST /v1/avatar-configs` mock -> 201 `{"id":"avc_01m5ah4e...","config":{},"sync_status":"not_required",...}`; a Tavus body with `faceId` -> 422 `errors` `config.faceId`, `config.replica_id`, `config.persona_id`; `GET ?external_ref=tenant-1&limit=1` -> the one match, `next_cursor` null (rows removed afterwards) |
+| Rollback boundary | `AvatarConfigController`, `AvatarConfigRequest`, `CreateAvatarConfigRequest`, `UpdateAvatarConfigRequest`, `ListAvatarConfigsRequest`, `AvatarConfigResource`, the route block in `routes/api.php`, `openapi.json`, the test |
+
+### Deviations and decisions (slice 16)
+
+- Authored size about 950 lines (about 575 tests), above the 400 budget: five routes, three requests and a resource with the full
+  validation matrix; recommend `size:exception`.
+- Route parameter is `{avatarConfig}` (implicit binding applies the account scope and hides soft-deleted rows), not `{id}`.
+- PATCH replaces each member it sends as a whole (`config` is not merged); a member left out is kept. The validation checks the state
+  that would result (stored members with the sent ones laid over), so changing the voice engine cannot leave a stored setting the new
+  engine does not take, and removing the voice is refused while `tts_model_name` is stored.
+- Sync state on PATCH: only a real change (data comparison, key order ignored) of `config`, `persona`, `llm_model_id` or `voice`
+  re-evaluates `syncRequired` (`pending` or `not_required`) and clears `sync_error`; `synced_at` is kept. The dispatch lands in slice 17.
+- `config`, `persona` and `voice` are written back as objects even when empty (`{}`), as the slice 8 note required.
+- Validation errors are keyed `config.<key>`, `persona.<key>`, `voice.engine`/`voice.voice_id` with a fixed sentence per code.
+  `voice` must carry exactly `engine` and `voice_id` (others are dropped by `validated()`).
+- The conversation-based in-use guard (`config_in_use`) and "a deleted config cannot start a conversation" need the `conversations`
+  table and stay in slice 20, as the task says.
+- `external_ref` filter: exact and case-sensitive, 1-255 characters (an empty value is a 422, not "no filter").
+- Common 401/403/429 Problem responses remain undocumented in `openapi.json` (slice 31).

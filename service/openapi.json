@@ -18,6 +18,9 @@
             "name": "API keys"
         },
         {
+            "name": "Avatar configs"
+        },
+        {
             "name": "Credentials"
         },
         {
@@ -246,6 +249,245 @@
                                 }
                             }
                         }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/avatar-configs": {
+            "get": {
+                "operationId": "avatar-configs.index",
+                "description": "The account's configs, newest first. `external_ref` keeps only those carrying exactly that\nreference (case-sensitive, no wildcards); it is applied before the page is cut, so a host that\nshares one account across its own tenants never loses a config to the page size.",
+                "summary": "List avatar configs",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    },
+                    {
+                        "name": "external_ref",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/AvatarConfigResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "avatar-configs.store",
+                "description": "`config` is checked against the settings the provider's adapter declares (`GET /v1/catalogue`):\nan unknown key, a missing required key or a wrong value is a 422 naming `config.<key>`.\n`llm_model_id` must be an enabled catalogue model; `voice` is `{engine, voice_id}` and the\nengine must be one the provider speaks with. A config whose provider needs objects created for\nit starts `pending`, any other `not_required`.",
+                "summary": "Create an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateAvatarConfigRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/avatar-configs/{avatarConfig}": {
+            "get": {
+                "operationId": "avatar-configs.show",
+                "description": "One config of the account. A config of another account, or a deleted one, is a 404.",
+                "summary": "Show an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "avatar-configs.update",
+                "description": "Each member sent replaces the stored one as a whole; members left out are kept. The provider\ncannot change. Changing the `config`, `persona`, `llm_model_id` or `voice` to something\ndifferent moves the config back to `pending` (or `not_required` when its provider needs\nnothing for it); a change to the name or the reference leaves the sync state alone.",
+                "summary": "Update an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateAvatarConfigRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "avatar-configs.destroy",
+                "description": "A soft delete: the config leaves the list and cannot start new conversations, and the\nconversations that used it keep their reference to it.",
+                "summary": "Delete an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 },
                 "security": [
@@ -757,6 +999,114 @@
                 ],
                 "title": "ApiKeyResource"
             },
+            "AvatarConfigResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "config": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "persona": {
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "sync_status": {
+                        "$ref": "#/components/schemas/SyncStatus"
+                    },
+                    "sync_error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "synced_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "provider",
+                    "config",
+                    "persona",
+                    "llm_model_id",
+                    "voice",
+                    "external_ref",
+                    "sync_status",
+                    "sync_error",
+                    "synced_at",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "AvatarConfigResource"
+            },
             "CreateApiKeyRequest": {
                 "type": "object",
                 "properties": {
@@ -791,6 +1141,81 @@
                     "mode"
                 ],
                 "title": "CreateApiKeyRequest"
+            },
+            "CreateAvatarConfigRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "provider": {
+                        "type": "string",
+                        "enum": [
+                            "mock",
+                            "heygen",
+                            "tavus"
+                        ]
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "The provider-specific settings. The accepted keys depend on the provider: see `GET /v1/catalogue`.",
+                        "additionalProperties": {}
+                    },
+                    "persona": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "Provider-specific persona settings, or null for none.",
+                        "additionalProperties": {}
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The voice to speak with, or null for the provider's default. `engine` must be one the provider speaks with.",
+                        "properties": {
+                            "engine": {
+                                "type": "string",
+                                "enum": [
+                                    "provider",
+                                    "cartesia",
+                                    "elevenlabs"
+                                ]
+                            },
+                            "voice_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                            }
+                        },
+                        "required": [
+                            "engine",
+                            "voice_id"
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "name",
+                    "provider"
+                ],
+                "title": "CreateAvatarConfigRequest"
             },
             "CredentialSource": {
                 "type": "string",
@@ -1046,6 +1471,84 @@
                     "updated_at"
                 ],
                 "title": "StoredLlmCredentialResource"
+            },
+            "SyncStatus": {
+                "type": "string",
+                "description": "Whether an avatar config's provider-side objects match the config: `not_required` when the provider needs nothing created for it, `pending` after a change, `synced` once the objects exist and match, `failed` when the last attempt gave up.\n",
+                "enum": [
+                    "not_required",
+                    "pending",
+                    "synced",
+                    "failed"
+                ],
+                "title": "SyncStatus"
+            },
+            "UpdateAvatarConfigRequest": {
+                "type": "object",
+                "description": "A partial update: each member sent replaces the stored one as a whole (`config` is replaced, not\nmerged), each member left out is kept. The provider is fixed at creation; sending the one it\nalready has is allowed, any other is refused.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "The provider-specific settings. The accepted keys depend on the provider: see `GET /v1/catalogue`.",
+                        "additionalProperties": {}
+                    },
+                    "persona": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "Provider-specific persona settings, or null for none.",
+                        "additionalProperties": {}
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The voice to speak with, or null for the provider's default. `engine` must be one the provider speaks with.",
+                        "properties": {
+                            "engine": {
+                                "type": "string",
+                                "enum": [
+                                    "provider",
+                                    "cartesia",
+                                    "elevenlabs"
+                                ]
+                            },
+                            "voice_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                            }
+                        },
+                        "required": [
+                            "engine",
+                            "voice_id"
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "title": "UpdateAvatarConfigRequest"
             }
         },
         "responses": {

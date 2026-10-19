@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\V1\ApiKeyController;
+use App\Http\Controllers\V1\AvatarConfigController;
 use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
@@ -30,6 +31,17 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::get('llm-credentials', [LlmCredentialController::class, 'index'])->name('llm-credentials.index');
         Route::put('llm-credentials/{llmProvider}', [LlmCredentialController::class, 'update'])->name('llm-credentials.update');
         Route::delete('llm-credentials/{llmProvider}', [LlmCredentialController::class, 'destroy'])->name('llm-credentials.destroy');
+    });
+
+    Route::middleware('scope:avatar_configs:read')->group(function () {
+        Route::get('avatar-configs', [AvatarConfigController::class, 'index'])->name('avatar-configs.index');
+        Route::get('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'show'])->name('avatar-configs.show');
+    });
+
+    Route::middleware('scope:avatar_configs:write')->group(function () {
+        Route::post('avatar-configs', [AvatarConfigController::class, 'store'])->name('avatar-configs.store');
+        Route::patch('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'update'])->name('avatar-configs.update');
+        Route::delete('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'destroy'])->name('avatar-configs.destroy');
     });
 
     Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');

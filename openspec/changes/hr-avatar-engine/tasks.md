@@ -450,11 +450,11 @@ Specs: avatar-configs (config validation, voice, sync gate). Reconciliation: 30,
 Commit: `feat(service): add avatar config CRUD endpoints with soft delete`
 Specs: avatar-configs (resource and CRUD). Reconciliation: 30, 32.
 
-- [ ] 16.1 Create, read, list.
+- [x] 16.1 Create, read, list.
   - RED: `service/tests/Feature/AvatarConfigEndpointTest.php` scenarios "Create" (initial `sync_status` from `syncRequired`), validation through `validateConfig` (422 `config.<key>`), unknown provider 422, `llm_model_id` must reference an enabled model, paginated list, show, scopes `avatar_configs:read|write`, cross-account 404 on show/patch/delete.
   - GREEN: `service/app/Http/Controllers/V1/AvatarConfigController.php`, `service/app/Http/Requests/{CreateAvatarConfigRequest,UpdateAvatarConfigRequest}.php`, `service/app/Http/Resources/AvatarConfigResource.php` (never `provider_state` internals, never credentials), routes.
   - Verify: `cd service && php artisan test --filter=AvatarConfigEndpointTest`.
-- [ ] 16.2 Update and soft delete.
+- [x] 16.2 Update and soft delete.
   - RED: scenarios "Provider is immutable" (PATCH with another provider -> 422), "Soft delete keeps history" (deleted config absent from list, `deleted_at` set), PATCH of `config`/`persona`/`llm_model_id`/`voice` re-evaluates `syncRequired` and resets to `pending` (dispatch lands in slice 17).
   - GREEN: update/destroy actions. The in-use guard and "deleted config cannot start conversations" need the `conversations` table and land in slice 20.
   - Verify: `cd service && php artisan test --filter=AvatarConfigEndpointTest && php artisan test --coverage --min=90`.
