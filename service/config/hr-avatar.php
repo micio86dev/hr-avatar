@@ -6,7 +6,7 @@ use App\AvatarProviders\Tavus\TavusProvider;
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
  * A key is added by the slice that reads it. Still to come: the release delay, the duration ceiling,
- * the Tavus retry settings, the catalogue cache lifetime and the voice vendor classes.
+ * the catalogue cache lifetime and the voice vendor classes.
  */
 return [
 

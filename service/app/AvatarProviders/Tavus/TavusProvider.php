@@ -9,12 +9,15 @@ use App\AvatarProviders\JoinMaterial;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\TranscriptLine;
+use App\AvatarProviders\TranscriptNotReady;
+use App\AvatarProviders\TranscriptShapeError;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
-use LogicException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The Tavus adapter. Tavus reports what happens in a conversation by calling back, so events
@@ -72,25 +75,166 @@ final class TavusProvider implements AvatarProvider
         ));
     }
 
-    // ponytail: the operations below arrive in the next slice, which replaces these.
+    /**
+     * Ends the conversation. Tavus answers 404 for one it no longer has, which is the goal reached.
+     * Never throws: a failure is logged by its status class and reported as not released.
+     */
     public function teardown(string $sessionRef, ?string $contextRef, ProviderAuth $auth): bool
     {
-        throw new LogicException('Not implemented yet.');
+        try {
+            $response = $this->http($auth)->post(self::BASE_URL.'/conversations/'.rawurlencode($sessionRef).'/end');
+        } catch (ConnectionException) {
+            Log::warning('Tavus teardown failed', ProviderException::noResponse()->context());
+
+            return false;
+        }
+
+        if ($response->successful() || $response->status() === 404) {
+            return true;
+        }
+
+        Log::warning('Tavus teardown failed', ProviderException::fromStatus($response->status())->context());
+
+        return false;
     }
 
+    /**
+     * The transcript is part of the conversation Tavus reports once the call is over: it is not
+     * there while the call is active or before Tavus has prepared it, and an empty one counts as
+     * not there yet.
+     */
     public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array
     {
-        throw new LogicException('Not implemented yet.');
+        $rows = null;
+
+        foreach ($this->events($this->conversation($sessionRef, $auth)) as $event) {
+            if (($event['event_type'] ?? null) === 'application.transcription_ready') {
+                $rows = data_get($event, 'properties.transcript');
+
+                break;
+            }
+        }
+
+        if (! is_array($rows) || $rows === []) {
+            throw new TranscriptNotReady('Tavus has not delivered the transcript yet.');
+        }
+
+        $lines = [];
+
+        foreach ($rows as $row) {
+            $line = $this->line($row);
+
+            if ($line !== null) {
+                $lines[] = $line;
+            }
+        }
+
+        return $lines;
     }
 
+    /**
+     * An error is never an end: a failed call, or an answer with no usable status, raises.
+     */
     public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus
     {
-        throw new LogicException('Not implemented yet.');
+        $conversation = $this->conversation($sessionRef, $auth);
+        $status = $conversation['status'] ?? null;
+
+        if (! is_string($status) || $status === '') {
+            throw ProviderException::noResponse();
+        }
+
+        if ($status === 'active') {
+            return new SessionStatus(false, null);
+        }
+
+        // Only `shutdown_reason` is read at the top level: Tavus documents `reason` only inside an event's properties.
+        $reason = $conversation['shutdown_reason'] ?? null;
+
+        foreach ($this->events($conversation) as $event) {
+            if (($event['event_type'] ?? null) === 'system.shutdown') {
+                $reason ??= TavusEventMapper::endReason((array) ($event['properties'] ?? []));
+            }
+        }
+
+        return new SessionStatus(true, is_string($reason) && $reason !== '' ? $reason : null);
     }
 
     public function parseCallback(array $payload): array
     {
-        throw new LogicException('Not implemented yet.');
+        return TavusEventMapper::map($payload);
+    }
+
+    /**
+     * The one conversation, with its events.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws ProviderException
+     */
+    private function conversation(string $sessionRef, ProviderAuth $auth): array
+    {
+        try {
+            $response = $this->http($auth)->get(self::BASE_URL.'/conversations/'.rawurlencode($sessionRef).'?verbose=true');
+        } catch (ConnectionException) {
+            throw ProviderException::noResponse();
+        }
+
+        if (! $response->successful()) {
+            throw ProviderException::fromStatus($response->status());
+        }
+
+        $conversation = $response->json();
+
+        if (! is_array($conversation)) {
+            throw ProviderException::noResponse();
+        }
+
+        return $conversation;
+    }
+
+    /**
+     * @param  array<string, mixed>  $conversation
+     * @return list<array<string, mixed>>
+     */
+    private function events(array $conversation): array
+    {
+        $events = $conversation['events'] ?? null;
+
+        return is_array($events) ? array_values(array_filter($events, 'is_array')) : [];
+    }
+
+    /**
+     * One transcript row as a line, null for the system prompt Tavus lists first.
+     *
+     * @throws TranscriptShapeError a row that is not an object, or has an unknown role or no text
+     */
+    private function line(mixed $row): ?TranscriptLine
+    {
+        if (! is_array($row)) {
+            throw new TranscriptShapeError('A Tavus transcript row is not an object.');
+        }
+
+        $role = match ($row['role'] ?? null) {
+            'system' => null,
+            'assistant', 'replica' => TranscriptLine::AVATAR,
+            'user' => TranscriptLine::USER,
+            default => throw new TranscriptShapeError('A Tavus transcript row has a missing or unknown role.'),
+        };
+
+        if ($role === null) {
+            return null;
+        }
+
+        $text = $row['content'] ?? null;
+
+        if (! is_string($text)) {
+            throw new TranscriptShapeError('A Tavus transcript row has no text.');
+        }
+
+        $offset = $row['seconds_from_start'] ?? null;
+
+        return new TranscriptLine($role, $text, TavusEventMapper::time($row['timestamp'] ?? null), is_int($offset) || is_float($offset) ? (float) $offset : null);
     }
 
     private function http(ProviderAuth $auth): PendingRequest

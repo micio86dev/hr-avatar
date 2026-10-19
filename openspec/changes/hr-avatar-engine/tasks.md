@@ -372,15 +372,15 @@ Specs: provider-adapters (Tavus adapter start, concurrency guard, provider key n
 Commit: `feat(service): add Tavus teardown, transcript, session status and callback event mapping`
 Specs: provider-adapters (teardown, transcript reconciliation, session status), provider-webhooks (mapping). Reconciliation: 20, 25.
 
-- [ ] 11.1 Teardown.
+- [x] 11.1 Teardown.
   - RED: `service/tests/Unit/AvatarProviders/Tavus/TavusTeardownTest.php` scenarios "Normal teardown" (`POST /v2/conversations/{id}/end`, returns true), "Already gone" (404 counts as released), "Provider failure" (returns false, never throws, no message leak).
   - GREEN: `TavusProvider::teardown`.
   - Verify: `cd service && php artisan test --filter=TavusTeardownTest`.
-- [ ] 11.2 Transcript and session status.
+- [x] 11.2 Transcript and session status.
   - RED: `TavusTranscriptTest`: scenario "Tavus mapping" (`assistant`/`replica` -> `avatar`, `user` -> `user`, `system` excluded), "Unknown role" (`TranscriptShapeError`), "Empty transcript" (`TranscriptNotReady`); `TavusSessionStatusTest`: status not active -> `ended`, an HTTP error throws `ProviderException` (an error is never an end).
   - GREEN: `TavusProvider::fetchTranscript`, `fetchSession`.
   - Verify: `cd service && php artisan test --filter='TavusTranscriptTest|TavusSessionStatusTest'`.
-- [ ] 11.3 `TavusEventMapper` and `parseCallback`.
+- [x] 11.3 `TavusEventMapper` and `parseCallback`.
   - RED: `service/tests/Unit/AvatarProviders/Tavus/TavusEventMapperTest.php`: `system.pal_joined` and legacy `system.replica_joined` -> `Joined`; `system.shutdown` -> `Ended` with `providerEndReason` from `properties.shutdown_reason`, else `properties.reason`, else `unknown`; `application.transcription_ready` -> `TranscriptReady` carrying rows; anything else -> `Ignored`; idempotency key `sha256(conversation_id|event_type|timestamp)`.
   - GREEN: `service/app/AvatarProviders/Tavus/TavusEventMapper.php`, `TavusProvider::parseCallback`.
   - Verify: `cd service && php artisan test --filter='TavusEventMapperTest' && php artisan test --coverage --min=90`.

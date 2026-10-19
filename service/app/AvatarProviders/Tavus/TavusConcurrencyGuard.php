@@ -64,7 +64,8 @@ final class TavusConcurrencyGuard
             return false;
         }
 
-        $message = $response->json('message') ?? $response->json('error') ?? Arr::get((array) $response->json(), 'data.message');
+        $body = (array) $response->json();
+        $message = $body['message'] ?? $body['error'] ?? Arr::get($body, 'data.message');
 
         return is_string($message) && preg_match(self::CAPACITY_MESSAGE, $message) === 1;
     }
