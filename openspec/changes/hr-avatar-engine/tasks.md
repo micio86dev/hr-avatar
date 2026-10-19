@@ -214,23 +214,23 @@ Commit: `feat(service): add secret-key authentication, scopes, query-key rejecti
 Specs: api-keys (scopes, secret keys reject browser origins, per-key rate limiting, publishable key grants nothing alone - SK side).
 Reconciliation: 4, 8, 14. High-integrity zone.
 
-- [ ] 4.1 `RejectKeyInQuery`.
+- [x] 4.1 `RejectKeyInQuery`.
   - RED: `service/tests/Feature/RejectKeyInQueryTest.php`: `?api_key=`, `?key=` or any value starting `hra_sk_`/`hra_pk_` -> `400 api_key_in_query`; clean query passes.
   - GREEN: `service/app/Http/Middleware/RejectKeyInQuery.php`.
   - Verify: `cd service && php artisan test --filter=RejectKeyInQueryTest`.
-- [ ] 4.2 `AuthenticateSecretKey` and failed-auth limiter.
+- [x] 4.2 `AuthenticateSecretKey` and failed-auth limiter.
   - RED: `service/tests/Feature/AuthenticateSecretKeyTest.php`: "Missing credentials" (401 `unauthenticated`), "Live secret with Origin" (`403 secret_key_origin_forbidden`), "Live secret without Origin", "Test secret with Origin" (allowed), "Publishable key on SK endpoint" (401 `unauthenticated`), `key_expired`, `key_revoked`, binds `CurrentAccount` and sets `api_key_id`, `key_mode`, `key_scopes`; "Auth failure flood" (31st failure within a minute from one IP -> 429 `rate_limited`).
   - GREEN: `service/app/Http/Middleware/AuthenticateSecretKey.php`, aliases `auth.secret`, `scope`, and the middleware priority (both auth middlewares ahead of `SubstituteBindings`) in `service/bootstrap/app.php`.
   - Verify: `cd service && php artisan test --filter=AuthenticateSecretKeyTest`.
-- [ ] 4.3 `RequireScope`.
+- [x] 4.3 `RequireScope`.
   - RED: `service/tests/Feature/RequireScopeTest.php` scenarios "Missing scope" (403 `insufficient_scope`), "Wildcard" (`*` passes every scope).
   - GREEN: `service/app/Http/Middleware/RequireScope.php`.
   - Verify: `cd service && php artisan test --filter=RequireScopeTest`.
-- [ ] 4.4 Rate limiters (secret + failed-auth; publishable arrives in slice 6).
+- [x] 4.4 Rate limiters (secret + failed-auth; publishable arrives in slice 6).
   - RED: `service/tests/Feature/RateLimitTest.php` scenarios "Limit exceeded" (601st request in a minute from one secret key -> 429 `rate_limited`, `Retry-After`, `X-RateLimit-Limit`/`X-RateLimit-Remaining` present), "Separate budgets" (two keys do not share), env override `HRA_RATE_LIMIT_SECRET`.
   - GREEN: `RateLimiter::for('secret'|'failed-auth')` in `service/app/Providers/AppServiceProvider.php`, `throttle:secret` in the secret chain.
   - Verify: `cd service && php artisan test --filter=RateLimitTest`.
-- [ ] 4.5 High-integrity coverage file and CI step.
+- [x] 4.5 High-integrity coverage file and CI step.
   - RED: `cd service && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` fails (config missing).
   - GREEN: `service/phpunit.high-integrity.xml` (coverage source `app/Keys`, `app/Accounts`, `app/Http/Middleware`; slices 21 and 25 add the signer and lifecycle); add the step to `.github/workflows/service.yml` and extend `service/tests/Feature/CiWorkflowTest.php` to assert it.
   - Verify: `cd service && vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95 && php artisan test --filter=CiWorkflowTest`.

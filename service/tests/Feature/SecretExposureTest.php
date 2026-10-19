@@ -4,6 +4,7 @@ use App\Models\Account;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 
 /**
  * A credential must never appear in a response, a log line or a stored column other than its
@@ -34,4 +35,22 @@ it('keeps an API key out of the logs while it is created, authenticated with and
 
     expect($raw)->toStartWith('hra_sk_live_')
         ->and($everything)->not->toContain($raw)->not->toContain($other);
+});
+
+it('never echoes or logs a key that fails authentication', function () {
+    $logged = captureLogs();
+    Route::middleware('auth.secret')->get('/v1/_probe', fn () => ['ok' => true]);
+    $wrong = 'hra_sk_live_'.str_repeat('f', 96);
+    [, $expired] = issueKey(Account::factory()->create(), ['expires_at' => now()->subMinute()]);
+
+    $responses = [
+        $this->getJson('/v1/_probe', ['Authorization' => "Bearer {$wrong}"]),
+        $this->getJson('/v1/_probe', ['Authorization' => "Bearer {$expired}"]),
+        $this->getJson("/v1/_probe?api_key={$wrong}"),
+    ];
+
+    foreach ($responses as $response) {
+        expect($response->getContent())->not->toContain($wrong)->not->toContain($expired);
+    }
+    expect(implode("\n", $logged->getArrayCopy()))->not->toContain($wrong)->not->toContain($expired);
 });

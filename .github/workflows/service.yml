@@ -94,6 +94,9 @@ jobs:
       - name: Tests with coverage
         run: php artisan test --coverage --min=90
 
+      - name: High-integrity coverage (keys, accounts, middleware)
+        run: vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95
+
   openapi:
     runs-on: ubuntu-latest
     timeout-minutes: 10

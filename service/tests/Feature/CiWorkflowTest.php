@@ -31,12 +31,13 @@ it('runs the service job against PostgreSQL 17 and Redis 8', function () {
     expect(workflow())->toContain('image: pgvector/pgvector:0.8.0-pg17')->toContain('image: redis:8.0-alpine');
 });
 
-it('runs style, static analysis, migrations and the covered suite in that order', function () {
+it('runs style, static analysis, migrations, the covered suite and the high-integrity gate in that order', function () {
     $steps = array_map('position', [
         'vendor/bin/pint --test',
         'vendor/bin/phpstan analyse',
         'php artisan migrate --force',
         'php artisan test --coverage --min=90',
+        'vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95',
     ]);
 
     expect($steps)->toBe(collect($steps)->sort()->values()->all());

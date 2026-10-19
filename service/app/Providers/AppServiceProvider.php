@@ -6,9 +6,12 @@ use App\Accounts\CurrentAccount;
 use App\Http\OpenApi\DocumentIdentity;
 use App\Http\OpenApi\SecurityDocumentation;
 use Dedoc\Scramble\Scramble;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use RuntimeException;
 
@@ -33,6 +36,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->guardJwtSecret();
+
+        RateLimiter::for('secret', fn (Request $request) => Limit::perMinute((int) config('hr-avatar.rate_limits.secret'))
+            ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
 
         Scramble::configure()
             ->withDocumentTransformers(DocumentIdentity::apply(...))

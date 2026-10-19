@@ -119,3 +119,35 @@ The vocabulary scan caught the word "candidate" in the resolver's own comments a
 - Authored size about 1,285 lines against a ~330 forecast (tests are about 650 of them). Cohesive unit; recommend `size:exception`.
 - `CurrentAccount` has no `set()` yet (removed as dead code at 87 % coverage); slice 4 adds the setter with the authentication middleware that uses it.
 - `rotated_from_id` is added as a plain column and its self foreign key in a second statement (Postgres needs the primary key to exist first).
+
+Slice 3 commit: `83fe7cc`.
+
+## Slice 4: Secret-key auth chain (tasks 4.1-4.5) - complete
+
+Commit subject: `feat(service): add secret-key authentication, scopes, query-key rejection and rate limiting`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 4.1 | `tests/Feature/RejectKeyInQueryTest.php` | middleware missing (45 tests failing together with 4.2-4.4) | 13/13 | the clean-query dataset first contained `key_prefix=hra_sk_live_...`, which the rule (any value starting with a key prefix) correctly rejects; the case was wrong, not the rule |
+| 4.2 | `tests/Feature/AuthenticateSecretKeyTest.php` | middleware missing | 18/18 | account is bound with `CurrentAccount::runAs` around `$next`, so nothing leaks to the next request; failed-auth budget lives in `Keys\FailedAuthLimiter` (shared with the client chain of slice 6) |
+| 4.3 | `tests/Feature/RequireScopeTest.php` | middleware missing | 6/6 | `scope:conversations:write` (Laravel splits the alias on the first colon only) |
+| 4.4 | `tests/Feature/RateLimitTest.php` | default config missing | 5/5 | first attempt shared one bucket across keys: Laravel's priority list ran `throttle` before authentication, so the key id was not yet known. Fixed with `prependToPriorityList(before: ThrottleRequests)` |
+| 4.5 | `phpunit.high-integrity.xml` + `CiWorkflowTest` | config file missing; workflow step missing | 309 tests, 100.0 % over Keys, Accounts, Middleware | CI step added after the main coverage step |
+
+Extra findings from the harness, fixed with a RED test each: inside the real `api` route group Laravel's priority sort ran authentication ahead of `RejectKeyInQuery`, so `?api_key=` answered 401 instead of 400; `RejectKeyInQuery` is now ordered ahead of authentication in the priority list. An implicit-binding test proves the account is bound before `SubstituteBindings` (removing the priority entry makes it fail).
+
+### Work Unit Evidence (slice 4)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='RejectKeyInQuery|AuthenticateSecretKey|RequireScope|RateLimit'` : 46 passed; full suite 309 passed, 1008 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % |
+| Static analysis / style | larastan level 8 and pint passed; `openapi.json` unchanged |
+| Runtime harness (H-KEY, temporary route reverted) | no key 401 `unauthenticated`; key with `conversations:read` 403 `insufficient_scope`; wildcard key 200 with `X-RateLimit-Limit: 600`, `X-RateLimit-Remaining: 597`; live key + `Origin` 403 `secret_key_origin_forbidden`; `?api_key=x` 400 `api_key_in_query` |
+| Rollback boundary | revert the three middlewares, `Keys\FailedAuthLimiter`, the `secret` limiter, the alias/priority lines in `bootstrap/app.php`, `phpunit.high-integrity.xml`, the workflow step and their tests |
+
+### Deviations (slice 4)
+
+- No named `RateLimiter::for('failed-auth')`: the failed-auth budget is checked by `FailedAuthLimiter` (manual hit counting from `config('hr-avatar.rate_limits.failed_auth')`), because a named limiter nobody applies as `throttle:` middleware would be dead code.
+- Authored size about 565 lines (about 325 are tests), above the 400 budget. Cohesive security unit; recommend `size:exception`.
+- Reminder carried from slice 3: `CLAUDE.md` now lists the two credential lookups as the only unscoped reads (the Guardian Angel review required an explicit exception).
