@@ -9,6 +9,7 @@ use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
 use App\Http\Controllers\V1\ProviderCredentialController;
+use App\Http\Controllers\V1\TranscriptController;
 use App\Http\Controllers\V1\VoicePreviewController;
 use App\Http\Controllers\V1\WebhookDeliveryController;
 use App\Http\Controllers\V1\WebhookEndpointController;
@@ -66,6 +67,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
     Route::post('conversations', [ConversationController::class, 'store'])->middleware('scope:conversations:write')->name('conversations.store');
     Route::post('conversations/{conversation}/end', [ConversationController::class, 'end'])->middleware('scope:conversations:write')->name('conversations.end');
     Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->middleware('scope:conversations:read')->name('conversations.show');
+    Route::get('conversations/{conversation}/transcript', [TranscriptController::class, 'show'])->middleware('scope:conversations:read')->name('conversations.transcript');
 
     Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');
 });
@@ -74,4 +76,6 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
 // CORS is answered by the global ClientCors middleware for every route under `client/`.
 Route::middleware([RejectKeyInQuery::class, 'auth.client', 'throttle:publishable'])->prefix('client')->group(function () {
     Route::post('conversations/{conversation}/connect', [ClientConversationController::class, 'connect'])->name('client.conversations.connect');
+    Route::post('conversations/{conversation}/events', [ClientConversationController::class, 'events'])->name('client.conversations.events');
+    Route::post('conversations/{conversation}/end', [ClientConversationController::class, 'end'])->name('client.conversations.end');
 });

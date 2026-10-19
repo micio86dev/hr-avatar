@@ -1166,3 +1166,39 @@ Mutation checks (not committed): removing the `! $won` branch, the claim itself,
 - `HRA_PUBLIC_BASE_URL` was already in `.env.example`; `hr-avatar.public_base_url` reads it. It is only read for a provider that calls back; if it is unset the start of such a provider fails the conversation (`config()->string` throws) instead of sending the provider a broken target. The Railway documentation of the variable is slice 32.
 - `ScriptedProvider` (test support) gained `start` (scripted by `$starts`), a settable `$ingestion` and `$lastSpec`; defaults unchanged, so slices 23-24 tests are untouched.
 - Cross-account on the browser surface: a secret for the key's own account naming another account's conversation id is a 404 (only the signing secret could mint it); a secret for another conversation is the middleware's 403 `forbidden`, per reconciliation 12.
+
+## Slice 27: Client events, client end, transcript endpoint (tasks 27.1-27.4) - complete
+
+Commit subject: `feat(service): add idempotent client event ingestion, client end and the transcript endpoint`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 27.1 | `tests/Feature/ClientEventsTest.php` (53 cases) | 70 of 76 failed with 27.2-27.4 (404 on the routes; 5 refusal checks pass while the routes are absent) | green | batch stored in order with server-assigned sequence, numbering continues after provider and lifecycle rows, body cannot set `sequence` / `source` / `account_id`, time kept in UTC to the millisecond and none when none was given, `data` kept as an object (`{}` stays `{}`), same key in another conversation is independent, the conversation row is locked (`for update`), replay (0 accepted, N duplicates, count unchanged), partial overlap, a key repeated inside one batch, atomic validation (one bad event: 422 naming `events.N.field`, nothing stored; 21 malformed shapes), non-list bodies, 100 accepted / 101 refused, 8000 characters and 2048 bytes of data accepted, accepted while connecting, grace window (30 s and exactly 60 s accepted, 61 s `conversation_closed`, ended and failed), utterance before connect `invalid_state` for the whole batch, `live` in `created` stored without effect, `live` makes a connecting conversation live with one `conversation.live` (replays and later signals do nothing), `error` stored with data and no effect, `live` after the end stored without effect, form-encoded bodies (accepted without data, `data` refused), foreign conversation 404, other conversation's secret 403, no secret 401 |
+| 27.2 | `tests/Feature/ClientEndTest.php` (8) | same run | green | client end (`client`, release queued, one `conversation.ended`), already ended / failed (200, attributes byte-identical, nothing emitted), end before connect (no release, `ready` transcript), last events still accepted after the end, reason not taken from the body, foreign 404, 403 / 401, preflight |
+| 27.3 | `tests/Feature/TranscriptEndpointTest.php` (14) | same run | green | members exactly `conversation_id`, `status`, `utterances[{sequence, role, text, occurred_at, source}]`, ordering by time then sequence with timeless lines last, lifecycle events excluded, `pending` / `ready` / `partial`, in-flight conversations are `pending` with what was sent, `created` 409 `invalid_state`, empty list, no mixing of conversations, foreign 404 (no text leaked), unknown 404, `conversations:read` scope / key |
+| 27.4 | `tests/Feature/MockConversationFlowTest.php` (2) | same run | green | the whole path over HTTP with the real sync queue: bootstrap key, publishable key, Mock config, webhook endpoint, create, connect, live + utterances, client end, release, reconciliation (the Mock opening line merged as a `provider` utterance), transcript `ready`, three webhooks delivered and succeeded in order with the `transcript.ready` payload, a second end changes nothing; and end-before-connect |
+| (support) | `tests/Feature/EventTimePrecisionTest.php` (1) | failed with the reconciler change reverted (times cut to whole seconds) | green | provider times are kept to the microsecond, in UTC |
+
+Mutation checks (not committed): removing the row lock, the grace window, the duplicate check and the `connecting` guard on the live signal each failed 1 to 4 cases; making a non-JSON body read no `data` failed the form-encoded refusal.
+
+### Work Unit Evidence (slice 27)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ClientEventsTest\|ClientEndTest\|TranscriptEndpointTest\|MockConversationFlowTest\|EventTimePrecisionTest'`: all passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2287 passed, 6306 assertions, exit 0; line coverage 100.0 % |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 2287 passed, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `scramble:export` regenerated (`POST /client/conversations/{conversation}/events`, `.../end`, `GET /conversations/{conversation}/transcript`); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-MOCK full flow) | `MockConversationFlowTest` is the harness: HTTP end to end with the real stack and the synchronous queue (a curl run needs a queue worker for the delayed jobs; the test removes that difference) |
+| Rollback boundary | `EventIngestor`, `ClientEventsRequest`, `TranscriptController`, `TranscriptResource`, the `events` / `end` actions and the three routes, migration `100012`, the microsecond write in `TranscriptReconciler`, the five test files, `openapi.json` |
+
+### Deviations and decisions (slice 27)
+
+- Authored size 1217 lines (814 tests), above the 400 budget: ingestion with its validation matrix, the client end, the transcript endpoint and the end-to-end flow. Recommend `size:exception`.
+- **`occurred_at` precision.** The column was created with whole-second precision. A transcript is ordered by it and the browser writes milliseconds, so a new migration widens it to microseconds, and `TranscriptReconciler` (slice 23) now writes provider times as microsecond strings in UTC (the query builder would otherwise cut them). The transcript shows times to the millisecond (`...T12:00:05.250Z`), unlike the whole-second timestamps of the other resources, because here the sub-second part decides the order.
+- `data` of an event is validated from the raw JSON body (an object stays an object, strings are not trimmed or nulled by the middleware); a form-encoded body can carry no object, so `data` in one is a 422. `events` must be a list (`list` rule), each event an object.
+- `role` and `text` are refused on a lifecycle event and `name` on an utterance (the spec lists them as type-specific; accepting and ignoring them would hide a client bug).
+- A terminal conversation with `ended_at` exactly 60 s ago still accepts events; 61 s is `conversation_closed` (`ended_at + 60 s` in the past).
+- `live` is acted on only for the first stored copy of that key and only when the conversation is `connecting`, under the row lock; a `live` after `live`, in `created`, or after the end is stored without effect.
+- The client end returns the full conversation resource to the browser (the spec says "the conversation resource"), including the host's `external_ref` and `metadata`, which the host already chose to put on a conversation the browser holds.

@@ -654,19 +654,20 @@ Specs: conversations (connect), provider-webhooks (callback token issuance), api
 Commit: `feat(service): add idempotent client event ingestion, client end and the transcript endpoint`
 Specs: conversations (client event ingestion, end, transcript). Reconciliation: 19, 20.
 
-- [ ] 27.1 `EventIngestor`.
+- [x] 27.1 `EventIngestor`.
   - RED: rewrite BEAI `UtteranceControllerTest` as `service/tests/Feature/ClientEventsTest.php`: "Batch stored in order" (server-assigned monotonic `sequence`), "Idempotent replay", "Partial overlap" (`{accepted, duplicates}`), "Atomic validation" (one bad event -> 422, nothing stored), "Too many events" (> 100), "Grace window" (accepted within 60 s of `ended_at`), "Closed" (`409 conversation_closed`), "Utterance before connect" (`409 invalid_state`), lifecycle `live` in `created` stored without effect, lifecycle `live` in `connecting` -> `live`, lifecycle `error` stored with no state effect, row lock (`lockForUpdate`), cross-conversation/cross-account 404 (`CrossParticipantOwnershipTest` rewrite).
   - GREEN: `service/app/Conversations/EventIngestor.php`, `service/app/Http/Requests/ClientEventsRequest.php`, events action on `ClientConversationController`, route.
+  - Note (apply): migration `..._100012` widens `conversation_events.occurred_at` to microseconds (a transcript is ordered by it; whole seconds would tie the lines of one second) and the reconciler now writes provider times as microsecond strings in UTC.
   - Verify: `cd service && php artisan test --filter=ClientEventsTest`.
-- [ ] 27.2 Client end.
+- [x] 27.2 Client end.
   - RED: `service/tests/Feature/ClientEndTest.php` scenario "Client end" (`ended_reason client`), idempotent 200 on a terminal conversation, "End before connect".
   - GREEN: end action on `ClientConversationController`, route.
   - Verify: `cd service && php artisan test --filter=ClientEndTest`.
-- [ ] 27.3 `GET /v1/conversations/{id}/transcript`.
+- [x] 27.3 `GET /v1/conversations/{id}/transcript`.
   - RED: `service/tests/Feature/TranscriptEndpointTest.php` scenarios "Pending", "Before connect" (`409 invalid_state` for `created`), ordering `occurred_at` asc nulls last then `sequence`, `source` field, status `ready|partial|pending`, "Account isolation", scope `conversations:read`.
   - GREEN: `service/app/Http/Controllers/V1/TranscriptController.php`, route.
   - Verify: `cd service && php artisan test --filter=TranscriptEndpointTest && php artisan test --coverage --min=90`.
-- [ ] 27.4 Mock end-to-end flow (runtime check).
+- [x] 27.4 Mock end-to-end flow (runtime check).
   - RED: `service/tests/Feature/MockConversationFlowTest.php` drives bootstrap key -> mock config -> create -> connect -> events -> end -> release -> reconcile -> transcript with `Queue::fake` replaced by the sync queue; fails until slices 20-27 are wired correctly.
   - GREEN: fix wiring gaps only.
   - Verify: `cd service && php artisan test --filter=MockConversationFlowTest`.

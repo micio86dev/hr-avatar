@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\ConversationEvent;
 use App\Webhooks\Outbound\EventType;
 use App\Webhooks\Outbound\WebhookDispatcher;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -94,7 +95,8 @@ final class TranscriptReconciler
                 'type' => 'utterance',
                 'role' => $line->role,
                 'text' => $line->text,
-                'occurred_at' => $line->occurredAt,
+                // A string, not the object: the query builder would write whole seconds, and the column keeps microseconds.
+                'occurred_at' => $line->occurredAt === null ? null : Carbon::instance($line->occurredAt)->utc()->format('Y-m-d H:i:s.u'),
                 'idempotency_key' => "provider:{$position}",
                 'created_at' => now(),
                 'updated_at' => now(),

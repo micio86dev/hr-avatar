@@ -3,7 +3,12 @@
 namespace App\Http\Controllers\V1\Client;
 
 use App\Conversations\ConnectConversation;
+use App\Conversations\ConversationLifecycle;
+use App\Conversations\EndedReason;
+use App\Conversations\EventIngestor;
 use App\Http\Problem;
+use App\Http\Requests\ClientEventsRequest;
+use App\Http\Resources\ConversationResource;
 use App\Http\Resources\JoinMaterialResource;
 use App\Models\Conversation;
 use Dedoc\Scramble\Attributes\Group;
@@ -32,5 +37,35 @@ class ClientConversationController
     public function connect(Conversation $conversation, ConnectConversation $connect): JoinMaterialResource
     {
         return new JoinMaterialResource($connect->connect($conversation));
+    }
+
+    /**
+     * Send events
+     *
+     * Stores a batch of 1 to 100 events (utterances and lifecycle signals) in order, once each: a
+     * key sent before is counted in `duplicates` and not stored again, so a batch can be retried safely. One
+     * invalid event rejects the whole batch (422). Events are taken while the conversation is open and for a
+     * minute after it ended; later ones are `conversation_closed`. An utterance before the conversation is
+     * connected is `invalid_state`. A `live` signal makes a connecting conversation live.
+     *
+     * @return array{accepted: int, duplicates: int}
+     */
+    #[ResponseDoc(409, description: 'The conversation closed more than a minute ago (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
+    public function events(ClientEventsRequest $request, Conversation $conversation, EventIngestor $ingestor): array
+    {
+        return $ingestor->ingest($conversation, $request->events());
+    }
+
+    /**
+     * End
+     *
+     * Ends the conversation from the browser, with the reason `client`, and answers 200 with it. Ending a
+     * conversation that is already over answers 200 with it unchanged.
+     */
+    public function end(Conversation $conversation, ConversationLifecycle $lifecycle): ConversationResource
+    {
+        $lifecycle->end($conversation, EndedReason::Client);
+
+        return new ConversationResource($conversation);
     }
 }
