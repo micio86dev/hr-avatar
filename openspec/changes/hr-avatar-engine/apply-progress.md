@@ -917,6 +917,8 @@ Test defects fixed on the way (no assertion weakened): none beyond the dataset l
 
 ## Slice 22: Consumer webhooks - dispatch and delivery (tasks 22.1-22.3) - complete
 
+Slice 22 commit: `863d32d`.
+
 Commit subject: `feat(service): add webhook dispatcher, signed delivery with retries and the delivery log`
 
 | Task | Test file | RED (observed) | GREEN | Notes |
@@ -955,3 +957,40 @@ commit" (and a rolled-back transaction makes no request). Removing `->afterCommi
 - The dispatcher takes the utterance count as an argument for `transcript.ready`; slice 23 passes it. `transcript.status` in the payload is the conversation's `transcript_status` at the time, so the caller must have set it first.
 - `DeliveryStatus` lives in `App\Webhooks\Outbound` next to `EventType`; the delivery id is a plain lowercase ULID (design: only conversations, configs and endpoints have prefixed ids).
 - Retry delays are not configuration (nothing varies them); they are a constant of the job.
+
+## Slice 23: Transcript reconciler (tasks 23.1-23.2) - complete
+
+Commit subject: `feat(service): add merge-based transcript reconciliation job`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| (support) auth | `tests/Feature/ConversationProviderAuthTest.php` (5) | 0 of 60 passed with 23.1-23.2: classes missing | green | `ProviderAuth::none()` (the placeholder slice 9 left open) and `ConversationProviderAuth::for(Conversation)`: none for a provider that takes no credential, else the account's key, else the platform's, else null |
+| 23.1 | `tests/Feature/TranscriptReconcilerTest.php` (35) | same run | green | merge adds only missing, normalized comparison (trim, whitespace, case, unicode case), other role / other text are different lines, repeated lines are not lost, sequence continues after the highest stored (lifecycle events included), lifecycle events never match, stored text and time as given, empty ready, partial, non-terminal is a no-op, idempotent, ready and partial never override each other, stale model, `transcript.ready` once with status and count and no text, endpoints scoping, one transaction (rollback takes everything), lock order |
+| 23.2 | `tests/Feature/ReconcileTranscriptTest.php` (20) | same run | green | pending to ready, finished is a no-op, no provider session finishes empty, not-ready / provider failure propagate for the queue to retry, `tries` 5 and `backoff` `[30,60,120,300]`, `failed()` finishes as partial with the client lines and emits once, shape error fails the job at once (queue job told, nothing thrown), credential resolution (account key; missing key is a retryable failure without a request), account isolation, the job holds ids only |
+
+A support class for the tests, `tests/Support/AvatarProviders/ScriptedProvider.php`, lets a test script `fetchTranscript` / `teardown`
+answers and see what was asked (slice 24 uses it too). Mutation check (not committed): removing the `transcript_status = 'pending'`
+condition from the finishing UPDATE failed 3 of the 35 reconciler cases.
+
+### Work Unit Evidence (slice 23)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ConversationProviderAuthTest\|TranscriptReconcilerTest\|ReconcileTranscriptTest'`: 60 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 2047 passed, 5477 assertions, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors; `openapi.json` unchanged (no route) |
+| Runtime harness | N/A by task: a queue job driven end to end in the slice 26 harness; here the adapter is scripted and the Tavus path runs against `Http::fake` |
+| Rollback boundary | `TranscriptReconciler`, `ReconcileTranscript`, `ConversationProviderAuth`, `ProviderAuth::none()` and `NONE`, `ScriptedProvider`, their tests |
+
+### Deviations and decisions (slice 23)
+
+- Authored size 930 lines (687 tests): within about 2.3x the budget for two cohesive classes and the shared auth helper; recommend `size:exception`.
+- **Multiset matching instead of set matching.** The spec says a provider line is added when "no existing utterance of the same role and normalized text" exists. Read literally, a provider that repeats a line ("Yes", "Okay.") would have all but the first dropped when the browser forwarded nothing, which is silent data loss. Here each stored line accounts for **one** provider line: provider `Yes, Yes` with client `Yes` adds one. Every spec scenario holds (merge adds only missing, normalized comparison, idempotent).
+- Provider lines get the idempotency key `provider:{position}` (the unique key the events table needs); the position is the line's index in the provider's list.
+- `reconcile()` takes the line list and the outcome (`ready` or `partial`); the empty-list call is the "finalize" of the task text (no provider session, partial). A conversation that has not reached a terminal state is a no-op (so a stray job can never finish a live conversation's transcript).
+- The finishing write is the first statement (a conditional UPDATE that takes the conversation row lock), then lines are counted and numbered, then `transcript.ready` is recorded; slice 27's event ingestion locks the same row, so a late browser event cannot take a sequence number mid-merge.
+- The count in `transcript.ready` is the number of utterance events (browser and provider), lifecycle events excluded.
+- **Open decision recorded:** "receipt rows used when passed" (task 23.2) is not built. The receipts table is slice 29, and rows passed through the job would put transcript text on the queue and in `failed_jobs`. Slice 29's `ProcessProviderEvent` should pass the receipt id (the job then reads the receipt's `payload`, which is hidden). Smallest safe option; no test pins a rows argument.
+- A provider that needs a credential and has none for the account is `ProviderException::noResponse()` (retry, then partial), not an immediate partial: the host may store the key while retries run.
+- `failed()` logs the conversation id and the exception class, never the message.
+- `ProviderAuth::none()` is the answer to the slice 9 open point (`credential: false` providers): a real object with the owner `none` and no meaningful key; it still refuses to serialize.

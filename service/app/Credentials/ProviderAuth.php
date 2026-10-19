@@ -15,6 +15,9 @@ final class ProviderAuth
     /** The owner of a key that belongs to the platform rather than to an account. */
     public const PLATFORM = 'platform';
 
+    /** The owner of the placeholder handed to a provider that takes no credential. */
+    public const NONE = 'none';
+
     /** First 16 hex characters of the key's sha256: tells two keys apart without revealing either. */
     public readonly string $fingerprint;
 
@@ -28,6 +31,15 @@ final class ProviderAuth
         }
 
         $this->fingerprint = substr(hash('sha256', $apiKey), 0, 16);
+    }
+
+    /**
+     * What a provider that takes no credential is handed: every adapter operation takes an auth, and
+     * this one holds no key worth the name.
+     */
+    public static function none(): self
+    {
+        return new self(self::NONE, self::NONE);
     }
 
     public function apiKey(): string

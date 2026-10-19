@@ -575,13 +575,14 @@ Note: lifecycle-driven emission scenarios are asserted end to end in slice 25; h
 Commit: `feat(service): add merge-based transcript reconciliation job`
 Specs: conversations (transcript and reconciliation). Reconciliation: 20, 21.
 
-- [ ] 23.1 `TranscriptReconciler`.
+- [x] 23.1 `TranscriptReconciler`.
   - RED: `service/tests/Unit/TranscriptReconcilerTest.php` scenarios "Merge adds only missing" (client lines kept), "Normalized comparison" (trim, whitespace collapse, case-insensitive), "Idempotent" (second run changes nothing and emits nothing: lost CAS is a no-op), `finalize` of a conversation with no provider session as an empty `ready`, `partial` finalization, sequences continue after the existing maximum, `transcript.ready` recorded through `WebhookDispatcher` in the same transaction.
   - GREEN: `service/app/Conversations/TranscriptReconciler.php`.
   - Verify: `cd service && php artisan test --filter=TranscriptReconcilerTest`.
-- [ ] 23.2 `ReconcileTranscript` job.
+- [x] 23.2 `ReconcileTranscript` job.
   - RED: `service/tests/Feature/ReconcileTranscriptTest.php` scenarios "Pending", "Partial" (5 attempts then `partial` via `failed()`), `TranscriptNotReady` and `ProviderException` retry (backoff `[30,60,120,300]`), `TranscriptShapeError` fails at once, receipt rows used when passed, account isolation ("Account isolation" scenario), runs under `CurrentAccount::runAs`.
   - GREEN: `service/app/Jobs/ReconcileTranscript.php`.
+  - Note (apply): "receipt rows used when passed" is not built here: the receipts table lands in slice 29, and passing the rows through the job would put transcript text on the queue and in the failed-job record. Slice 29 passes the receipt id instead (see apply-progress, open decisions).
   - Verify: `cd service && php artisan test --filter='ReconcileTranscriptTest' && php artisan test --coverage --min=90`.
 
 ## Slice 24: Provider release job
