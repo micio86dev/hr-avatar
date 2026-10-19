@@ -124,6 +124,12 @@ final class LiveAvatarVoiceRegistrar
         ]);
     }
 
+    /**
+     * The shape LiveAvatar was seen to answer for a secret id it does not know: HTTP 400, code 4000,
+     * and a message of the form "Secret with id '...' not found in your space". The message is the only
+     * thing that tells it from another 4000, so a wording change on their side degrades to a plain
+     * bind failure (an error, never a wrong voice).
+     */
     private function isUnknownSecret(Response $response): bool
     {
         return $response->status() === 400

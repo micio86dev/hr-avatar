@@ -1,5 +1,6 @@
 <?php
 
+use App\AvatarProviders\LiveAvatar\LiveAvatarProvider;
 use App\AvatarProviders\Mock\MockProvider;
 
 /*
@@ -26,6 +27,7 @@ return [
     */
     'providers' => [
         'mock' => ['adapter' => MockProvider::class, 'credential' => false],
+        'heygen' => ['adapter' => LiveAvatarProvider::class, 'credential' => true, 'event_key_prefix' => 'liveavatar'],
     ],
 
     /*

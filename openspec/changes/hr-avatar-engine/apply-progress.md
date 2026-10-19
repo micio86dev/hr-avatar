@@ -382,3 +382,55 @@ Triangulation: failure modes, verbs, base URL shapes and key switches are datase
   `hra-{engine}-{vendorFingerprint}`, the voice name `hra-{engine}-{vendorVoiceId}` cut to 64 characters. Names are labels for a
   human reading the LiveAvatar dashboard; LiveAvatar does not require them to be unique and the service never looks anything up by name.
 - The vocabulary scan caught "BEAI" in a docblock (a ported comment); reworded.
+
+Slice 12 commit: `c5cd8c7`.
+
+## Slice 13: LiveAvatar adapter - start (tasks 13.1-13.2) - complete (LiveAvatar lane)
+
+Commit subject: `feat(service): add LiveAvatar adapter start with context, token and cleanup`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 13.1 | `tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarPayloadTest.php` | `LiveAvatarPayload` not found (27 errors) | 27/27 | pure bodies; the "env widening path is gone" scenario is a source scan: the payload reads neither `config(` nor `env(` nor `extra_token_fields` |
+| 13.2 | `LiveAvatarProviderStartTest.php` | `LiveAvatarProvider` does not exist (31 errors) | 31/31 (2 failures on the first run were test defects: a throwing fake is not recorded by `Http::recorded()`, and a second `Http::fake` for the same pattern does not replace the first; assertions rewritten to the observable behaviour) | ported from BEAI `HeygenProviderTest` and `ProviderContractFixtureTest`: context then token, token failure deletes the context, voice before anything billable, golden bodies pinned with `toBe`, key never leaks, registry entry |
+
+Triangulation: every failure mode (500/429/422/timeout/missing id) is a dataset for both the context call and the token call;
+cleanup is shown for the delete succeeding, 404, 5xx and timing out.
+
+### Work Unit Evidence (slice 13)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='LiveAvatar'`: 141 passed, 323 assertions, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --coverage --min=90`: 882 passed, 2626 assertions, total 99.5 %, exit 0 (`LiveAvatarProvider` 90.0 %: the four slice 14 placeholders are uncovered by design; every other LiveAvatar class 100 %) |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 882 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed; `openapi.json` unchanged |
+| Runtime harness | N/A-WIRE by task: no route consumes the adapter yet (connect is slice 26); the HTTP boundary is pinned with `Http::fake` + `Http::preventStrayRequests()` |
+| Rollback boundary | `LiveAvatarPayload.php`, `LiveAvatarProvider.php`, the two `use`/`heygen` lines in `config/hr-avatar.php`, and `LiveAvatarPayloadTest` / `LiveAvatarProviderStartTest` |
+
+### Deviations and decisions (slice 13)
+
+- Authored size about 798 lines (about 297 app and config, 501 tests), above the 400 budget: one adapter `start` with its pure payload, the
+  failure matrix and the registry entry. Recommend `size:exception`.
+- **Config keys of a `heygen` avatar config** (decision for slice 15, `LiveAvatarFieldSpecs`): camelCase, as BEAI's field specs kept them:
+  `avatarId`, `interactivityType` (`CONVERSATIONAL`/`PUSH_TO_TALK`), `videoQuality`, and for an external voice `voiceSpeed`,
+  `voiceStability`, `voiceSimilarityBoost`, `voiceStyle`, `voiceUseSpeakerBoost`, `ttsModelName`. The voice itself is the config's
+  top-level `voice {engine, voice_id}` (so BEAI's `voiceId`, `ttsEngine` and `ttsExternalVoiceId` keys do not exist). BEAI's
+  `maxSessionDurationSec`, `videoEncoding` and the native voice knobs were never proven against a live call and are **not** sent;
+  slice 15 should not declare them as settings that have an effect (or the allowlist must grow with a proof).
+- The proven constants `interactivity_type: CONVERSATIONAL` and `video_settings.quality: low` stay as floors (they were in BEAI's
+  demonstrated-working call, and its hotfix 0.22.1 existed because they were missing); a config value overrides them. BEAI's platform
+  `avatar_id`/`voice_id`/`language` environment floor is gone: `avatarId` comes from the config only (slice 15 makes it required), and the
+  language is the conversation's.
+- A token answer without `data.session_id` is a failure (and the context is deleted); BEAI tolerated a null session id because its
+  `provider_session_ref` was nullable. Here a session with no ref could never be torn down or polled.
+- `JoinMaterial.expiresAt` is now + 3600 s: LiveAvatar documents no token lifetime and the answer carries no expiry. Open item:
+  confirm the real lifetime; the SDK does not read `expires_at` yet.
+- A config bound to a model whose configuration was never synced starts without `llm_configuration_id` (as BEAI did); the
+  `config_not_synced` gate of slice 20 is what keeps that from happening.
+- Until slice 14, `teardown`, `fetchTranscript`, `fetchSession` and `parseCallback` exist only to satisfy the contract and throw
+  `LogicException`; they are untested placeholders that slice 14's RED tests replace. The adapter is registered as `heygen` in the shipped
+  registry now, but nothing calls it before slice 26.
+- Guardian Angel notes from slice 12 handled here: `isUnknownSecret` now documents the observed message it matches. The voice
+  registrar's `noResponse()` for a precondition failure and the LLM secret name carrying a truncated hash of the model key
+  (the vendor already holds the key itself; the label is not a credential) are kept and recorded above.

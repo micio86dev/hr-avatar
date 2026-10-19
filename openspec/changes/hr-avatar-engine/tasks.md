@@ -404,11 +404,11 @@ Specs: provider-adapters (HeyGen LiveAvatar adapter), avatar-configs (voice bind
 Commit: `feat(service): add LiveAvatar adapter start with context, token and cleanup`
 Specs: provider-adapters (HeyGen LiveAvatar adapter start). Reconciliation: 23.
 
-- [ ] 13.1 `LiveAvatarPayload` (pure).
+- [x] 13.1 `LiveAvatarPayload` (pure).
   - RED: `service/tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarPayloadTest.php` scenario "Field allowlist" (only allowlisted config fields reach the token body; `mode FULL`, `avatar_persona.context_id`, `avatar_persona.language`, `llm_configuration_id`, bound voice; the env widening path is gone).
   - GREEN: `service/app/AvatarProviders/LiveAvatar/LiveAvatarPayload.php`.
   - Verify: `cd service && php artisan test --filter=LiveAvatarPayloadTest`.
-- [ ] 13.2 `LiveAvatarProvider::start`.
+- [x] 13.2 `LiveAvatarProvider::start`.
   - RED: port BEAI `HeygenProviderTest` (`../api/tests/Unit/C7a/HeygenProviderTest.php`, read-only) cases to `service/tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarProviderStartTest.php`: scenario "Context then token" (`POST /v1/contexts` with `name = hra-{conversationId}-{ulid}`, `prompt`, `opening_text`; then `POST /v1/sessions/token`), "Token failure cleans up the context", unbindable voice fails before any billable call, `callbackUrl` ignored, transport `liveavatar`, `ingestion` `Poll`, provider key never leaks, golden bodies.
   - GREEN: `service/app/AvatarProviders/LiveAvatar/LiveAvatarProvider.php` (start only), `heygen` entry in `service/config/hr-avatar.php` (`credential: true`, `event_key_prefix: liveavatar`).
   - Verify: `cd service && php artisan test --filter='LiveAvatarProviderStartTest' && php artisan test --coverage --min=90`.
