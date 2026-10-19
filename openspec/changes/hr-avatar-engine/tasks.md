@@ -390,11 +390,11 @@ Specs: provider-adapters (teardown, transcript reconciliation, session status), 
 Commit: `feat(service): add LiveAvatar LLM and voice registrars over the provider resource ledger`
 Specs: provider-adapters (HeyGen LiveAvatar adapter), avatar-configs (voice binding). Design AD6.
 
-- [ ] 12.1 `LiveAvatarLlmRegistrar`.
+- [x] 12.1 `LiveAvatarLlmRegistrar`.
   - RED: port BEAI `HeygenLlmRegistrar` tests (locate: `rg -l 'HeygenLlmRegistrar' ../api/tests`, read-only): secret created once per `(account, key fingerprint)` in `provider_resources` kind `llm_secret`, configuration created/updated and its id stored in `provider_state.llm_configuration_id`, idempotent re-run, switching the provider key creates new ledger rows, account B never reuses account A's secret, `Http::fake` verb/path/body pinned.
   - GREEN: `service/app/AvatarProviders/LiveAvatar/LiveAvatarLlmRegistrar.php`.
   - Verify: `cd service && php artisan test --filter=LiveAvatarLlmRegistrar`.
-- [ ] 12.2 `LiveAvatarVoiceRegistrar`.
+- [x] 12.2 `LiveAvatarVoiceRegistrar`.
   - RED: port BEAI `HeygenVoiceRegistrar` tests (locate: `rg -l 'HeygenVoiceRegistrar' ../api/tests`, read-only): vendor secret and bound voice rows (`vendor_secret`, `voice`), lock around concurrent binds, "never trust bound language", per-account vendor keys from `CredentialResolver`, unbindable voice raises `ProviderException` before any billable call, cross-account isolation.
   - GREEN: `service/app/AvatarProviders/LiveAvatar/LiveAvatarVoiceRegistrar.php`.
   - Verify: `cd service && php artisan test --filter=LiveAvatarVoiceRegistrar && php artisan test --coverage --min=90`.

@@ -326,3 +326,59 @@ Extra contract test: `JoinMaterial::toArray()` keys must equal the members of th
 - The interface docblock says ProviderAuth comes last except that `start` is followed by its optional callback URL (the design's own signature; the review flagged the docblock, not the order). The config header comment now lists only what is still to come.
 - Mock opening text is stored in the shared cache for a day (the transcript operation has no other way to see it).
 - `LlmBindingResolver` docblock narrowed ("never throws" became "null instead of an exception, infrastructure failures still propagate") after the slice 8 review note.
+
+## Slice 12: LiveAvatar registrars (tasks 12.1-12.2) - complete (LiveAvatar lane)
+
+Commit subject: `feat(service): add LiveAvatar LLM and voice registrars over the provider resource ledger`
+
+Lane note: slices 12-14 ran in the LiveAvatar lane, in parallel with the Tavus lane (slices 10-11, own
+worktree and database `hra_test_tavus`). This lane used `DB_PORT=55442` with `hra_test`. The slice 10/11
+boxes in `tasks.md` are untouched.
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| (support) `LiveAvatarApi` | `tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarApiTest.php` | `LiveAvatarApi` not found (18 errors) | 18/18 | the one place that knows the host and the `X-API-KEY` header, and maps a transport failure / non-2xx to `ProviderException`; also reused by slices 13-14 |
+| (support) `LiveAvatarLedger` | `LiveAvatarLedgerTest.php` | `LiveAvatarLedger` not found (12 errors) | 13/13 | find / record / forget over `provider_resources`, and `secret()` (find-or-create a LiveAvatar secret, dedupe a lost race); binds the account itself with `CurrentAccount::runAs` |
+| 12.1 | `LiveAvatarLlmRegistrarTest.php` | class not found (25 errors) | 25/25 (3 failures on the first run were test defects: an unfaked PATCH path and the `Http::fake` stacking gotcha when one pattern is faked twice; fixed with sequences, no assertion weakened) | ported from BEAI `HeygenLlmRegistrarTest` and the `ProviderContractFixtureTest` secret/configuration cases |
+| 12.2 | `LiveAvatarVoiceRegistrarTest.php` | class not found (27 errors) | 28/28 | ported from BEAI `HeygenVoiceRegistrarTest`; one extra test (lock timeout path) added after the coverage run showed the branch unexercised |
+
+Triangulation: failure modes, verbs, base URL shapes and key switches are datasets; every refusal asserts the ledger and
+`provider_state` are left clean.
+
+### Work Unit Evidence (slice 12)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='LiveAvatar'`: 83 passed, 213 assertions, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --coverage --min=90`: 824 passed, 2515 assertions, total 100.0 %, exit 0 (baseline before the slice: 741 passed) |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 824 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` (pint) and `composer run analyse` (larastan level 8): passed; `OpenApiDrift` tests green (no route, `openapi.json` unchanged) |
+| Runtime harness | N/A-WIRE by task: no route or process boundary yet; every LiveAvatar request is pinned with `Http::fake` (verb, URL, header, JSON body) and `Http::preventStrayRequests()` |
+| Rollback boundary | `app/AvatarProviders/LiveAvatar/{LiveAvatarApi,LiveAvatarLedger,LiveAvatarLlmRegistrar,LiveAvatarVoiceRegistrar}.php` and `tests/Unit/AvatarProviders/LiveAvatar/*` |
+
+### Deviations and decisions (slice 12)
+
+- Authored size about 1,371 lines (about 431 app, 940 tests), above the 400 budget. Two registrars plus the two support classes
+  both need; recommend `size:exception`.
+- **Shape of the registrars (decision for slice 17):** `ensureConfiguration(AvatarConfig, LlmBinding, ProviderAuth): string` and
+  `forget(AvatarConfig, ProviderAuth): void`; `ensureVoice(accountId, ProviderAuth, engine, vendorVoiceId): string`. The binding is
+  a required argument, not resolved inside: a bound model whose key is missing must fail the sync, and treating a null binding as
+  "unbound" would delete a working configuration. The sync job decides (`llm_model_id` null -> `forget`; bound -> resolve or fail).
+- Failures raise `ProviderException` (generic message, no `previous`, status class in logs) instead of BEAI's `warning` arrays: the sync
+  job retries and records a short `sync_error`. `forget` is the only method that never throws. Preconditions that send nothing (an
+  unsupported engine, no vendor key, a bind lock that stayed busy) are raised as `ProviderException::noResponse()`, because
+  `ProviderException` has no constructor for "not attempted" and the Tavus lane may touch that file. A reason code is a candidate for
+  slice 17 / 26 if the operator needs to tell them apart; connect pre-checks credentials (reconciliation 17).
+- LLM secret natural key = first 16 hex of the sha256 of the **model key** (the task text: "per (account, key fingerprint)"); the ledger's
+  own `key_fingerprint` column is the LiveAvatar key. Vendor secret key = `{engine}:{vendorKeyFingerprint}`, voice key =
+  `{engine}:{vendorKeyFingerprint}:{vendorVoiceId}`: a voice bound through a secret that holds a key the account has since replaced
+  is never reused (LiveAvatar secrets are immutable). Consequence, not handled here: the old secret/voice stay in the provider as
+  clutter; a cleanup sweep belongs to slice 17 (sync) if wanted.
+- A PATCH of an existing configuration that answers 2xx without `data.id` keeps the stored id (the object is known to exist); BEAI
+  required the id in the answer.
+- The bind lock wait is a constructor argument (`lockWaitSeconds`, default 10), not configuration: nothing varies it in production, and
+  the tests pass 0. Locks use the application cache (`Cache::lock`), shared by api and worker.
+- The LLM configuration `display_name` is `hra-{avatarConfigId}`, the secret name `hra-llm-{fingerprint}`, the vendor secret name
+  `hra-{engine}-{vendorFingerprint}`, the voice name `hra-{engine}-{vendorVoiceId}` cut to 64 characters. Names are labels for a
+  human reading the LiveAvatar dashboard; LiveAvatar does not require them to be unique and the service never looks anything up by name.
+- The vocabulary scan caught "BEAI" in a docblock (a ported comment); reworded.
