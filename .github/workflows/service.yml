@@ -72,6 +72,7 @@ jobs:
           php-version: "8.5"
           extensions: pdo_pgsql, redis, pcntl
           coverage: pcov
+          ini-values: memory_limit=1G
           tools: composer:v2
 
       - name: Install dependencies
