@@ -735,13 +735,13 @@ Specs: provider-webhooks (inbound endpoint authentication, receipt confidentiali
   - Verify: `cd service && php artisan test --filter=LimitWebhookBodyTest`.
 - [x] 30.2 `ProviderWebhookController`.
   - RED: `service/tests/Feature/ProviderWebhookTest.php` (security row "Inbound forgery") scenarios "Valid token and matching conversation id" (`200 {"received": true}`), "Unknown token", "Token of another conversation" (payload `conversation_id` != ref), "Unsupported provider segment" (`heygen`, `mock` and unknown ids), "Responses are indistinguishable" (identical 404 body for all failures, nothing persisted), "Malformed body after auth" (422 `validation_failed`, nothing stored), "Plain token never stored"; `ProviderWebhookIdempotencyTest`: duplicate -> 200, one receipt, one transition.
-  - Note (apply): the `{provider}` segment must be a registered provider whose `ingestion()` is `Callback` (no provider name in the controller); the token and the provider are judged before the body, so a malformed body with a bad token is a 404, never a 422.
+  - Note (apply): authentication is a route middleware (`auth.provider`, `AuthenticateProviderCallback`) and validation a Form Request (`ProviderCallbackRequest`), as for the other chains. The `{provider}` segment must be a registered provider whose `ingestion()` is `Callback` (no provider name in the code); the token and the provider are judged before the body, so a malformed body with a bad token is a 404, never a 422.
   - GREEN: `service/app/Http/Controllers/V1/ProviderWebhookController.php`, route `POST /v1/webhooks/providers/{provider}/{token}` (`AssignRequestId` -> `throttle:provider-webhook` per IP -> `LimitWebhookBody`), `RateLimiter::for('provider-webhook')` 120/min, `hash_equals` on the stored hash.
   - Verify: `cd service && php artisan test --filter='ProviderWebhookTest|ProviderWebhookIdempotencyTest'`.
 - [x] 30.3 Confidentiality.
   - RED: `service/tests/Feature/ProviderWebhookConfidentialityTest.php` scenarios "Token redacted in logs" (the token never appears in log output of a failing callback; log context holds the route name, not the path), "No customer-facing exposure" (receipt payload returned by no endpoint).
   - GREEN: adjust `AssignRequestId` log context and exception reporting if needed.
-  - Note (apply): nothing in `AssignRequestId` had to change. The controller reads the token from the route instead of taking it as an argument, so it is in no stack trace; the plain token is also taken out of the stored payload, since a provider may echo the address it was given.
+  - Note (apply): nothing in `AssignRequestId` had to change. The token is read from the route, never taken as an argument, so it is in no stack trace; the plain token is also taken out of the stored payload, since a provider may echo the address it was given.
   - Verify: `cd service && php artisan test --filter=ProviderWebhookConfidentialityTest && php artisan test --coverage --min=90`.
 
 ## Slice 31: Final service hardening
@@ -918,15 +918,17 @@ Specs: client-sdk (build outputs and size budget, SDK test gates). Reconciliatio
 Commit: `docs: add README, architecture, API and SDK usage guides and record the retention open item`
 Specs: service-foundation (documentation), conversations (retention decision). Reconciliation: 36.
 
-- [ ] 40.1 README and architecture.
+- [x] 40.1 README and architecture.
   - RED: extend `service/tests/Arch/DocsBoundaryTest.php`: `README.md` and `docs/architecture.md` exist, contain the retention open item (no purge of transcripts, events, receipts or delivery payloads in this change; owner decision pending), pass the vocabulary scan.
   - GREEN: `README.md` (what it is, layout, run locally with compose ports 55432/56379/8100, test commands for service and SDK, gates, Git Flow note, retention open item, the owner ratification items R1-R9 pointer), `docs/architecture.md` (provider contract, lazy start at connect, state machine, event flow diagram, key model, provider-agnostic rule).
+  - Note (apply): also `service/README.md` and `sdk/README.md`; the retention open item, the owner ratification pointer and the "Known assumptions" list (ruling 56) are in the README. The tests also parse every relative link and heading anchor of every document.
   - Verify: `cd service && php artisan test --filter=DocsBoundaryTest`.
-- [ ] 40.2 API usage with curl and SDK examples.
+- [x] 40.2 API usage with curl and SDK examples.
   - RED: add to `DocsBoundaryTest` a check that `docs/api-usage.md` contains the curl sequence (bootstrap key, create credential, create mock config, create conversation, connect, events, end, transcript) and the webhook verification procedure (`X-HRA-Signature`, `X-HRA-Timestamp`, 300 s window, dedupe on `X-HRA-Event-Id`).
   - GREEN: `docs/api-usage.md`; run its curl sequence against the local stack (`cd service && docker compose up -d && php artisan migrate --force`) and fix any doc drift.
+  - Note (apply): the curl sequence was run against a local service (the repository's PostgreSQL and Redis, the mock provider, a webhook receiver on loopback) and the answers pasted in the guide are the real ones; the PHP and Node verification snippets were run against three real signed deliveries (valid, tampered body and expired timestamp all judged correctly). A test checks every curl call against `openapi.json`.
   - Verify: `cd service && php artisan test --filter=DocsBoundaryTest`.
-- [ ] 40.3 SDK usage.
+- [x] 40.3 SDK usage.
   - RED: `DocsBoundaryTest` requires `docs/sdk-usage.md` to document `HrAvatar.connect` options, events, controls, error codes, the `./mock` export, and the IIFE loader recipe (passing a CDN-backed `loaders.daily` / `loaders.liveavatar`, `provider_library_missing`).
   - GREEN: `docs/sdk-usage.md`.
   - Verify: `cd service && php artisan test --filter=DocsBoundaryTest && php artisan test --coverage --min=90 && cd ../sdk && bun run test:coverage`.
