@@ -28,7 +28,7 @@ class IssueKey extends Command
             return self::FAILURE;
         }
 
-        $scopes = array_map('trim', explode(',', $this->stringOption('scopes', Scope::Wildcard->value) ?? Scope::Wildcard->value));
+        $scopes = array_values(array_unique(array_map('trim', explode(',', $this->stringOption('scopes', Scope::Wildcard->value) ?? Scope::Wildcard->value))));
 
         foreach ($scopes as $scope) {
             if (Scope::tryFrom($scope) === null) {
@@ -46,7 +46,7 @@ class IssueKey extends Command
             return self::FAILURE;
         }
 
-        $this->line($issuer->issue($account, KeyType::Secret, $mode, $scopes)[1]);
+        $this->line($issuer->issue($account->id, KeyType::Secret, $mode, $scopes)[1]);
         $this->comment('The key above is shown once and cannot be recovered. Store it now.');
 
         return self::SUCCESS;

@@ -15,10 +15,243 @@
     ],
     "tags": [
         {
+            "name": "API keys"
+        },
+        {
             "name": "Health"
         }
     ],
     "paths": {
+        "/api-keys": {
+            "get": {
+                "operationId": "api-keys.index",
+                "description": "The account's keys, newest first. Neither the key nor its hash is ever returned after creation.",
+                "summary": "List API keys",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `ApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ApiKeyResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api-keys.store",
+                "description": "The response carries the full `key` once; it cannot be retrieved afterwards. A secret key\nneeds an explicit scope list, a publishable key needs 1 to 20 allowed origins. A key can only\nissue keys of its own mode and, unless it holds `*`, only scopes it holds itself.",
+                "summary": "Create an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateApiKeyRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssuedApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuedApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "description": "The caller lacks a requested scope (`insufficient_scope`) or asked for the other mode (`forbidden`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/api-keys/{apiKey}/revoke": {
+            "post": {
+                "operationId": "api-keys.revoke",
+                "description": "Takes effect at once. Revoking a key that is already revoked changes nothing and keeps the\noriginal `revoked_at`. Revoking only removes access, so unlike create and rotate it needs\nno scope or mode comparison with the caller: any key with `api_keys:manage` may revoke any\nkey of the account, itself included. The way back from a lockout is the `hra:issue-key` command.",
+                "summary": "Revoke an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true,
+                        "description": "The api key ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/api-keys/{apiKey}/rotate": {
+            "post": {
+                "operationId": "api-keys.rotate",
+                "description": "Issues a successor with the same type, mode, scopes and origins, returned once as `key`. The\nsuccessor does not inherit an expiry: it has none until one is set by creating a key instead.\nThe old key keeps working for `overlap_seconds` (default 3600, 0 revokes it immediately) and never\noutlives an expiry it already had. A revoked or expired key cannot be rotated.",
+                "summary": "Rotate an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true,
+                        "description": "The api key ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RotateApiKeyRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssuedApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuedApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "description": "The key carries a scope the caller lacks (`insufficient_scope`) or is of the other mode (`forbidden`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The key is revoked or expired (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
         "/health": {
             "get": {
                 "operationId": "health.live",
@@ -143,6 +376,293 @@
                 "description": "Browser-safe publishable key (`hra_pk_...`); it grants nothing without the client secret.",
                 "in": "header",
                 "name": "X-HRA-Publishable-Key"
+            }
+        },
+        "schemas": {
+            "ApiKeyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "key_prefix": {
+                        "type": "string"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revoked_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rotated_from_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "mode",
+                    "key_prefix",
+                    "scopes",
+                    "allowed_origins",
+                    "expires_at",
+                    "revoked_at",
+                    "last_used_at",
+                    "rotated_from_id",
+                    "created_at"
+                ],
+                "title": "ApiKeyResource"
+            },
+            "CreateApiKeyRequest": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Scope"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "type",
+                    "mode"
+                ],
+                "title": "CreateApiKeyRequest"
+            },
+            "IssuedApiKeyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "key_prefix": {
+                        "type": "string"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revoked_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rotated_from_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "key": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "mode",
+                    "key_prefix",
+                    "scopes",
+                    "allowed_origins",
+                    "expires_at",
+                    "revoked_at",
+                    "last_used_at",
+                    "rotated_from_id",
+                    "created_at",
+                    "key"
+                ],
+                "title": "IssuedApiKeyResource"
+            },
+            "KeyMode": {
+                "type": "string",
+                "description": "A label of the key space and its prefix. It never changes provider selection and never partitions data: both modes read and write the same account's resources.\n",
+                "enum": [
+                    "live",
+                    "test"
+                ],
+                "title": "KeyMode"
+            },
+            "KeyType": {
+                "type": "string",
+                "enum": [
+                    "secret",
+                    "publishable"
+                ],
+                "title": "KeyType"
+            },
+            "RotateApiKeyRequest": {
+                "type": "object",
+                "properties": {
+                    "overlap_seconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 604800
+                    }
+                },
+                "title": "RotateApiKeyRequest"
+            },
+            "Scope": {
+                "type": "string",
+                "enum": [
+                    "*",
+                    "avatar_configs:read",
+                    "avatar_configs:write",
+                    "credentials:manage",
+                    "llm_models:read",
+                    "conversations:read",
+                    "conversations:write",
+                    "webhook_endpoints:manage",
+                    "api_keys:manage"
+                ],
+                "title": "Scope"
+            }
+        },
+        "responses": {
+            "ValidationException": {
+                "description": "Validation error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Errors overview."
+                                },
+                                "errors": {
+                                    "type": "object",
+                                    "description": "A detailed description of each field that failed validation.",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "errors"
+                            ]
+                        }
+                    }
+                }
+            },
+            "ModelNotFoundException": {
+                "description": "Not found",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
             }
         }
     }

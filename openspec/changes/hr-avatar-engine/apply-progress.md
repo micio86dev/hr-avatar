@@ -151,3 +151,41 @@ Extra findings from the harness, fixed with a RED test each: inside the real `ap
 - No named `RateLimiter::for('failed-auth')`: the failed-auth budget is checked by `FailedAuthLimiter` (manual hit counting from `config('hr-avatar.rate_limits.failed_auth')`), because a named limiter nobody applies as `throttle:` middleware would be dead code.
 - Authored size about 565 lines (about 325 are tests), above the 400 budget. Cohesive security unit; recommend `size:exception`.
 - Reminder carried from slice 3: `CLAUDE.md` now lists the two credential lookups as the only unscoped reads (the Guardian Angel review required an explicit exception).
+
+## Slice 5: API key endpoints (tasks 5.1-5.4) - complete
+
+Commit subject: `feat(service): add API key management with rotation, publishable keys and cursor pagination`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| (pre) | `tests/Arch/BoundaryTest.php` | merging the SDK made the scan see 5 roots (`sdk/src` now exists): "actual size 5 matches expected size 4" | `toHaveCount(5)` | the scan really covers `sdk/src` and finds nothing |
+| 5.1 | `tests/Feature/PaginationTest.php` | `PaginationRequest` missing (all cases errored) | 22/22 | `PaginationRequest::page()` + `PagedCollection`; the cursor is validated to exactly `{created_at, id, _pointsToNextItems}` with a strict timestamp (a crafted cursor is bound into SQL, and `2026-02-30` or `yesterday` would reach Postgres) |
+| 5.2 | `tests/Unit/OriginNormalizerTest.php` | class missing (22 failures) | 31/31 | default ports are dropped (`:443`), duplicates collapse, 1-20 enforced after normalization |
+| 5.3 | `ApiKeyEndpointTest.php`, `ApiKeyScopeTest.php` | 404 on every route (38 failures) | 40/40 | `KeyIssuer::issue` now takes an account id plus origins, expiry and lineage; `IssuedApiKeyResource` is the only class that can carry `key` |
+| 5.4 | `tests/Feature/ApiKeyRotationTest.php` | 404 / test-helper fixes (21 failures) | 26/26 | rotate runs in a transaction on a `lockForUpdate` row; revoke is a conditional `UPDATE ... WHERE revoked_at IS NULL` |
+| exposure | `SecretExposureTest.php` | n/a (added after the endpoints) | passes | create, rotate, revoke, list and a refused create never leak a key or hash into a response or a log |
+
+Triangulation: scopes, modes, overlaps, malformed origins and cursors are datasets; every refusal asserts that nothing was created or changed.
+
+### Work Unit Evidence (slice 5)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ApiKey|OriginNormalizer|Pagination'` : 119 passed; full suite 430 passed, 1342 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 % total; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % |
+| Static analysis / style | `composer run lint` (pint) and `composer run analyse` (larastan level 8) passed |
+| OpenAPI | `php artisan scramble:export` regenerated `openapi.json` (4 operations); drift test green; `cd tools/spectral && bun run lint` : no results at `warn` or higher |
+| Runtime harness (H-KEY) | `php artisan serve --port=8100`, `hra:bootstrap-account`, then curl: create publishable key (origin normalized to `https://app.example.com`), list `limit=1` (`next_cursor` set), rotate with overlap 60 (`rotated_from_id` set), revoke twice (same `revoked_at`), rotate revoked 409, `?cursor=garbage` 422 `validation_failed` |
+| Rollback boundary | `ApiKeyController`, `CreateApiKeyRequest`, `RotateApiKeyRequest`, `PaginationRequest`, `ApiResource`, `ApiKeyResource`, `IssuedApiKeyResource`, `PagedCollection`, `OriginNormalizer`, the routes, the `KeyIssuer` signature change, their tests, `openapi.json` |
+
+### Deviations and decisions (slice 5)
+
+- Authored size about 1,250 lines (about 705 are tests; `openapi.json` and bookkeeping excluded), above the 400 budget. Four cohesive tasks; recommend `size:exception`.
+- Route parameter is `{apiKey}` (implicit binding, so the account scope applies before the controller), not `{id}` as the spec writes informally.
+- `mode` is required in the create body (the spec lists it without "optional"); `name` is not accepted (not in the spec body or resource).
+- Rotation never extends a key: when the old key already expires before `now + overlap`, its own expiry is kept (the spec only says "set to now + overlap"). The successor does not inherit `expires_at`.
+- Rotation and create check mode first (`403 forbidden`), then scopes (`403 insufficient_scope`); a malformed body is reported (`422`) before either.
+- Default ports are dropped when normalizing an origin (the browser never sends `:443`, so an entry with it could never match).
+- Error responses other than the ones listed above (401/404/429) are not yet documented in `openapi.json`; only the success shape, 422 and the per-operation 403/409 are. A shared Problem documentation transformer is a candidate for slice 31.
+- `SecretExposureTest` gained the management-API case instead of a new file.
+- Guardian Angel advisories: the rotate and revoke docblocks (and so the OpenAPI descriptions) now state that the successor inherits no expiry and that revoke needs no scope comparison (it only removes access); `hra:issue-key` de-duplicates `--scopes` like the endpoint (RED test first: 1 failed). Full suite after the amend: 431 passed, 1343 assertions.

@@ -15,7 +15,7 @@ it('contains no host-product vocabulary in source, config, schema, routes or the
         dirname(base_path()).'/sdk/src',
     ], 'is_dir');
 
-    expect($roots)->toHaveCount(4);
+    expect($roots)->toHaveCount(5);
 
     $findings = (new VocabularyScanner)->scan($roots);
 

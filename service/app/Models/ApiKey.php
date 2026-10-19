@@ -38,7 +38,7 @@ class ApiKey extends Model
 
     protected $fillable = [
         'name', 'type', 'mode', 'key_prefix', 'key_hash', 'scopes', 'allowed_origins',
-        'expires_at', 'revoked_at', 'last_used_at',
+        'expires_at', 'revoked_at', 'last_used_at', 'rotated_from_id',
     ];
 
     protected function casts(): array

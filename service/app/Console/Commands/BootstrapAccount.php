@@ -40,7 +40,7 @@ class BootstrapAccount extends Command
         [$account, $rawKey] = DB::transaction(function () use ($issuer, $mode, $name) {
             $account = Account::create(['name' => $name]);
 
-            return [$account, $issuer->issue($account, KeyType::Secret, $mode, [Scope::Wildcard->value])[1]];
+            return [$account, $issuer->issue($account->id, KeyType::Secret, $mode, [Scope::Wildcard->value])[1]];
         });
 
         $this->info("Account {$account->id} created.");

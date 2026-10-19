@@ -109,6 +109,14 @@ it('issues a key with the requested scopes and mode', function () {
     expect(json_decode($row->scopes))->toBe(['conversations:read', 'conversations:write'])->and($row->mode)->toBe('test');
 });
 
+it('stores a repeated scope once', function () {
+    $account = Account::factory()->create();
+
+    runCommand('hra:issue-key', ['account_id' => $account->id, '--scopes' => 'conversations:read,conversations:read']);
+
+    expect(json_decode(DB::table('api_keys')->sole()->scopes))->toBe(['conversations:read']);
+});
+
 it('refuses an unknown account and creates no key', function () {
     [$exit, $output] = runCommand('hra:issue-key', ['account_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV']);
 

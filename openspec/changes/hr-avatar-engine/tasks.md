@@ -241,19 +241,19 @@ Commit: `feat(service): add API key management with rotation, publishable keys a
 Specs: api-keys (management endpoints, rotation, origin allowlist, scopes, mode label), service-foundation (pagination).
 Reconciliation: 4, 10, 13, 32.
 
-- [ ] 5.1 `PaginationRequest` and cursor convention.
+- [x] 5.1 `PaginationRequest` and cursor convention.
   - RED: `service/tests/Feature/PaginationTest.php` scenarios "Default page" (25), "Following the cursor", "Invalid limit" (`limit=500` -> 422 `validation_failed`), malformed cursor -> 422 (Laravel would silently serve page 1), order `created_at desc, id desc`, shape `{data, next_cursor}`.
   - GREEN: `service/app/Http/Requests/PaginationRequest.php`, helper used by list controllers.
   - Verify: `cd service && php artisan test --filter=PaginationTest`.
-- [ ] 5.2 `OriginNormalizer`.
+- [x] 5.2 `OriginNormalizer`.
   - RED: `service/tests/Unit/OriginNormalizerTest.php` scenarios "Normalization" (lowercase, `scheme://host[:port]`, no path/trailing slash), "Wildcard rejected", "Plain http refused except loopback" (`http://localhost`, `http://127.0.0.1` any port), 1-20 entries.
   - GREEN: `service/app/Keys/OriginNormalizer.php`.
   - Verify: `cd service && php artisan test --filter=OriginNormalizerTest`.
-- [ ] 5.3 Create and list keys.
+- [x] 5.3 Create and list keys.
   - RED: `service/tests/Feature/ApiKeyEndpointTest.php` scenarios "Create returns the key once", "Publishable key needs origins", "Secret key must not carry origins", "Unknown scope" (422), secret key requires an explicit non-empty `scopes` list (no API default), list is paginated and never returns the raw key or hash, "Another account's key" -> 404; `service/tests/Feature/ApiKeyScopeTest.php` (security table): creating a key with a scope the caller lacks -> `403 insufficient_scope` and nothing created (a `*` caller may), other mode -> `403 forbidden`.
   - GREEN: `service/app/Http/Controllers/V1/ApiKeyController.php`, `service/app/Http/Requests/CreateApiKeyRequest.php`, `service/app/Http/Resources/ApiKeyResource.php` (explicit fields), routes under `auth.secret` + `scope:api_keys:manage`.
   - Verify: `cd service && php artisan test --filter='ApiKeyEndpointTest|ApiKeyScopeTest'`.
-- [ ] 5.4 Revoke and rotate.
+- [x] 5.4 Revoke and rotate.
   - RED: `service/tests/Feature/ApiKeyRotationTest.php` scenarios "Revoke is idempotent" (second revoke keeps the original `revoked_at`, 200), "Overlap" (default 3600 s: both keys work), "Old key dies after overlap" (`Carbon::setTestNow`), "Immediate rotation" (`overlap_seconds: 0` sets `revoked_at`), "Lineage" (`rotated_from_id`), "Rotate a revoked key" (409 `invalid_state`), `overlap_seconds` range 0..604800, scope/mode checks as in create, no self-revoke guard.
   - GREEN: rotate/revoke actions on `ApiKeyController`, `service/app/Http/Requests/RotateApiKeyRequest.php`.
   - Verify: `cd service && php artisan test --filter=ApiKeyRotationTest && php artisan test --coverage --min=90`.
