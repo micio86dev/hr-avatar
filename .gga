@@ -1,0 +1,6 @@
+PROVIDER="claude"
+FILE_PATTERNS="*.php,*.ts,*.js,*.mjs,*.sh,*.yml,*.yaml"
+EXCLUDE_PATTERNS="*Test.php,*/database/migrations/*,*/vendor/*,*.test.ts,*.spec.ts,*.d.ts,*/dist/*"
+RULES_FILE="AGENTS.md"
+STRICT_MODE="true"
+TIMEOUT="900"
