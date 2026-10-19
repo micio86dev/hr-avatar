@@ -13,8 +13,6 @@ export interface OutboxOptions {
   send: (events: ClientEvent[], options: { keepalive: boolean }) => Promise<void>
   /** Called when forwarding stops or a batch is dropped. Never ends the conversation. */
   onError: (error: HrAvatarError) => void
-  /** False turns the outbox into a no-op (`forwardTranscript: false`). Default true. */
-  enabled?: boolean
   /** Where `pagehide` is heard. Defaults to `window` when there is one. */
   target?: EventTarget
 }
@@ -45,16 +43,14 @@ export class Outbox {
   private stopped = false
   /** Serialises flushes: two runs over the same head event would deliver it twice. */
   private chain: Promise<void> = Promise.resolve()
-  private readonly enabled: boolean
   private readonly target: EventTarget | undefined
   private readonly onPageHide = () => {
     void this.run({ final: true, keepalive: true })
   }
 
   constructor(private readonly options: OutboxOptions) {
-    this.enabled = options.enabled ?? true
     this.target = options.target ?? (typeof window === 'undefined' ? undefined : window)
-    if (this.enabled) this.target?.addEventListener('pagehide', this.onPageHide)
+    this.target?.addEventListener('pagehide', this.onPageHide)
   }
 
   get size(): number {
@@ -62,7 +58,7 @@ export class Outbox {
   }
 
   enqueue(capture: Capture): void {
-    if (!this.enabled || this.stopped) return
+    if (this.stopped) return
     this.queue.push({
       ...capture,
       idempotency_key: crypto.randomUUID(),

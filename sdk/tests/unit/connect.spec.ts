@@ -184,7 +184,7 @@ describe('transcript forwarding option', () => {
     expect(service.events().map((e) => e.type)).toEqual(['lifecycle', 'utterance'])
   })
 
-  it('posts nothing to events when forwardTranscript is false', async () => {
+  it('still posts the lifecycle live event, but no utterance, when forwardTranscript is false', async () => {
     const service = fakeService()
     const mock = createMockTransport({ script: { avatarLines: ['Hello'] } })
 
@@ -193,7 +193,7 @@ describe('transcript forwarding option', () => {
     )
     await vi.advanceTimersByTimeAsync(60_000)
 
-    expect(service.called('events')).toHaveLength(0)
+    expect(service.events()).toMatchObject([{ type: 'lifecycle', name: 'live' }])
   })
 })
 

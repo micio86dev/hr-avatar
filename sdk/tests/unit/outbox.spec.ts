@@ -26,11 +26,11 @@ const line = (text: string, role: 'user' | 'avatar' = 'user'): Capture => ({
   text,
 })
 
-function setup(overrides: { enabled?: boolean } = {}) {
+function setup() {
   const send = vi.fn<Send>().mockResolvedValue(undefined)
   const onError = vi.fn<(error: HrAvatarError) => void>()
   const target = new EventTarget()
-  const outbox = new Outbox({ send, onError, target, ...overrides })
+  const outbox = new Outbox({ send, onError, target })
   return { send, onError, target, outbox }
 }
 
@@ -298,21 +298,6 @@ describe('stop conditions', () => {
     expect(onError).toHaveBeenCalledTimes(1)
     expect(onError.mock.calls[0]?.[0]).toMatchObject({ code: 'forwarding_failed' })
     expect(outbox.size).toBe(0)
-  })
-})
-
-describe('opt-out', () => {
-  it('queues and posts nothing when forwarding is disabled', async () => {
-    const { outbox, send, target } = setup({ enabled: false })
-
-    outbox.enqueue(line('a'))
-    outbox.enqueue({ type: 'lifecycle', name: 'live' })
-    target.dispatchEvent(new Event('pagehide'))
-    await vi.advanceTimersByTimeAsync(60_000)
-    await outbox.flush()
-
-    expect(outbox.size).toBe(0)
-    expect(send).not.toHaveBeenCalled()
   })
 })
 

@@ -179,7 +179,10 @@ failure or HTTP 5xx/429 with exponential backoff (1 s base, doubling, 30 s cap) 
 idempotency keys. HTTP 409 `conversation_closed` and 401 MUST stop forwarding and emit an `error`
 event without ending the conversation by themselves. A forwarding failure MUST never end or break
 the live conversation. On `end()` and on `pagehide` the outbox MUST attempt a final flush (using
-`fetch` with `keepalive` on `pagehide`). Interim (non-final) utterances MUST NOT be forwarded.
+`fetch` with `keepalive` on `pagehide`). Interim (non-final) utterances MUST NOT be forwarded. `forwardTranscript: false` suppresses
+**utterance** forwarding only: lifecycle events (`live`, `error`) are always forwarded, because for
+`mock` and `heygen` (no provider callback) the client `live` event is the only `connecting -> live`
+transition.
 
 #### Scenario: Batching by count
 
@@ -214,8 +217,8 @@ the live conversation. On `end()` and on `pagehide` the outbox MUST attempt a fi
 #### Scenario: Opt-out
 
 - GIVEN `forwardTranscript: false`
-- WHEN final utterances occur
-- THEN no request to `.../events` is made
+- WHEN the conversation becomes live and final utterances occur
+- THEN the lifecycle `live` event is still posted to `.../events` and no `utterance` event is ever posted
 
 #### Scenario: Final flush on end
 

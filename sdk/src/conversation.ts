@@ -30,6 +30,7 @@ export interface ConversationDeps {
   id: string
   api: Api
   transport: Transport
+  /** False suppresses utterance forwarding only; lifecycle events are always sent. */
   forwardTranscript: boolean
   completionPhrases?: string[]
   start: TransportStartOptions
@@ -53,6 +54,7 @@ export class Conversation {
   readonly #transport: Transport
   readonly #video: HTMLVideoElement
   readonly #outbox: Outbox
+  readonly #forwardTranscript: boolean
   readonly #handlers: { [K in keyof EventMap]: Set<Handler<K>> } = {
     state: new Set(),
     transcript: new Set(),
@@ -78,6 +80,7 @@ export class Conversation {
     this.#api = deps.api
     this.#transport = deps.transport
     this.#video = deps.start.mount
+    this.#forwardTranscript = deps.forwardTranscript
     this.#watchCompletion = watchCompletion({
       phrases: deps.completionPhrases,
       whenAvatarSilent: (ms) => this.whenAvatarSilent(ms),
@@ -86,7 +89,6 @@ export class Conversation {
     this.#outbox = new Outbox({
       send: (events, options) => deps.api.postEvents(deps.id, events, options),
       onError: (error) => this.#emit('error', error),
-      enabled: deps.forwardTranscript,
     })
   }
 
@@ -242,7 +244,7 @@ export class Conversation {
     const entry = { ...line, occurredAt }
     this.#emit('transcript', entry)
     this.#watchCompletion(entry)
-    if (line.final) {
+    if (line.final && this.#forwardTranscript) {
       this.#outbox.enqueue({
         type: 'utterance',
         role: line.role,

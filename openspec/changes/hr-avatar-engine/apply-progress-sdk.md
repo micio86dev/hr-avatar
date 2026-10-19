@@ -51,8 +51,8 @@ is snake_case. A redirect is refused (`redirect: 'error'`) so the auth headers n
 | Rollback boundary | `src/outbox.ts`, `src/completion.ts` and their two specs |
 
 Decisions:
-- `forwardTranscript: false` disables the whole outbox, including the lifecycle `live` event, because
-  the spec scenario "Opt-out" requires that no request reaches `.../events`.
+- SUPERSEDED by reconciliation item 39 (see "Follow-up: lifecycle always forwarded"): originally
+  `forwardTranscript: false` disabled the whole outbox, including the lifecycle `live` event.
 - A batch refused with a non-retryable status other than 401 or 409 `conversation_closed` (for
   example the atomic 422) is dropped with an `error` event and forwarding continues; holding it
   would block every later event.
@@ -253,3 +253,15 @@ Decisions and deviations:
 - Playwright browsers were already installed (chromium 1228, webkit 2311, ffmpeg 1011): no download.
 - `tsup.config.ts` imports `peerDependencies` from `package.json` (`resolveJsonModule`), so no
   provider package name is hardcoded in the build config.
+
+## Follow-up: lifecycle always forwarded (reconciliation item 39)
+
+- `forwardTranscript: false` now suppresses utterance forwarding only; the lifecycle `live` event is
+  always posted. The gate moved from the outbox (`enabled` option removed, with its "opt-out" test) to
+  `Conversation.#heard`, which skips `enqueue` for utterances.
+- Spec scenario "Opt-out" and the requirement text in `specs/client-sdk/spec.md` updated to match.
+- RED: `connect.spec.ts` "still posts the lifecycle live event, but no utterance, when
+  forwardTranscript is false" failed with `[]` received instead of `[{lifecycle, live}]`.
+- Evidence (all exit 0): `bunx tsc --noEmit`; `bun run test:coverage` (outbox 100/97.77/100/100);
+  `bun run build`; `bun run size` (index 5511 B, IIFE 5880 B gzip); `bunx playwright test`
+  (chromium + webkit, 2 passed).
