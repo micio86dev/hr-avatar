@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { resolveMount } from '../../src/media'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { releaseMedia, resolveMount } from '../../src/media'
 
 describe('resolveMount', () => {
   it('uses a <video> mount as-is', () => {
@@ -31,5 +31,38 @@ describe('resolveMount', () => {
     const container = document.createElement('div')
 
     expect(resolveMount(container)).not.toBe(resolveMount(container))
+  })
+})
+
+describe('releaseMedia', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('stops every track of the stream and detaches it', () => {
+    const stop = vi.fn()
+    class FakeStream {
+      getTracks = () => [{ stop }, { stop }]
+    }
+    vi.stubGlobal('MediaStream', FakeStream)
+    const video = document.createElement('video')
+    video.srcObject = new FakeStream() as unknown as MediaStream
+
+    releaseMedia(video)
+
+    expect(stop).toHaveBeenCalledTimes(2)
+    expect(video.srcObject).toBeNull()
+  })
+
+  it('leaves an element without a stream alone', () => {
+    const video = document.createElement('video')
+
+    expect(() => releaseMedia(video)).not.toThrow()
+    expect(video.srcObject).toBeNull()
+  })
+
+  it('copes with a browser that has no MediaStream', () => {
+    vi.stubGlobal('MediaStream', undefined)
+    const video = document.createElement('video')
+
+    expect(() => releaseMedia(video)).not.toThrow()
   })
 })

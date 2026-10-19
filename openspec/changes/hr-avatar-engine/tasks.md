@@ -803,19 +803,19 @@ Specs: client-sdk (provider transports and peer dependencies, exported mock prov
 Commit: `feat(sdk): add connect, the conversation object, controls, events and ended reasons`
 Specs: client-sdk (connect, events, controls). Reconciliation: 34. Design SDK architecture.
 
-- [ ] 36.1 `connect`.
+- [x] 36.1 `connect`.
   - RED: `sdk/tests/unit/connect.spec.ts` scenarios "Happy path on the mock transport" (`POST connect` then transport start, state `connecting`), "Id derived from the token" (decode `sub` without verification), "Malformed secret" (`invalid_client_secret`, no request sent), "Service error is surfaced", "Secrets stay private".
   - GREEN: `sdk/src/connect.ts`, types and exports in `sdk/src/index.ts` (`HrAvatar`, `HrAvatarError`, `createMockTransport`).
   - Verify: `cd sdk && bun run test -- connect`.
-- [ ] 36.2 Events and state.
+- [x] 36.2 Events and state.
   - RED: `sdk/tests/unit/conversation-events.spec.ts` scenarios "State sequence" (`connecting` -> `live` -> `ended`; lifecycle `live` sent once when the transport reports ready), "Unsubscribe", "Ended once", interim transcripts delivered with `final: false` and never forwarded.
   - GREEN: `sdk/src/conversation.ts` (emitter).
   - Verify: `cd sdk && bun run test -- conversation-events`.
-- [ ] 36.3 Controls.
+- [x] 36.3 Controls.
   - RED: `sdk/tests/unit/conversation-controls.spec.ts` scenarios "Toggle returns new state" (synchronous boolean), "Say", "Silence already satisfied", "Silence waits", "Ended while waiting", "Control after end" (`conversation_ended`), "End is idempotent and calls the service", "Unsupported control" (`unsupported_operation`), `sendContext(string|object)`.
   - GREEN: controls in `sdk/src/conversation.ts`.
   - Verify: `cd sdk && bun run test -- conversation-controls`.
-- [ ] 36.4 Ended reasons.
+- [x] 36.4 Ended reasons.
   - RED: `sdk/tests/unit/ended-reasons.spec.ts`: `end()` -> `user`; completion phrase -> `completion_phrase`; fatal transport error -> `error`; remote close -> flush outbox, call client end (idempotent 200), then `provider` when the resource's `ended_reason` is `provider` or was set by this call and `server` when it was already `api`, `max_duration` or `expired`.
   - GREEN: remote-close handling in `sdk/src/conversation.ts`.
   - Verify: `cd sdk && bun run test -- ended-reasons && bun run test:coverage`.

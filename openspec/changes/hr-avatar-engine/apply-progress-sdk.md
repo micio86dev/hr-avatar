@@ -86,4 +86,47 @@ Decisions and open points:
   LiveAvatar transports land in slices 37 and 38. Those slices replace that rejection with their
   builders and update the "imports the installed library by default" test.
 - The mock emits scripted lines in a `setTimeout(0)` after `start()` resolves, so a host that
-  subscribes right after `await connect()` sees them.
+  subscribes right after `await connect()` sees them (slice 36 moved `ready` into that same task).
+- gga rejected the first commit attempt twice (a `switch` on transport names and the peer package
+  names inside the registry). The registry is now a name -> `Adapter` table; each adapter file
+  (`daily.ts`, `liveavatar.ts`, `mock.ts`) owns its peer package and loader, and the registry only
+  looks an adapter up by name with an own-property check (`constructor`/`__proto__` are not
+  transports).
+
+## Slice 36: connect and conversation
+
+| Task | RED (observed) | GREEN | REFACTOR |
+|------|----------------|-------|----------|
+| 36.1 `connect` | `connect.spec.ts`: 20 of 20 failed (`HrAvatar` undefined) | `src/connect.ts`, minimal `src/conversation.ts`, `src/index.ts`; 19 of 20 passed, the 20th ("forwards by default") stayed red until 36.2 | `Conversation.open` owns start + cleanup |
+| 36.2 events and state | `conversation-events.spec.ts`: 8 of 8 failed (`on` is not a function; utterances not forwarded) | emitter, `state` replay, transcript, forwarding, outbox errors as `error` events, `reportError` for throwing host handlers; 8 passed (one test fixed: jsdom has no `reportError`, it is stubbed) | none |
+| 36.3 controls | `conversation-controls.spec.ts`: 17 of 19 failed | controls, silence waiters, `releaseMedia` (with 3 `media.spec.ts` cases); 19 passed, later 20 with a non-`HrAvatarError` failure case added for coverage | none |
+| 36.4 ended reasons | `ended-reasons.spec.ts`: 12 of 15 failed | completion wiring, remote close, fatal failure; 15 passed | none |
+| public API | `public-api.spec.ts` written after the code as a contract pin (type-level + exported values), not a RED-first test | passes | none |
+
+### Work Unit Evidence (slice 36)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd sdk && bun run test -- connect conversation ended-reasons` -> exit 0; full suite 15 files, 184 tests |
+| Runtime harness | `bun run build`, then `bun -e` import of `dist/index.js` + `dist/mock.js` and `node -e require` of the `.cjs` files: both export `HrAvatar, HrAvatarError, createMockTransport`. The browser path is covered by the slice 39 smoke |
+| Coverage | `bun run test:coverage` exit 0: all files 100 stmts / 98.51 branches / 100 funcs / 100 lines |
+| Rollback boundary | `src/connect.ts`, `src/conversation.ts`, `src/index.ts` exports, `releaseMedia`, the mock's deferred `ready`, and their specs |
+
+Decisions and deviations:
+- `on('state', handler)` calls the handler at once with the current state. `connect` resolves while
+  the conversation is still `connecting` (the transport's `start()` resolves on join; `ready` is the
+  next task), so without the replay the spec scenario "state emits connecting, live, ended" could
+  not be observed by a host.
+- The mock now goes live in the task after `start()` resolves (was synchronous in slice 35) for the
+  same reason; `mock-transport.spec.ts` was updated first and observed failing.
+- Fatal transport failure ends in state `error` (terminal), emits `error`, then `ended` with reason
+  `error`. Every other ending lands in `ended`.
+- Beyond the spec: when the service already connected but the SDK cannot continue (library missing,
+  transport fails to start) the SDK calls the client `end` route best-effort, so a provider session
+  is not left running until `max_duration`. The original error is still the one that rejects.
+- A failed `end` request (service unreachable) never blocks the local end: the transport is stopped,
+  `error` is emitted with the cause and `ended` still fires. For a remote close the reason then
+  falls back to `provider`.
+- `JoinMaterial` key names are an assumption (snake_case); the service slice must match them.
+- A throwing `transcript`/`state`/`ended` host handler is reported with `reportError` and does not
+  stop the other handlers or the SDK.

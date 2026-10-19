@@ -20,11 +20,13 @@ function events() {
   return { handlers, log }
 }
 
-async function started(script?: { avatarLines?: string[] }) {
+/** Resolves `start()` and, unless told otherwise, lets the mock go live (its next task). */
+async function started(script?: { avatarLines?: string[] }, settle = true) {
   const mock = createMockTransport(script ? { script } : undefined)
   const { handlers, log } = events()
   const mount = document.createElement('video')
   await mock.start({ join, mount }, handlers)
+  if (settle) await vi.advanceTimersByTimeAsync(0)
   return { mock, handlers, log, mount }
 }
 
@@ -38,8 +40,11 @@ afterEach(() => {
 })
 
 describe('joining', () => {
-  it('reports ready as it connects', async () => {
-    const { handlers } = await started()
+  it('goes live right after start() resolves, so the host can subscribe first', async () => {
+    const { handlers } = await started(undefined, false)
+    expect(handlers.ready).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(handlers.ready).toHaveBeenCalledTimes(1)
   })
@@ -67,7 +72,7 @@ describe('joining', () => {
 
 describe('scripted avatar lines', () => {
   it('emits each line as a final avatar transcript once live, in order, after start resolves', async () => {
-    const { handlers, log } = await started({ avatarLines: ['Hello', 'How are you?'] })
+    const { handlers, log } = await started({ avatarLines: ['Hello', 'How are you?'] }, false)
     expect(handlers.transcript).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(0)
@@ -92,12 +97,13 @@ describe('scripted avatar lines', () => {
     expect(handlers.speaking).not.toHaveBeenCalled()
   })
 
-  it('does not emit lines after stop()', async () => {
-    const { mock, handlers } = await started({ avatarLines: ['Hello'] })
+  it('does not go live or emit lines after stop()', async () => {
+    const { mock, handlers } = await started({ avatarLines: ['Hello'] }, false)
 
     await mock.stop()
     await vi.advanceTimersByTimeAsync(10_000)
 
+    expect(handlers.ready).not.toHaveBeenCalled()
     expect(handlers.transcript).not.toHaveBeenCalled()
   })
 })
@@ -197,6 +203,7 @@ describe('through loadTransport', () => {
     const { handlers } = events()
 
     await transport.start({ join, mount: document.createElement('video') }, handlers)
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(handlers.ready).toHaveBeenCalledTimes(1)
   })

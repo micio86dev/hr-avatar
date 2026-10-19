@@ -8,3 +8,12 @@ export function resolveMount(mount: HTMLElement): HTMLVideoElement {
   mount.appendChild(video)
   return video
 }
+
+/** Stops the tracks the avatar was rendered from and detaches them from the element. */
+export function releaseMedia(video: HTMLVideoElement): void {
+  const stream = video.srcObject
+  if (typeof MediaStream !== 'undefined' && stream instanceof MediaStream) {
+    for (const track of stream.getTracks()) track.stop()
+  }
+  video.srcObject = null
+}

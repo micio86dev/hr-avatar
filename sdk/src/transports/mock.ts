@@ -54,9 +54,10 @@ export function createMockTransport(options: { script?: MockScript } = {}): Tran
 
     async start(_options: TransportStartOptions, handlers: TransportEvents): Promise<void> {
       events = handlers
-      handlers.ready()
-      // After start() resolves, so the host has had time to subscribe to the conversation.
+      // Live and scripted lines come after start() resolves, so the host has had time to subscribe
+      // to the conversation it just received.
       scriptTimer = setTimeout(() => {
+        live()?.ready()
         for (const text of options.script?.avatarLines ?? []) {
           live()?.speaking(true)
           emitLine('avatar', text, true)
