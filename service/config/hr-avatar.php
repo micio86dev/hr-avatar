@@ -1,6 +1,7 @@
 <?php
 
 use App\AvatarProviders\Mock\MockProvider;
+use App\AvatarProviders\Tavus\TavusProvider;
 
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
@@ -26,6 +27,17 @@ return [
     */
     'providers' => [
         'mock' => ['adapter' => MockProvider::class, 'credential' => false],
+        'tavus' => ['adapter' => TavusProvider::class, 'credential' => true],
+    ],
+
+    /*
+    | Tavus refuses a new conversation while the account is at its concurrent limit, and frees the slot
+    | of one that just ended a few seconds late: a create is retried this many times, this many
+    | milliseconds apart. 0 retries disables retrying.
+    */
+    'tavus' => [
+        'concurrency_retries' => 3,
+        'concurrency_backoff_ms' => 2000,
     ],
 
     /*
