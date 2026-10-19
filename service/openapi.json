@@ -24,6 +24,9 @@
             "name": "Catalogue"
         },
         {
+            "name": "Conversations"
+        },
+        {
             "name": "Credentials"
         },
         {
@@ -264,7 +267,7 @@
         "/avatar-configs": {
             "get": {
                 "operationId": "avatar-configs.index",
-                "description": "The account's configs, newest first. `external_ref` keeps only those carrying exactly that\nreference (case-sensitive, no wildcards); it is applied before the page is cut, so a host that\nshares one account across its own tenants never loses a config to the page size.",
+                "description": "The account's configs, newest first. `external_ref` keeps only those carrying exactly that\nreference (case-sensitive, no wildcards); it is applied before the page is cut, so a host that\nshares one account across its own customers never loses a config to the page size.",
                 "summary": "List avatar configs",
                 "tags": [
                     "Avatar configs"
@@ -469,7 +472,7 @@
             },
             "delete": {
                 "operationId": "avatar-configs.destroy",
-                "description": "A soft delete: the config leaves the list and cannot start new conversations, and the\nconversations that used it keep their reference to it.",
+                "description": "A soft delete: the config leaves the list and cannot start new conversations, and the\nconversations that used it keep their reference to it. While a conversation that has not\nfinished (`created`, `connecting` or `live`) uses the config, it is refused with 409 `config_in_use`.",
                 "summary": "Delete an avatar config",
                 "tags": [
                     "Avatar configs"
@@ -491,6 +494,16 @@
                     },
                     "404": {
                         "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "409": {
+                        "description": "A conversation that has not finished uses the config (`config_in_use`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
                     }
                 },
                 "security": [
@@ -852,6 +865,107 @@
                                 }
                             }
                         }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations": {
+            "post": {
+                "operationId": "conversations.store",
+                "description": "Registers a conversation on one of the account's avatar configs and answers 201 with it, in\nstatus `created`, plus a `client_secret` and its expiry. The secret is shown once: the host hands it\nto the browser, which presents it with a publishable key to connect. Nothing is asked of the provider\nor of any credential here; that happens when the browser connects. `external_ref` and `metadata` are\nthe host's own and come back exactly as sent. A config whose provider needs synchronizing must be\n`synced` first (409 `config_not_synced`); a config of another account, or a deleted one, is a 404.",
+                "summary": "Create a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateConversationRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CreatedConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreatedConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "description": "The avatar config does not exist, belongs to another account or was deleted (`not_found`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The avatar config is still synchronizing, or its last synchronization failed (`config_not_synced`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations/{conversation}": {
+            "get": {
+                "operationId": "conversations.show",
+                "description": "One conversation of the account. Neither the client secret nor anything of the provider's (its\nreferences, the callback token) is ever returned. A conversation of another account is a 404.",
+                "summary": "Show a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
                     }
                 },
                 "security": [
@@ -1471,6 +1585,101 @@
                 ],
                 "title": "AvatarConfigResource"
             },
+            "ConversationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ConversationStatus"
+                    },
+                    "avatar_config_id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "max_duration_seconds": {
+                        "type": "integer"
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "ended_reason": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/EndedReason"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "transcript_status": {
+                        "$ref": "#/components/schemas/TranscriptStatus"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "connecting_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "live_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ended_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "avatar_config_id",
+                    "provider",
+                    "language",
+                    "max_duration_seconds",
+                    "external_ref",
+                    "metadata",
+                    "ended_reason",
+                    "transcript_status",
+                    "created_at",
+                    "connecting_at",
+                    "live_at",
+                    "ended_at"
+                ],
+                "title": "ConversationResource"
+            },
+            "ConversationStatus": {
+                "type": "string",
+                "description": "Where a conversation is: `created -> connecting -> live -> ended | failed`. The transitions themselves are the lifecycle's business; this only names the states.\n",
+                "enum": [
+                    "created",
+                    "connecting",
+                    "live",
+                    "ended",
+                    "failed"
+                ],
+                "title": "ConversationStatus"
+            },
             "CreateApiKeyRequest": {
                 "type": "object",
                 "properties": {
@@ -1581,6 +1790,155 @@
                 ],
                 "title": "CreateAvatarConfigRequest"
             },
+            "CreateConversationRequest": {
+                "type": "object",
+                "description": "The body of a conversation create. `external_ref` and `metadata` are the host's own and are carried untouched.",
+                "properties": {
+                    "avatar_config_id": {
+                        "type": "string",
+                        "description": "The avatar config to talk with: one of the account's, synchronized if its provider needs it."
+                    },
+                    "system_prompt": {
+                        "type": "string",
+                        "description": "The instructions the avatar follows. Kept as sent, whitespace included.",
+                        "maxLength": 32000
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "The two-letter ISO 639-1 code of the conversation's language, in lower case.",
+                        "pattern": "^[a-z]{2}$"
+                    },
+                    "opening_text": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "What the avatar says first, if anything.",
+                        "maxLength": 4000
+                    },
+                    "max_duration_seconds": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "How long the conversation may last, 30 seconds up to the platform ceiling. Defaults to 1800 (or the ceiling, if lower).",
+                        "minimum": 30,
+                        "maximum": 3600
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The host's own reference, returned as sent and never interpreted.",
+                        "maxLength": 255
+                    },
+                    "metadata": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The host's own JSON object, up to 8 KB encoded, returned exactly as sent and never interpreted."
+                    }
+                },
+                "required": [
+                    "avatar_config_id",
+                    "system_prompt",
+                    "language"
+                ],
+                "title": "CreateConversationRequest"
+            },
+            "CreatedConversationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ConversationStatus"
+                    },
+                    "avatar_config_id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "max_duration_seconds": {
+                        "type": "integer"
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "ended_reason": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/EndedReason"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "transcript_status": {
+                        "$ref": "#/components/schemas/TranscriptStatus"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "connecting_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "live_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ended_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "client_secret": {
+                        "type": "string"
+                    },
+                    "client_secret_expires_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "avatar_config_id",
+                    "provider",
+                    "language",
+                    "max_duration_seconds",
+                    "external_ref",
+                    "metadata",
+                    "ended_reason",
+                    "transcript_status",
+                    "created_at",
+                    "connecting_at",
+                    "live_at",
+                    "ended_at",
+                    "client_secret",
+                    "client_secret_expires_at"
+                ],
+                "title": "CreatedConversationResource"
+            },
             "CredentialSource": {
                 "type": "string",
                 "description": "Whose key a provider call would be made with, as the credential list reports it.\n",
@@ -1590,6 +1948,20 @@
                     "none"
                 ],
                 "title": "CredentialSource"
+            },
+            "EndedReason": {
+                "type": "string",
+                "description": "Why a conversation reached a terminal state. The first writer wins and the value never changes.\n",
+                "enum": [
+                    "client",
+                    "api",
+                    "max_duration",
+                    "provider",
+                    "expired",
+                    "provider_error",
+                    "provider_capacity"
+                ],
+                "title": "EndedReason"
             },
             "IssuedApiKeyResource": {
                 "type": "object",
@@ -1846,6 +2218,16 @@
                     "failed"
                 ],
                 "title": "SyncStatus"
+            },
+            "TranscriptStatus": {
+                "type": "string",
+                "description": "`pending` until the transcript has been reconciled with the provider's, then `ready`, or `partial` when the provider's side never became available.\n",
+                "enum": [
+                    "pending",
+                    "ready",
+                    "partial"
+                ],
+                "title": "TranscriptStatus"
             },
             "UpdateAvatarConfigRequest": {
                 "type": "object",

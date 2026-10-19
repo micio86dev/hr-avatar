@@ -515,19 +515,19 @@ Specs: avatar-configs (voice preview). Reconciliation: 31.
 Commit: `feat(service): add conversations and events schema with create and read endpoints`
 Specs: conversations (create, read, config in-use). Reconciliation: 1, 15, 18.
 
-- [ ] 20.1 Schema and enums.
+- [x] 20.1 Schema and enums.
   - RED: `service/tests/Feature/ConversationSchemaTest.php` (rewrite of BEAI `MigrationSchemaTest`): `conversations` columns, unique `callback_token_hash`, the three indexes, CHECKs for status/ended_reason/transcript_status, `metadata` is `json` not `jsonb`, `conversation_events` uniques `(conversation_id, idempotency_key)` and `(conversation_id, sequence)`, FK cascade, both models scoped by account.
   - GREEN: migrations, `service/app/Models/{Conversation,ConversationEvent}.php`, `service/app/Conversations/{ConversationStatus,EndedReason,TranscriptStatus}.php`, factories.
   - Verify: `cd service && php artisan test --filter=ConversationSchemaTest`.
-- [ ] 20.2 `POST /v1/conversations`.
+- [x] 20.2 `POST /v1/conversations`.
   - RED: `service/tests/Feature/ConversationCreateTest.php` scenarios "Happy path" (201, `conv_` id, status `created`, `client_secret`, `client_secret_expires_at`, no provider call and no credential call under `Http::preventStrayRequests()`), "Default duration" (1800), "Above ceiling", "Oversize metadata" (> 8 KB), "Config not synced" (409 `config_not_synced`), "Config of another account" (404), "Opaque host fields round-trip" (`{}` stays an object, key order preserved, `external_ref` untouched); `language` `^[a-z]{2}$`, `system_prompt` 1-32000; `account_id` in body ignored.
   - GREEN: `service/app/Http/Controllers/V1/ConversationController.php` (store), `service/app/Http/Requests/CreateConversationRequest.php` (raw body `json_decode(..., false)` for `metadata`, AD13), `service/app/Http/Resources/ConversationResource.php`, route `conversations:write`.
   - Verify: `cd service && php artisan test --filter=ConversationCreateTest`.
-- [ ] 20.3 `GET /v1/conversations/{id}`.
+- [x] 20.3 `GET /v1/conversations/{id}`.
   - RED: `ConversationShowTest` scenarios "Read own", "No internals" (no provider refs, callback token or hash, `client_secret`), cross-account 404 (per-endpoint isolation scenario), scope `conversations:read`.
   - GREEN: show action.
   - Verify: `cd service && php artisan test --filter=ConversationShowTest`.
-- [ ] 20.4 Config in-use guard (deferred from slice 16).
+- [x] 20.4 Config in-use guard (deferred from slice 16).
   - RED: `AvatarConfigInUseTest` scenarios "Delete in use" (409 `config_in_use` while a conversation is `created`/`connecting`/`live`), a terminal conversation does not block, "Deleted config cannot start conversations" (404 on create), existing conversations keep `avatar_config_id`.
   - GREEN: guard in `AvatarConfigController::destroy`.
   - Verify: `cd service && php artisan test --filter='AvatarConfigInUseTest|AvatarConfigEndpointTest' && php artisan test --coverage --min=90`.

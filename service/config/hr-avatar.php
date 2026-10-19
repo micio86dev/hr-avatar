@@ -9,7 +9,7 @@ use App\Voices\ElevenLabsVoices;
 
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
- * A key is added by the slice that reads it. Still to come: the release delay and the duration ceiling.
+ * A key is added by the slice that reads it. Still to come: the release delay.
  */
 return [
 
@@ -100,6 +100,9 @@ return [
         'cartesia' => env('CARTESIA_API_KEY'),
         'elevenlabs' => env('ELEVENLABS_API_KEY'),
     ],
+
+    /* The longest a conversation may be asked to last, in seconds; a create asking for more is refused. */
+    'max_duration_ceiling' => (int) env('HRA_MAX_DURATION_CEILING', 3600),
 
     /*
     | Requests per minute. Every key has a budget of its own; failed authentications are counted per address.

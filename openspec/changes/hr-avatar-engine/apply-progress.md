@@ -793,3 +793,63 @@ Mutation check (not committed): removing the `WHERE sync_revision = ?` clause fr
   it; left open.
 - The preview budget default (10 a minute per key) follows BEAI's per-user preview limit; the env variable is `HRA_RATE_LIMIT_PREVIEW`.
 - Authored size about 330 lines (about 215 tests): within the budget.
+
+Unit 0 commit: `37d4e5f`.
+
+## Slice 20: Conversations (model, create, show, config in-use guard) (tasks 20.1-20.4) - complete
+
+Commit subject: `feat(service): add conversations and events schema with create and read endpoints`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 20.1 | `tests/Feature/ConversationSchemaTest.php` (32 tests) | 2 failed and 23 more would not have passed: `conversations` / `conversation_events` tables, enums, models and factories missing (the 7 that "passed" are refusal checks that pass while the table is absent) | 32/32 | columns in design order, `metadata` is `json`, unique `callback_token_hash` (any number of nulls), the three indexes, CHECKs for status / ended_reason / transcript_status / metadata object / event source, type, role, name, data object, both event uniques, FK cascade, restrict on the config, scope by account, typed reads, hidden internals, mass assignment |
+| 20.2 | `tests/Feature/ConversationCreateTest.php` (53 cases) | 65 of 74 failed across 20.2-20.4 (404 on the route, 204 where 409 was due) | green | scenarios: happy path, default duration, above ceiling, oversize metadata, config not synced, config of another account, opaque round-trip; plus client secret claims and expiry, never stored or logged, null as not given, whitespace kept, `account_id`/state in the body ignored, scope and key |
+| 20.3 | `tests/Feature/ConversationShowTest.php` (7 cases) | same run | green | members, finished conversation, no internals (refs, callback hash, prompt, secret), cross-account 404, deleted config still readable, scope |
+| 20.4 | `tests/Feature/AvatarConfigInUseTest.php` (11 cases) | same run | green | 409 `config_in_use` for created/connecting/live, ended/failed do not block, other configs do not block, 404 for a foreign config, deleted config 404 on create, existing conversations keep the reference |
+
+Test defects fixed on the way (no assertion weakened): the first version expected `"en\n"` to be refused, but Laravel's `TrimStrings`
+turns it into `en`, which is valid (case replaced by `"e n"`); Pest spreads an array dataset entry into arguments, so the list
+`[60]` ran as the integer 60 (wrapped as `[[60]]`); a violation aborts the surrounding Postgres transaction, so the schema test's
+repeated refusals run in a savepoint (`refused()`), as in slice 7.
+
+### Work Unit Evidence (slice 20)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ConversationCreateTest\|ConversationShowTest\|AvatarConfigInUseTest\|ConversationSchemaTest'`: 107 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1738 passed, 4583 assertions, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `DB_PORT=55442 php artisan scramble:export` (the dev database needs the new migrations, else a model-schema warning); `OpenApiDriftTest` green; `cd tools/spectral && bun run lint`: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `serve --port=8100`, `hra:bootstrap-account`, curl: `POST /v1/avatar-configs` mock -> `avc_...`; `POST /v1/conversations` with `external_ref` and `metadata {"a":{"b":{}}}` -> 201 `status created`, `max_duration_seconds 1800`, `metadata` returned byte-for-byte, `client_secret` and `client_secret_expires_at` present; `GET /v1/conversations/{id}` the same body without the secret; `DELETE` of the config -> 409 `config_in_use`. Harness rows deleted |
+| Rollback boundary | migrations 100008-100009, `Conversation`, `ConversationEvent`, the three enums, two factories, `ConversationController`, `CreateConversationRequest`, the two resources, the two routes, the guard in `AvatarConfigController::destroy`, `max_duration_ceiling` config, the `trimStrings` line in `bootstrap/app.php`, their tests, `openapi.json` |
+
+### Deviations and decisions (slice 20)
+
+- Authored size about 1,500 lines (about 800 tests), above the 400 budget: schema with two models, three endpoints' worth of rules
+  and the in-use guard. Recommend `size:exception`.
+- `conversation_events` carries `account_id` (the design's table lists it among "every table carries account_id"; the events
+  model is account-scoped like all others, so ingestion and the transcript read stay scoped without a join).
+- `$middleware->trimStrings(except: ['external_ref', 'system_prompt', 'opening_text'])` in `bootstrap/app.php`: Laravel trims every
+  string in the request, which would change a host's opaque reference or a prompt. The exception also applies to `external_ref` on the
+  avatar-config endpoints (an improvement there). `ConvertEmptyStringsToNull` is left alone: an empty `external_ref` or
+  `opening_text` becomes null (none), an empty `system_prompt` is refused.
+- Optional members accept `null` as "not given" (`opening_text`, `external_ref`, `max_duration_seconds`, `metadata`); an absent
+  `metadata` is stored and returned as `{}` (the design's webhook example shows `"metadata":{}`), not null.
+- `metadata` is read from the raw JSON body (AD13) and validated in `after()`: a list, an empty list, a scalar or a form-encoded
+  value is a 422 on `metadata`; the size is the compact UTF-8 encoding (`JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES`) and the limit
+  is inclusive at 8192 bytes. The column is `json` with an `object` cast and a `json_typeof = 'object'` CHECK.
+- `language` is `string(2)` with the anchored `^[a-z]{2}\z` rule; `system_prompt` has no minimum beyond `required` (an empty
+  string is null after the middleware).
+- Default duration is `min(1800, HRA_MAX_DURATION_CEILING)` so a ceiling below 1800 does not make the default invalid. The ceiling
+  is `hr-avatar.max_duration_ceiling` (`HRA_MAX_DURATION_CEILING`, 3600), added to `.env.example`.
+- Order of checks: body validation (422), then the config (404), then its sync state (409). A malformed `avatar_config_id` is a 404,
+  not a 422, as the spec says "a config of another account is a 404".
+- `provider` is copied from the config at create time (not accepted from the body, which a test proves).
+- The config-in-use guard and the create take the config row lock (`SELECT ... FOR UPDATE`) inside one transaction each, so a delete
+  and a create of the same config are serialized: whichever locks first decides (the other sees a 404 or a 409 `config_in_use`). One
+  connection cannot interleave two requests, so the tests pin the mechanism (the lock query precedes the conversation lookup and
+  the insert; removing the lock fails both). Found by the Guardian Angel review (it first passed this as an acceptable limitation).
+- `avatar_config_id` has no `exists` rule (it would answer 422, the spec wants 404) and the lookup is the account-scoped, soft-delete
+  aware `find`, so another account's config and a deleted one are indistinguishable from an unknown id.
+- `Conversation::avatarConfig()` includes soft-deleted configs (`withTrashed`), since a conversation outlives its config.
+- Common 401/403/429 Problem responses remain undocumented in `openapi.json` (slice 31).

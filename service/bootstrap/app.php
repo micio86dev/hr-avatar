@@ -22,6 +22,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(AssignRequestId::class);
+        // The host's own text is carried as sent: trimming would change an opaque reference or a prompt.
+        $middleware->trimStrings(except: ['external_ref', 'system_prompt', 'opening_text']);
         // One CORS source: HandleCors decides from static config before authentication, so it cannot
         // tie the allow header to a key's own origin allowlist.
         $middleware->replace(HandleCors::class, ClientCors::class);

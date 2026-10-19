@@ -3,6 +3,7 @@
 use App\Http\Controllers\V1\ApiKeyController;
 use App\Http\Controllers\V1\AvatarConfigController;
 use App\Http\Controllers\V1\CatalogueController;
+use App\Http\Controllers\V1\ConversationController;
 use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
@@ -49,6 +50,9 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::post('avatar-configs/{avatarConfig}/sync', [AvatarConfigController::class, 'sync'])->name('avatar-configs.sync');
         Route::delete('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'destroy'])->name('avatar-configs.destroy');
     });
+
+    Route::post('conversations', [ConversationController::class, 'store'])->middleware('scope:conversations:write')->name('conversations.store');
+    Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->middleware('scope:conversations:read')->name('conversations.show');
 
     Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');
 });

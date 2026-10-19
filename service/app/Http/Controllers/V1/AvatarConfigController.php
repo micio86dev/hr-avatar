@@ -5,6 +5,7 @@ namespace App\Http\Controllers\V1;
 use App\AvatarProviders\ProviderRegistry;
 use App\AvatarProviders\SyncStatus;
 use App\Conversations\AvatarConfigSync;
+use App\Conversations\ConversationStatus;
 use App\Http\ApiProblem;
 use App\Http\ErrorCode;
 use App\Http\Problem;
@@ -14,6 +15,7 @@ use App\Http\Requests\UpdateAvatarConfigRequest;
 use App\Http\Resources\AvatarConfigResource;
 use App\Http\Resources\PagedCollection;
 use App\Models\AvatarConfig;
+use App\Models\Conversation;
 use Dedoc\Scramble\Attributes\Group;
 use Dedoc\Scramble\Attributes\Response as ResponseDoc;
 use Illuminate\Contracts\Database\Query\Expression;
@@ -39,7 +41,7 @@ class AvatarConfigController
      *
      * The account's configs, newest first. `external_ref` keeps only those carrying exactly that
      * reference (case-sensitive, no wildcards); it is applied before the page is cut, so a host that
-     * shares one account across its own tenants never loses a config to the page size.
+     * shares one account across its own customers never loses a config to the page size.
      */
     public function index(ListAvatarConfigsRequest $request): PagedCollection
     {
@@ -138,11 +140,28 @@ class AvatarConfigController
      * Delete an avatar config
      *
      * A soft delete: the config leaves the list and cannot start new conversations, and the
-     * conversations that used it keep their reference to it.
+     * conversations that used it keep their reference to it. While a conversation that has not
+     * finished (`created`, `connecting` or `live`) uses the config, it is refused with 409 `config_in_use`.
      */
+    #[ResponseDoc(409, description: 'A conversation that has not finished uses the config (`config_in_use`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     public function destroy(AvatarConfig $avatarConfig): Response
     {
-        $avatarConfig->delete();
+        DB::transaction(function () use ($avatarConfig): void {
+            // Locked, so a conversation being created on this config either exists by now (refused below) or
+            // waits until the config is gone (and is then a 404).
+            AvatarConfig::query()->whereKey($avatarConfig->id)->lockForUpdate()->first();
+
+            $inUse = Conversation::query()
+                ->where('avatar_config_id', $avatarConfig->id)
+                ->whereIn('status', array_column(ConversationStatus::open(), 'value'))
+                ->exists();
+
+            if ($inUse) {
+                throw new ApiProblem(ErrorCode::ConfigInUse);
+            }
+
+            $avatarConfig->delete();
+        });
 
         return response()->noContent();
     }
