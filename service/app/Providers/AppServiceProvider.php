@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Accounts\CurrentAccount;
 use App\Http\OpenApi\DocumentIdentity;
 use App\Http\OpenApi\SecurityDocumentation;
 use Dedoc\Scramble\Scramble;
@@ -20,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->scoped(CurrentAccount::class);
+
         // The documentation UI lives outside /v1; the committed openapi.json is the published contract.
         Scramble::ignoreDefaultRoutes();
     }

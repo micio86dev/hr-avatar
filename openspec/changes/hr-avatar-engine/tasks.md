@@ -187,23 +187,23 @@ Commit: `feat(service): add account scoping, key generation and resolution, and 
 Specs: api-keys (commands, formats and storage, lifecycle states, mode as label), service-foundation (account scoping).
 Reconciliation: 2, 3, 9. High-integrity zone (coverage >= 95).
 
-- [ ] 3.1 Account scoping that fails closed.
+- [x] 3.1 Account scoping that fails closed.
   - RED: `service/tests/Feature/AccountScopeTest.php` scenarios "Cross-account read", "Cross-account write", "Fail closed without context" (`LogicException` when no `CurrentAccount` is bound), "account_id in input is ignored" (not mass-assignable; `creating` hook stamps it), `CurrentAccount::runAs`.
   - GREEN: migrations `service/database/migrations/*_create_accounts_table.php` and `*_create_api_keys_table.php` (columns, unique `key_hash`, index `key_prefix`, CHECKs per design), `service/app/Accounts/{CurrentAccount,AccountScope,BelongsToAccount}.php`, `service/app/Models/{Account,ApiKey}.php` with factories.
   - Verify: `cd service && php artisan test --filter=AccountScopeTest`.
-- [ ] 3.2 `KeyType`, `KeyMode`, `Scope`, `KeyGenerator`.
+- [x] 3.2 `KeyType`, `KeyMode`, `Scope`, `KeyGenerator`.
   - RED: `service/tests/Unit/KeyGeneratorTest.php`: `hra_sk_{live|test}_` + 96 hex, `hra_pk_{live|test}_` + 48 hex, `key_prefix` is the type/mode prefix + first 8 hex, only the sha256 is stored, two keys differ; `Scope` enum values per reconciliation 4, `*` satisfies every scope. Port BEAI `ApiKeyGenerator` test first (locate: `rg -l 'ApiKeyGenerator' ../api/tests`, read-only).
   - GREEN: `service/app/Keys/{KeyType,KeyMode,Scope,KeyGenerator}.php`.
   - Verify: `cd service && php artisan test --filter=KeyGeneratorTest`.
-- [ ] 3.3 `KeyResolver` (hash first, state second).
+- [x] 3.3 `KeyResolver` (hash first, state second).
   - RED: `service/tests/Unit/KeyResolverTest.php` scenarios "Valid key authenticates", "Same prefix, wrong remainder", "Malformed key" (no DB lookup), "Unknown key reveals nothing" (`unauthenticated`), "Expired key", "Revoked key" (`key_expired`/`key_revoked` only after a hash match, constant-time compare via `hash_equals`), wrong key type is `unauthenticated`, "last_used_at updated" (at most once per 60 s). Port BEAI `ApiKeyResolver` test first (read-only locate), dropping the legacy fallback and denylist cases.
   - GREEN: `service/app/Keys/KeyResolver.php`.
   - Verify: `cd service && php artisan test --filter=KeyResolverTest`.
-- [ ] 3.4 `hra:bootstrap-account` and `hra:issue-key`.
+- [x] 3.4 `hra:bootstrap-account` and `hra:issue-key`.
   - RED: `service/tests/Feature/BootstrapCommandsTest.php` scenarios "Bootstrap creates account and key" (scopes `["*"]`), "Key is not recoverable" (raw key printed once to stdout, never logged, never stored), "Test mode key" (`--mode=test`), "Unknown account on issue-key" (non-zero exit, no key).
   - GREEN: `service/app/Console/Commands/{BootstrapAccount,IssueKey}.php`.
   - Verify: `cd service && php artisan test --filter=BootstrapCommandsTest`.
-- [ ] 3.5 Key and account serialization exposure.
+- [x] 3.5 Key and account serialization exposure.
   - RED: `service/tests/Feature/ApiKeySerializationTest.php` scenario "Resource shape": model `toArray()` never contains `key_hash`; `SecretExposureTest` case for keys with `Log::spy`.
   - GREEN: `$hidden` on `ApiKey`; explicit resource lands in slice 5.
   - Verify: `cd service && php artisan test --filter=ApiKeySerializationTest && php artisan test --coverage --min=90`.

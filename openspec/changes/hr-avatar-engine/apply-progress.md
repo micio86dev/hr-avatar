@@ -86,3 +86,36 @@ Commit subject: `build(service): add OpenAPI export with drift gate, Spectral li
 - No YAML parser was added: the compose test shells out to `docker compose config`; the workflow test uses text assertions.
 - Docker images were not built (4 GB Docker Desktop); the Dockerfile is covered by structural tests only, and the CI workflow has not been run (no remote contact).
 - Authored size about 1,050 lines (excludes `bun.lock`, `openapi.json`, bookkeeping): well above the ~400 forecast. Cohesive tooling unit; recommend `size:exception`.
+
+Slice 2 commit: `a4fcfdc` (the orchestrator's accidental commit 5838515 was amended into it).
+
+## Slice 3: Accounts and keys domain (tasks 3.1-3.5) - complete
+
+Commit subject: `feat(service): add account scoping, key generation and resolution, and bootstrap commands`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 3.1 | `tests/Feature/AccountScopeTest.php`, `tests/Feature/ApiKeySchemaTest.php` | `Account` class missing (20 errors) | 20/20 | the CHECK test caught a real defect: `jsonb_typeof(NULL) = 'array'` is NULL, which a CHECK accepts, so a publishable key with no origins passed until `allowed_origins IS NOT NULL` was added |
+| 3.2 | `tests/Unit/KeyGeneratorTest.php` | classes missing (dataset error) | 19/19 | `prefixOf` throws on a malformed key (RED first); `parse` is pure string work |
+| 3.3 | `tests/Unit/KeyResolverTest.php` | `KeyResolver` missing (14 errors) | 14/14 | hash first, state second; revoked wins over expired; lookup is unscoped on purpose (the key is how the account becomes known) |
+| 3.4 | `tests/Feature/BootstrapCommandsTest.php` | commands missing (12 errors) | 12/12 | `{--scopes=*}` is an array option in Laravel's signature syntax; the default is applied in code. `KeyIssuer` is shared with the key endpoints of slice 5 |
+| 3.5 | `tests/Feature/ApiKeySerializationTest.php`, `tests/Feature/SecretExposureTest.php` | `key_hash` was serialized | 3/3 | the exposure test uses a `MessageLogged` listener over the real logger, stronger than `Log::spy` |
+
+Triangulation: key formats and constraint violations are datasets; resolver states each have a positive and a negative case.
+The vocabulary scan caught the word "candidate" in the resolver's own comments and variable names (a lookup term); renamed.
+
+### Work Unit Evidence (slice 3)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='AccountScope|KeyGenerator|KeyResolver|Bootstrap|IssueKey'` passed; full suite 259 passed, 793 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 % (Keys and Accounts classes all 100 %) |
+| Static analysis / style | larastan level 8 and pint passed |
+| Runtime harness | `php artisan migrate --force` then `php artisan hra:bootstrap-account Demo` on the local stack printed `hra_sk_live_...` once; the row holds only prefix `hra_sk_live_0177c108`, the hash and scopes `["*"]` |
+| Rollback boundary | revert the accounts/api_keys migrations, `app/Accounts`, `app/Keys`, `app/Models`, the two commands and `ReadsInput`, factories, and their tests |
+
+### Deviations (slice 3)
+
+- Authored size about 1,285 lines against a ~330 forecast (tests are about 650 of them). Cohesive unit; recommend `size:exception`.
+- `CurrentAccount` has no `set()` yet (removed as dead code at 87 % coverage); slice 4 adds the setter with the authentication middleware that uses it.
+- `rotated_from_id` is added as a plain column and its self foreign key in a second statement (Postgres needs the primary key to exist first).

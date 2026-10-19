@@ -17,8 +17,12 @@ the BEAI wrapper: `docs/extraction/FINDINGS.md` and `docs/extraction/DESIGN.md`.
 - **No host-product concepts.** No participant, candidate, competency, BARS, interview, project,
   organization, assessment, score or tenant-of-BEAI vocabulary in code, schema, API or docs. A host
   passes an opaque `external_ref` and free-form `metadata`; HR-Avatar never interprets them.
-- **Account is the only tenant key.** Every table except platform catalogues carries
-  `account_id`; every query is scoped by it. Cross-account reads are a security defect.
+- **Account is the only tenant key.** Every table except platform catalogues and `accounts`
+  (the tenant root itself) carries `account_id`; every query is scoped by it. Cross-account reads are a security defect. The only
+  unscoped reads are the two credential lookups that run before an account is known: the key
+  resolver (matched by the globally unique key hash) and the inbound provider-webhook token
+  lookup (matched by an unguessable per-conversation token). Each returns a row only on a
+  credential match and binds the account from that row; nothing else may remove the scope.
 - **Provider-agnostic core.** Provider specifics live only in adapter classes behind the provider
   contract. Nothing outside an adapter may branch on a provider name.
 
