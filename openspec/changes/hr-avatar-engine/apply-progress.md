@@ -1130,3 +1130,39 @@ Mutation checks (not committed): removing the `status IN (...)` source condition
 - A conversation that becomes terminal while `start()` is still running (state `connecting`, no session ref yet) is finalized at once as if it had no session, because nothing is known to release. Slice 26 must release a session whose refs arrive after the conversation is already terminal (recorded as a slice 26 requirement).
 - The release job is dispatched `afterCommit()` with a delay of `hr-avatar.release_delay_seconds` (default 20, `HRA_RELEASE_DELAY_SECONDS`, already in `.env.example`).
 - `transcript.ready` for a conversation finalized at once is recorded by `TranscriptReconciler::reconcile($conversation, [])` inside the lifecycle's transaction, after `conversation.ended`.
+
+## Slice 26: Client connect (tasks 26.1-26.4) - complete
+
+Commit subject: `feat(service): add client connect with credential pre-checks, single-use CAS and callback token`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 26.1 | `tests/Feature/ClientConnectTest.php` (about 30 cases) | 39 of 45 failed with 26.2-26.4 (404 on the route, `ConnectConversation` missing; 2 refusal checks pass while the route is absent, 4 arch cases error on the missing files) | green | Mock happy path (`JoinMaterial` shape, `connecting`, `connecting_at`, ref kept), CORS echo and preflight, no provider material in the answer and nothing taken from the body, second connect (`connecting` / `live` -> 409 `already_connected`, no start), concurrent connects (two stale copies: one winner, `start` once), over (`ended` / `failed` -> 409 `invalid_state`), ended between the read and the CAS, credential pre-checks (Tavus without key 422 and the row byte-identical with no request, the platform key accepted, LiveAvatar model without key 422 `llm_credential_missing`, provider checked first, Mock skips both even with a model bound), who may connect (foreign conversation 404, other conversation's secret 403, no secret 401, unlisted origin 403, key in query 400, publishable budget 429) |
+| 26.2 | same file | same run | green | start arguments (conversation id, spec from the conversation, metadata object kept, the auth owner), outside any transaction (transaction level equal to the baseline), refs persisted and not returned, no webhook or job for a conversation that is only connecting; failures: provider error -> `failed` / `provider_error` / 502 / `conversation.ended` (status failed) + `transcript.ready`, no refs, no release; 429 and a capacity limit under another status -> `provider_capacity` / 429; provider message not repeated; an unexpected exception fails the conversation (not stuck in `connecting`) and answers 500 without its message; ended in the meantime stays ended while the provider failure is still reported; ended while the session starts -> 409 `invalid_state` and the release is queued for the session that now exists |
+| 26.3 | `tests/Feature/CallbackTokenTest.php` (10 cases) | same run | green | target `https://.../v1/webhooks/providers/{provider}/{64 hex}`, only the sha256 stored and in place before `start`, tokens differ, base url trailing slash, plain token absent from the response, the logs and every column of every table (each row of each table cast to text), the real Tavus adapter sends it as `callback_url`, none for `poll` / `none` ingestion or Mock |
+| 26.4 | `tests/Arch/ConnectProviderAgnosticTest.php` (2) | same run | green | `ConnectConversation` and `ClientConversationController` name no provider id literal (registry ids, `liveavatar`, `cartesia`, `elevenlabs`) |
+
+Mutation checks (not committed): removing the `! $won` branch, the claim itself, the token hash write and the late release each failed 1 to 8 cases.
+
+### Work Unit Evidence (slice 26)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ClientConnectTest\|CallbackTokenTest\|ConnectProviderAgnosticTest'`: 45 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2208 passed, 6011 assertions, exit 0; line coverage 100.0 % |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 2208 passed; `ConnectConversation`, `ConversationLifecycle`, `IllegalTransition` 100.0 %, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `scramble:export` regenerated (`POST /client/conversations/{conversation}/connect`, tag `Client`, `JoinMaterialResource`, security `clientSecret` + `publishableKey`); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-MOCK up to connect) | through the full HTTP stack in `ClientConnectTest` (real key resolution, origin allowlist, client secret, throttle, CORS, route binding, the Mock adapter); the curl harness of the whole flow is `MockConversationFlowTest` in slice 27 |
+| Rollback boundary | `ConnectConversation`, `ClientConversationController`, `JoinMaterialResource`, the client route group, the `public_base_url` config key, the high-integrity entry, `ScriptedProvider` start support and the `clientSecretFor` / `browserHeaders` helpers in `tests/Pest.php`, the three test files, `openapi.json` |
+
+### Deviations and decisions (slice 26)
+
+- Authored size 926 lines (675 tests), above the 400 budget: the connect class carries the credential pre-checks, the CAS, the token, the start and both failure paths, and the proofs of each. Recommend `size:exception`.
+- The claim goes through `ConversationLifecycle::transition(Connecting)` instead of a second hand-written UPDATE: one state-machine code path. Losing it is read from the `transition()` outcome (`false` = already connecting, `IllegalTransition` from `live` = connected, from a terminal state = `invalid_state`), which gives the reconciliation 16 answers.
+- A status that is not `created` is refused before the credential checks (409 beats 422), so a second connect never reports a credential problem.
+- **A conversation that ends while `start()` is running** (reported by slice 25 as a requirement): the lifecycle saw no session ref, so it finalized the transcript and queued no release. After `start` returns, the refs are stored, and if the conversation is already over `ReleaseProviderSession` is queued for the session that now exists and the answer is 409 `invalid_state`. If the start itself failed in that window the conversation stays ended and the provider failure is still what the caller gets.
+- Any `Throwable` from `start` fails the conversation (`provider_capacity` only for a throttle `ProviderException`, otherwise `provider_error`) and is re-raised; an unexpected non-provider error therefore answers 500 and cannot leave a conversation in `connecting` until the sweeper.
+- `HRA_PUBLIC_BASE_URL` was already in `.env.example`; `hr-avatar.public_base_url` reads it. It is only read for a provider that calls back; if it is unset the start of such a provider fails the conversation (`config()->string` throws) instead of sending the provider a broken target. The Railway documentation of the variable is slice 32.
+- `ScriptedProvider` (test support) gained `start` (scripted by `$starts`), a settable `$ingestion` and `$lastSpec`; defaults unchanged, so slices 23-24 tests are untouched.
+- Cross-account on the browser surface: a secret for the key's own account naming another account's conversation id is a 404 (only the signing secret could mint it); a secret for another conversation is the middleware's 403 `forbidden`, per reconciliation 12.

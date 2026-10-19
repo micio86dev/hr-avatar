@@ -3,6 +3,7 @@
 use App\Http\Controllers\V1\ApiKeyController;
 use App\Http\Controllers\V1\AvatarConfigController;
 use App\Http\Controllers\V1\CatalogueController;
+use App\Http\Controllers\V1\Client\ClientConversationController;
 use App\Http\Controllers\V1\ConversationController;
 use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
@@ -67,4 +68,10 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
     Route::get('conversations/{conversation}', [ConversationController::class, 'show'])->middleware('scope:conversations:read')->name('conversations.show');
 
     Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');
+});
+
+// Browser routes: a publishable key from an allowed origin plus the conversation's client secret, then a per-key budget.
+// CORS is answered by the global ClientCors middleware for every route under `client/`.
+Route::middleware([RejectKeyInQuery::class, 'auth.client', 'throttle:publishable'])->prefix('client')->group(function () {
+    Route::post('conversations/{conversation}/connect', [ClientConversationController::class, 'connect'])->name('client.conversations.connect');
 });

@@ -24,6 +24,9 @@
             "name": "Catalogue"
         },
         {
+            "name": "Client"
+        },
+        {
             "name": "Conversations"
         },
         {
@@ -873,6 +876,88 @@
                 "security": [
                     {
                         "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/client/conversations/{conversation}/connect": {
+            "post": {
+                "operationId": "client.conversations.connect",
+                "description": "Starts the provider session for a conversation that has not been connected, and answers with what the\nbrowser needs to join it. It can succeed once per conversation: a second call is `already_connected`.\nThe provider's and the language model's credentials are checked first; a missing one is a 422 that leaves\nthe conversation as it was. If the provider cannot start the session the conversation fails and the\nanswer is a 502 (a 429 when the provider is at capacity).",
+                "summary": "Connect",
+                "tags": [
+                    "Client"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`JoinMaterialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JoinMaterialResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "409": {
+                        "description": "The conversation is already connected (`already_connected`), or is over (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The provider has no credential (`provider_credential_missing`) or the language model has none (`llm_credential_missing`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "The provider is at its concurrency limit (`provider_concurrency_limited`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The provider could not start the session (`provider_error`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "clientSecret": [],
+                        "publishableKey": []
                     }
                 ]
             }
@@ -2500,6 +2585,40 @@
                     "key"
                 ],
                 "title": "IssuedApiKeyResource"
+            },
+            "JoinMaterialResource": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "transport": {
+                        "type": "string"
+                    },
+                    "conversation_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "session_token": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expires_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "provider",
+                    "transport",
+                    "conversation_url",
+                    "session_token",
+                    "expires_at"
+                ],
+                "title": "JoinMaterialResource"
             },
             "KeyMode": {
                 "type": "string",

@@ -631,19 +631,20 @@ Specs: conversations (state machine, becoming live, end a conversation). Reconci
 Commit: `feat(service): add client connect with credential pre-checks, single-use CAS and callback token`
 Specs: conversations (connect), provider-webhooks (callback token issuance), api-keys (client_secret). Reconciliation: 17, 25, 12. Design AD3.
 
-- [ ] 26.1 Pre-checks and CAS.
+- [x] 26.1 Pre-checks and CAS.
   - RED: `service/tests/Feature/ClientConnectTest.php` scenarios "Happy path with Mock" (`JoinMaterial` shape, status `connecting`), "Second connect" (`409 already_connected`), "Concurrent connects" (exactly one winner, one `start` call), "Credential missing keeps state" (`422 provider_credential_missing` / `llm_credential_missing`, status stays `created`, Mock skips both), "Connect on an ended conversation" (`409 invalid_state`); no partial state on any pre-check failure.
   - GREEN: `service/app/Conversations/ConnectConversation.php`, `service/app/Http/Controllers/V1/Client/ClientConversationController.php` (connect), route under the full client chain (`ClientCors`, `AssignRequestId`, `RejectKeyInQuery`, `auth.client`, `throttle:publishable`).
+  - Note (apply): the claim goes through `ConversationLifecycle::transition(Connecting)` (one code path for the state machine); a conversation that ends while `start()` runs has its session released and the connect answers 409 `invalid_state`; `JoinMaterialResource` is the typed wire form; `hr-avatar.public_base_url` (`HRA_PUBLIC_BASE_URL`) is added; the connect class joins the 95 % coverage zone.
   - Verify: `cd service && php artisan test --filter=ClientConnectTest`.
-- [ ] 26.2 Start failure handling.
+- [x] 26.2 Start failure handling.
   - RED: scenarios "Provider failure" (`connecting -> failed`, `provider_error`, 502 `provider_error`) and "Capacity failure" (`FailureClass::Throttle` -> `provider_capacity`, 429 `provider_concurrency_limited`), start runs outside any transaction, refs persisted on success, `JoinMaterial` carries no key material.
   - GREEN: failure branch in `ConnectConversation`.
   - Verify: `cd service && php artisan test --filter=ClientConnectTest`.
-- [ ] 26.3 Callback token issuance.
+- [x] 26.3 Callback token issuance.
   - RED: `service/tests/Feature/CallbackTokenTest.php` scenarios "Token shape and storage" (64 lowercase hex, only the sha256 in `callback_token_hash`, plain token only inside `callbackUrl`), "Tokens differ", "No token for LiveAvatar" (and none for Mock); `callbackUrl` built from `HRA_PUBLIC_BASE_URL` as `/v1/webhooks/providers/{provider}/{token}`.
   - GREEN: token minting for `Ingestion::Callback` adapters in `ConnectConversation`.
   - Verify: `cd service && php artisan test --filter=CallbackTokenTest`.
-- [ ] 26.4 Provider branching check on the connect path.
+- [x] 26.4 Provider branching check on the connect path.
   - RED: `service/tests/Arch/ConnectProviderAgnosticTest.php` asserts `ConnectConversation` references no provider id literal.
   - GREEN: ensure the code uses `ProviderRegistry` only.
   - Verify: `cd service && php artisan test --filter=ConnectProviderAgnosticTest && php artisan test --coverage --min=90`.

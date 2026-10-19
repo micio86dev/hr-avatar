@@ -25,6 +25,7 @@
             <directory>app/Webhooks/Outbound</directory>
             <file>app/Conversations/ConversationLifecycle.php</file>
             <file>app/Conversations/IllegalTransition.php</file>
+            <file>app/Conversations/ConnectConversation.php</file>
         </include>
     </source>
     <coverage>

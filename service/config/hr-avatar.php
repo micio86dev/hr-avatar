@@ -102,6 +102,12 @@ return [
     ],
 
     /*
+    | The address the service is reached at from outside. A provider that calls back is given a target
+    | under it, so it must be reachable by the provider.
+    */
+    'public_base_url' => env('HRA_PUBLIC_BASE_URL'),
+
+    /*
     | How long after a conversation ends its provider session is released, in seconds. The browser may still
     | be closing the call, and a provider may still be writing the transcript.
     */

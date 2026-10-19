@@ -1,11 +1,13 @@
 <?php
 
 use App\Accounts\CurrentAccount;
+use App\Keys\ClientSecret;
 use App\Keys\KeyGenerator;
 use App\Keys\KeyMode;
 use App\Keys\KeyType;
 use App\Models\Account;
 use App\Models\ApiKey;
+use App\Models\Conversation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Event;
@@ -56,6 +58,24 @@ function issueKey(
     $raw = KeyGenerator::generate($type, $mode);
 
     return [inAccount($account, fn () => ApiKey::factory()->withRawKey($raw)->create($attributes)), $raw];
+}
+
+/**
+ * The client secret a browser would hold for a conversation, as the create endpoint would have minted it.
+ */
+function clientSecretFor(Conversation $conversation): string
+{
+    return app(ClientSecret::class)->mint($conversation->id, $conversation->account_id, $conversation->created_at, $conversation->max_duration_seconds)->token;
+}
+
+/**
+ * The headers of a browser call: a publishable key, a client secret and an allowed origin.
+ *
+ * @return array<string, string>
+ */
+function browserHeaders(string $publishableKey, string $clientSecret, string $origin = 'https://app.example.com'): array
+{
+    return ['X-HRA-Publishable-Key' => $publishableKey, 'Authorization' => "Bearer {$clientSecret}", 'Origin' => $origin];
 }
 
 /**
