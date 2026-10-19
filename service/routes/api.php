@@ -40,7 +40,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::get('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'show'])->name('avatar-configs.show');
         Route::get('catalogue', [CatalogueController::class, 'index'])->name('catalogue.index');
         Route::get('catalogue/{provider}/{resource}', [CatalogueController::class, 'show'])->name('catalogue.show');
-        Route::post('voice-preview', [VoicePreviewController::class, 'store'])->name('voice-preview.store');
+        Route::post('voice-preview', [VoicePreviewController::class, 'store'])->middleware('throttle:preview')->name('voice-preview.store');
     });
 
     Route::middleware('scope:avatar_configs:write')->group(function () {

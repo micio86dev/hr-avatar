@@ -30,7 +30,9 @@ class VoicePreviewController
      * synthesizes that sentence; LiveAvatar returns its own generic clip. A provider that has no voices
      * of its own is previewed through the external vendor named in `tts_engine`; without one there is
      * nothing to preview (422). The vendor is called with the account's credential, else the platform's,
-     * and a repeat is served from a cache without a vendor call.
+     * and a repeat is served from a cache without a vendor call. Every preview request counts against
+     * a budget of its own per key (10 a minute by default, on top of the key's general budget), because
+     * each synthesis is a paid vendor call; beyond it the answer is 429 with `Retry-After`.
      *
      * @return array{content_type: string, audio_base64: string}
      */

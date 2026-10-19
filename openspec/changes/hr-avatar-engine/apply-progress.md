@@ -745,3 +745,51 @@ Commit subject: `feat(service): add voice vendors and voice preview with cached 
   LiveAvatar's sample is a base64 JSON envelope, so it cannot be streamed; it is checked against the cap after decoding.
 - The preview fakes in the tests are closures (`fn () => Http::response(...)`): a streamed body can be read once, so a fake that answers
   more than one call needs a fresh response each time.
+
+## Unit 0: Reconciliation follow-ups 40-44 (slices 15-19 review) - complete
+
+Commit subject: `fix(service): guard the sync race with a revision and throttle voice previews per key`
+
+Batch note: baseline 1611 tests passing (serial `php artisan test`, `DB_PORT=55442`). `php artisan test --parallel` runs but
+`DatabaseConnectionTest` fails under it by design of the parallel runner (per-process database names `hra_test_test_N`, the test
+asserts `hra_test`); the configured serial runner is the verification of record.
+
+| Item | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 40 | existing `AvatarConfigEndpointTest` "refuses a config whose provider needs no objects" | n/a: the behaviour exists since slice 17 | already green | recorded in `reconciliation.md`; no code change, no new test |
+| 41 | `tests/Feature/SyncRevisionTest.php` (13 tests) | 11 of 18 failed together with 42: no `sync_revision` column, third job argument missing | 11/11 | race tests: a PATCH lands inside the provider call (success path and failure path), a config already past the run's revision (no call), the current revision still settles, a change that settles `not_required` overtakes a run; endpoint tests: create carries 0, PATCH bumps by one per real change, `not_required` outcome bumps without a job, no-op PATCH and rename do not bump, manual sync bumps, the resource does not expose it |
+| 42 | `tests/Feature/VoicePreviewThrottleTest.php` (7 tests) | `rate_limits.preview` null, no 429 | 7/7 | default 10, 429 body (`rate_limited`, problem media type, `Retry-After`, `X-RateLimit-Limit/Remaining`), per key, a refused (422) request counts, independent from the secret budget in both directions |
+| 43 | n/a (documentation) | n/a | n/a | `tasks.md` 19.2 and the unit table updated; no code existed |
+| 44 | existing `VoicePreviewTest` credential-keyed cache cases | n/a: already implemented in slice 19 | already green | recorded in `reconciliation.md` |
+
+Mutation check (not committed): removing the `WHERE sync_revision = ?` clause from the job's single write made 3 of the 11
+`SyncRevisionTest` cases fail, so the tests do depend on the compare-and-set.
+
+### Work Unit Evidence (unit 0)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='SyncRevisionTest\|VoicePreviewThrottleTest'`: 20 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1629 passed, 4217 assertions, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (larastan level 8) passed (0 errors) |
+| OpenAPI | `php artisan scramble:export` (only the voice-preview description changed); `OpenApiDriftTest` green; `cd tools/spectral && bun run lint`: no results at `warn` or higher |
+| Runtime harness | N/A-WIRE: the race is a queue interleaving, proven by an in-flight write inside the faked provider call; the throttle is proven through the real route and middleware chain |
+| Rollback boundary | migration `..._100007_add_sync_revision_to_avatar_configs`, the `sync_revision` lines in `AvatarConfig`, `SyncAvatarConfig`, `AvatarConfigSync` and `AvatarConfigController`, the `preview` limiter (config, `AppServiceProvider`, route, `.env.example`), the two test files, `reconciliation.md` items 40-44 |
+
+### Deviations and decisions (unit 0)
+
+- `SyncAvatarConfig` takes the revision as an optional third argument (default 0, the revision of a never-changed config) so the
+  slice 17 tests that construct the job with two arguments are untouched. No existing test was edited.
+- Guardian Angel observation fixed (RED first, 2 failures): the controller no longer increments in PHP. The revision is set to
+  `sync_revision + 1` by the database in the same UPDATE and the model is read again before the job is queued, so two concurrent
+  changes cannot share a revision and a job always carries the revision that was really stored. `sync_revision` has no Eloquent
+  cast (a cast would reject the SQL expression); Postgres returns it as an integer.
+- A new migration adds the column rather than editing the slice 8 migration, so a database that already ran it migrates forward.
+- The revision moves up on every real change to `config`, `persona`, `llm_model_id` or `voice` even when the new state needs no
+  sync (`not_required`), so that a run still in flight for the older state cannot settle it.
+- Residual limit, documented on the job: a run already past the start check can still send the older state to the provider while a
+  newer run does the same. The config stays truthful (the older run does not settle it); the provider-side objects hold whichever
+  call landed last until the next sync. Serializing runs per config (`WithoutOverlapping` with a no-attempt-cost release) would close
+  it; left open.
+- The preview budget default (10 a minute per key) follows BEAI's per-user preview limit; the env variable is `HRA_RATE_LIMIT_PREVIEW`.
+- Authored size about 330 lines (about 215 tests): within the budget.

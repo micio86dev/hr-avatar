@@ -37,8 +37,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->guardJwtSecret();
 
-        // One budget per key, whichever kind it is: the authentication middleware records the key id.
-        foreach (['secret', 'publishable'] as $limiter) {
+        // One budget per key and limiter, whichever kind of key it is: the authentication middleware records the key id.
+        foreach (['secret', 'publishable', 'preview'] as $limiter) {
             RateLimiter::for($limiter, fn (Request $request) => Limit::perMinute((int) config("hr-avatar.rate_limits.{$limiter}"))
                 ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
         }

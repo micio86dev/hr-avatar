@@ -755,7 +755,7 @@
         "/voice-preview": {
             "post": {
                 "operationId": "voice-preview.store",
-                "description": "Returns a short audio sample of one voice as base64. The sentence is the platform's own for the\n`language`; the request cannot supply text (any member beyond the four is a 422). A voice vendor\nsynthesizes that sentence; LiveAvatar returns its own generic clip. A provider that has no voices\nof its own is previewed through the external vendor named in `tts_engine`; without one there is\nnothing to preview (422). The vendor is called with the account's credential, else the platform's,\nand a repeat is served from a cache without a vendor call.",
+                "description": "Returns a short audio sample of one voice as base64. The sentence is the platform's own for the\n`language`; the request cannot supply text (any member beyond the four is a 422). A voice vendor\nsynthesizes that sentence; LiveAvatar returns its own generic clip. A provider that has no voices\nof its own is previewed through the external vendor named in `tts_engine`; without one there is\nnothing to preview (422). The vendor is called with the account's credential, else the platform's,\nand a repeat is served from a cache without a vendor call. Every preview request counts against\na budget of its own per key (10 a minute by default, on top of the key's general budget), because\neach synthesis is a paid vendor call; beyond it the answer is 429 with `Retry-After`.",
                 "summary": "Preview a voice",
                 "tags": [
                     "Catalogue"

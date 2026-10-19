@@ -16,8 +16,10 @@ use App\Http\Resources\PagedCollection;
 use App\Models\AvatarConfig;
 use Dedoc\Scramble\Attributes\Group;
 use Dedoc\Scramble\Attributes\Response as ResponseDoc;
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Reusable avatar configurations: a provider, its settings, an optional persona, language model and
@@ -93,17 +95,21 @@ class AvatarConfigController
         $changed = array_any(self::SYNCED_MEMBERS, fn (string $member) => self::differs($avatarConfig, $member));
 
         if ($changed) {
+            // A new revision overtakes any run still in flight for the older state, whatever this change
+            // settles as. The increment is done by the database, so a concurrent change cannot share it.
+            $avatarConfig->forceFill(['sync_revision' => self::nextRevision()]);
             $avatarConfig->sync_status = $this->syncStatusFor($avatarConfig);
             $avatarConfig->sync_error = null;
         }
 
         $avatarConfig->save();
+        $avatarConfig->refresh();
 
         if ($changed) {
             AvatarConfigSync::dispatchWhenPending($avatarConfig);
         }
 
-        return new AvatarConfigResource($avatarConfig->refresh());
+        return new AvatarConfigResource($avatarConfig);
     }
 
     /**
@@ -121,10 +127,11 @@ class AvatarConfigController
             throw new ApiProblem(ErrorCode::InvalidState, 'This avatar configuration needs no synchronization.');
         }
 
-        $avatarConfig->forceFill(['sync_status' => SyncStatus::Pending, 'sync_error' => null])->save();
+        $avatarConfig->forceFill(['sync_status' => SyncStatus::Pending, 'sync_error' => null, 'sync_revision' => self::nextRevision()])->save();
+        $avatarConfig->refresh();
         AvatarConfigSync::dispatchWhenPending($avatarConfig);
 
-        return (new AvatarConfigResource($avatarConfig->refresh()))->response()->setStatusCode(202);
+        return (new AvatarConfigResource($avatarConfig))->response()->setStatusCode(202);
     }
 
     /**
@@ -162,6 +169,15 @@ class AvatarConfigController
         }
 
         return $value;
+    }
+
+    /**
+     * The revision after this write, computed by the database from the row's own value. The model is
+     * read again after the save, so the job carries the revision that was really stored.
+     */
+    private static function nextRevision(): Expression
+    {
+        return DB::raw('sync_revision + 1');
     }
 
     private function syncStatusFor(AvatarConfig $config): SyncStatus

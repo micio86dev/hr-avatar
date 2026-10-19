@@ -121,3 +121,11 @@ match this list; where they still differ, this file wins.
 
 38. `GET /v1/avatar-configs` accepts an optional exact-match `external_ref` query filter (applied server-side before pagination), so a host sharing one account across its own tenants never loses configs to the page cap. Scope `avatar_configs:read`.
 39. SDK `forwardTranscript: false` suppresses **utterance** forwarding only. Lifecycle events (`live`, `error`) are always forwarded, because for `mock` and `heygen` (no provider callback) the client `live` event is the only `connecting → live` transition.
+
+## Additions from the slices 15-19 review (2026-10-19)
+
+40. `POST /v1/avatar-configs/{id}/sync` on a config whose adapter has `syncRequired() === false` (Mock) answers 409 `invalid_state` and queues nothing. (Already the behaviour since slice 17; pinned by `AvatarConfigEndpointTest` "refuses a config whose provider needs no objects".)
+41. Sync race: an integer `avatar_configs.sync_revision` moves up on every change to `config`, `persona`, `llm_model_id` or `voice` (whatever the change settles as) and on a manual sync. `SyncAvatarConfig` carries the revision it was queued for; its settling writes (synced, not required, failed) are one conditional `UPDATE ... WHERE sync_revision = ?`, so a run overtaken by a newer change is a no-op. A run that starts past its revision makes no provider call. The revision is not part of any resource.
+42. `POST /v1/voice-preview` has its own per-key throttle (`throttle:preview`, `HRA_RATE_LIMIT_PREVIEW`, default 10 a minute), in addition to the general secret-key budget; over it the answer is 429 `rate_limited` with `Retry-After` and `X-RateLimit-*`.
+43. `CatalogueSample` (task 19.2) is dropped: no requirement or route uses it.
+44. The voice-preview cache key includes the credential owner and key fingerprint (more secure than the spec tuple `(vendor, voice, model, phrase version, language)`); the design wins.

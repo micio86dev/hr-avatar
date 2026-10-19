@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property SyncStatus $sync_status
  * @property string|null $sync_error
  * @property Carbon|null $synced_at
+ * @property int $sync_revision
  * @property array<string, mixed> $provider_state
  * @property Carbon|null $deleted_at
  * @property-read LlmModel|null $llmModel
@@ -43,11 +44,11 @@ class AvatarConfig extends Model
      * The column defaults, so a model that was just created holds what the table holds (an object,
      * never null) before it is read back.
      *
-     * @var array<string, string>
+     * @var array<string, int|string>
      */
-    protected $attributes = ['config' => '{}', 'provider_state' => '{}'];
+    protected $attributes = ['config' => '{}', 'provider_state' => '{}', 'sync_revision' => 0];
 
-    /** The members a client may set. The sync state and the adapter's own state are written with forceFill. */
+    /** The members a client may set. The sync state, its revision and the adapter's own state are written with forceFill. */
     protected $fillable = ['name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref'];
 
     protected static function idPrefix(): string

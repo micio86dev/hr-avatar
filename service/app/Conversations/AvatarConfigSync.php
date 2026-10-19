@@ -14,7 +14,7 @@ final class AvatarConfigSync
     public static function dispatchWhenPending(AvatarConfig $config): void
     {
         if ($config->sync_status === SyncStatus::Pending) {
-            SyncAvatarConfig::dispatch($config->account_id, $config->id);
+            SyncAvatarConfig::dispatch($config->account_id, $config->id, $config->sync_revision);
         }
     }
 }

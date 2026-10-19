@@ -101,10 +101,14 @@ return [
         'elevenlabs' => env('ELEVENLABS_API_KEY'),
     ],
 
-    /* Requests per minute. Every key has a budget of its own; failed authentications are counted per address. */
+    /*
+    | Requests per minute. Every key has a budget of its own; failed authentications are counted per address.
+    | `preview` is a second, smaller budget per key for voice previews, which each cost a paid synthesis.
+    */
     'rate_limits' => [
         'secret' => (int) env('HRA_RATE_LIMIT_SECRET', 600),
         'publishable' => (int) env('HRA_RATE_LIMIT_PUBLISHABLE', 300),
+        'preview' => (int) env('HRA_RATE_LIMIT_PREVIEW', 10),
         'failed_auth' => 30,
     ],
 
