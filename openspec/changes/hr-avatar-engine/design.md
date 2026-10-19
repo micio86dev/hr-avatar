@@ -195,7 +195,9 @@ logic.
 **Choice**:
 - Client utterances are stored as `conversation_events` with `source=client`.
 - Reconciliation keeps every client line and adds each provider line whose `role` and normalized
-  text (trimmed, whitespace collapsed, case-insensitive) are absent, with `source=provider`.
+  text (trimmed, whitespace collapsed, case-insensitive) are not already accounted for by a stored
+  line, with `source=provider`. A stored line accounts for exactly one provider line (reconciliation
+  item 45), so a repeated utterance is not lost.
 - `conversations.transcript_status` is `pending` until reconciliation completes, then `ready`, or
   `partial` when the provider transcript could not be fetched after 5 attempts.
 - A terminal conversation with no provider session (ended from `created`, or failed at connect)

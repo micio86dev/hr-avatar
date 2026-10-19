@@ -10,8 +10,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 
-const CONVERSATION_MEMBERS = ['id', 'status', 'avatar_config_id', 'provider', 'language', 'max_duration_seconds', 'external_ref', 'metadata', 'ended_reason', 'transcript_status', 'created_at', 'connecting_at', 'live_at', 'ended_at'];
-
 beforeEach(function () {
     $this->account = Account::factory()->create();
     [, $this->raw] = issueKey($this->account, ['scopes' => ['conversations:write', 'conversations:read']]);

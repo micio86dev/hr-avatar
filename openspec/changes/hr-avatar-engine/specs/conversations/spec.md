@@ -373,9 +373,11 @@ Auth: SK with scope `conversations:read`. `GET /v1/conversations/{id}/transcript
 conversation past `created`; `created` yields 409 `invalid_state`. `status` is `pending` until
 reconciliation completes, then `ready`, or `partial` when provider reconciliation failed after 5
 attempts and only client-forwarded utterances exist. Reconciliation MUST call the adapter
-`fetchTranscript` and merge: client-forwarded utterances are kept with `source` `client`; each
-provider utterance with no existing utterance of the same `role` and the same normalized text
-(trimmed, whitespace collapsed, case-insensitive) is added with `source` `provider`. Utterances MUST
+`fetchTranscript` and merge: client-forwarded utterances are kept with `source` `client`; a
+provider utterance is added with `source` `provider` unless a stored utterance of the same `role` and
+the same normalized text (trimmed, whitespace collapsed, case-insensitive) accounts for it. Each stored
+utterance accounts for exactly one provider utterance, so a line the speaker repeated is not lost
+(provider `Yes, Yes` against one stored `Yes` adds one). Utterances MUST
 be ordered by `occurred_at` ascending then `sequence`. Reconciliation MUST be idempotent. Completion
 MUST emit `transcript.ready` exactly once (status `ready` or `partial`). A conversation that moves
 `created -> ended` has no provider session: its transcript MUST be finalised immediately as `ready`

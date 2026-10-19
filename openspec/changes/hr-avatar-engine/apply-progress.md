@@ -1048,3 +1048,51 @@ Slice 24 commit: `c064a9f`.
 6. **`trimStrings` exception** (slice 20): `external_ref`, `system_prompt` and `opening_text` are no longer trimmed on any endpoint (also changes `external_ref` on avatar configs).
 7. **Endpoint limit answer** (slice 21): the 21st endpoint is a 422 with a `detail` and no field error.
 8. **Contract notes still pending from earlier batches** (not touched here): `liveavatar` provider-token security scheme wording, LiveAvatar session-token lifetime, Tavus persona `editable` flag.
+
+---
+
+# Batch 2: unit 0b and slices 25-29
+
+Rulings 45-49 of the slices 20-24 review are recorded in `reconciliation.md` (items 45-49) in the unit 0b commit. Baseline before
+this batch: 2073 tests passing serially (`DB_PORT=55442 php artisan test`). From unit 0b on the full suite also runs under
+`php artisan test --parallel` (about 60 s instead of 130 s), which the fix below makes possible; both runners are cited where used.
+
+## Unit 0b: Rulings 45-49 (tasks 0b.1-0b.3) - complete
+
+Commit subject: `fix(service): serialize config sync runs per config and make the database check parallel-safe`
+
+| Item | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 45 | n/a (documentation) | n/a | n/a | the slice 23 behaviour stays; `specs/conversations/spec.md` and design AD9 amended in the same commit |
+| 46 | n/a (documentation) | n/a | n/a | recorded in `reconciliation.md` and the 21.2 task line |
+| 47 | n/a (documentation) | n/a | n/a | recorded; built in slice 29 |
+| 48 | n/a (documentation) | n/a | n/a | recorded; no code change |
+| 49 | `tests/Feature/SyncSerializationTest.php` (9 tests) | 9 of 9 failed: `SerializeConfigSync` not found, `SyncAvatarConfig::middleware()` undefined | 9/9 | the middleware as a unit (lock free, freed after a run and after an exception, busy -> fresh copy with the same ids, revision and a delay, original job never released, other configs and accounts not held up) and two runs through the real pipeline making one provider call |
+| parallel | `tests/Feature/DatabaseConnectionTest.php` | under `--parallel --processes=2`: expected `hra_test`, got `hra_test_test_1` | 2/2 in both runners | see deviations |
+
+Mutation check (not committed): making the lock always succeed failed the "second run of the same config" case.
+
+### Work Unit Evidence (unit 0b)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='SyncSerializationTest\|SyncRevisionTest\|SyncAvatarConfigTest'`: 40 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2082 passed, 5557 assertions, exit 0 (serial: see the batch totals) |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors; `openapi.json` unchanged (no route) |
+| Runtime harness | N/A: a queue job middleware and test code; the race is proven through the real job pipeline with a provider call in flight |
+| Rollback boundary | `app/Jobs/Middleware/SerializeConfigSync.php`, `SyncAvatarConfig::middleware()` and its docblock, `SyncSerializationTest`, the `DatabaseConnectionTest` and `tests/Pest.php` changes, the reconciliation / spec / design / tasks edits |
+
+### Deviations and decisions (unit 0b)
+
+- **`DatabaseConnectionTest` (asked to fix, not weaken).** The parallel runner gives each worker a database named `<database>_test_<token>`, so the
+  fixed `hra_test` assertion could never hold there. The expected name is now derived from `ParallelTesting::token()` and is still compared
+  exactly (`hra_test` serially, `hra_test_test_<token>` in a worker), so a run against any other database still fails. Nothing was loosened.
+- **A second parallel-only failure was fixed with it.** `ConversationShowTest` used `CONVERSATION_MEMBERS`, a constant defined at file level in
+  `ConversationCreateTest`; under `--parallel` the two files can land on different workers, so the constant was undefined. The constant moved to
+  `tests/Pest.php` (loaded by every worker) and its definition was removed from `ConversationCreateTest`. This edits two existing tests mechanically
+  (no assertion changed) and is the only edit to existing tests in this batch; it is not a reconciliation item.
+- **Ruling 49 is not Laravel's `WithoutOverlapping`.** That middleware releases the job, and a release spends one of the job's attempts (the job has
+  three, and the existing test pins `tries` 3), so a config that was merely busy could end up marked failed by a run that never started. The
+  middleware instead queues a fresh copy a few seconds later and lets the waiting job finish normally, so it spends no attempt. The lock is
+  the cache lock `hra:sync-config:{account_id}:{config_id}` (300 s expiry; the array store in tests, Redis in production).
+- Authored size 227 lines (154 tests): within the budget.

@@ -27,6 +27,12 @@ pest()->extend(TestCase::class)
     ->beforeEach(fn () => Http::preventStrayRequests())
     ->in('Arch');
 
+/*
+ * The members of a conversation resource, in order. Defined here (not in the first test file that used it)
+ * so a file run on its own, or on another worker of the parallel runner, finds it.
+ */
+const CONVERSATION_MEMBERS = ['id', 'status', 'avatar_config_id', 'provider', 'language', 'max_duration_seconds', 'external_ref', 'metadata', 'ended_reason', 'transcript_status', 'created_at', 'connecting_at', 'live_at', 'ended_at'];
+
 /**
  * Runs a callback with an account bound, as the authentication middleware would for a request.
  */

@@ -541,7 +541,7 @@ Specs: consumer-webhooks (endpoint management, SSRF, signing). Reconciliation: 2
   - RED: port BEAI `WebhookSigner` tests (read-only locate) to `service/tests/Unit/WebhookSignerTest.php`: scenarios "Known vector" (`v1=` + lowercase hex hmac_sha256 of `{ts}.{body}`), "Verifier accepts a fresh delivery", "Replay outside the window" (> 300 s), "Future timestamp outside the window", "Tampered body", "Wrong secret"; `hash_equals`.
   - GREEN: `service/app/Webhooks/Outbound/WebhookSigner.php`; add the file to the coverage source of `service/phpunit.high-integrity.xml`.
   - Verify: `cd service && php artisan test --filter=WebhookSignerTest`.
-- [x] 21.2 `OutboundHostGuard` (`RetryClassifier` and `SecretRedactor` dropped, see apply-progress slice 21).
+- [x] 21.2 `OutboundHostGuard` (`RetryClassifier` and `SecretRedactor` dropped for good, reconciliation 46; see apply-progress slice 21).
   - RED: port BEAI tests (read-only locate: `OutboundHostGuard`, `RetryClassifier`, `SecretRedactor`): private, loopback and link-local literals refused ("Private address literal"), IPv6 and IPv4-mapped forms, every resolved address checked; retry classification; redaction of secrets in messages.
   - GREEN: `service/app/Webhooks/Outbound/{OutboundHostGuard,EventType}.php` (+ `DestinationNotAllowed`, `DestinationUrl`); `DeliveryStatus` lands with its first use in slice 22.
   - Note (apply): the spec has no permanent-failure class (every non-2xx is retried) and a `last_error` from a closed set of codes can never hold a secret, so a retry classifier and a redactor would be dead code. Same reasoning as slice 17's `sync_error`.
@@ -582,7 +582,7 @@ Specs: conversations (transcript and reconciliation). Reconciliation: 20, 21.
 - [x] 23.2 `ReconcileTranscript` job.
   - RED: `service/tests/Feature/ReconcileTranscriptTest.php` scenarios "Pending", "Partial" (5 attempts then `partial` via `failed()`), `TranscriptNotReady` and `ProviderException` retry (backoff `[30,60,120,300]`), `TranscriptShapeError` fails at once, receipt rows used when passed, account isolation ("Account isolation" scenario), runs under `CurrentAccount::runAs`.
   - GREEN: `service/app/Jobs/ReconcileTranscript.php`.
-  - Note (apply): "receipt rows used when passed" is not built here: the receipts table lands in slice 29, and passing the rows through the job would put transcript text on the queue and in the failed-job record. Slice 29 passes the receipt id instead (see apply-progress, open decisions).
+  - Note (apply): "receipt rows used when passed" is not built here: the receipts table lands in slice 29, and passing the rows through the job would put transcript text on the queue and in the failed-job record. Slice 29 passes the receipt id instead (reconciliation 47; see apply-progress, open decisions).
   - Verify: `cd service && php artisan test --filter='ReconcileTranscriptTest' && php artisan test --coverage --min=90`.
 
 ## Slice 24: Provider release job
@@ -595,6 +595,17 @@ Specs: conversations (delayed provider release). Reconciliation: 21.
   - GREEN: `service/app/Jobs/ReleaseProviderSession.php` (scalar conversation id argument, loads with `withoutGlobalScope` then `runAs`).
   - Note (apply): the job takes the account id with the conversation id and loads the conversation under that account (the boundary rule allows no other unscoped read); the delay config `HRA_RELEASE_DELAY_SECONDS` is read by the lifecycle that queues the job (slice 25).
   - Verify: `cd service && php artisan test --filter=ReleaseProviderSessionTest && php artisan test --coverage --min=90`.
+
+## Unit 0b: Rulings 45-49 (slices 20-24 review)
+
+Commit: `fix(service): serialize config sync runs per config and make the database check parallel-safe`
+Reconciliation: 45, 46, 47, 48, 49.
+
+- [x] 0b.1 Record rulings 45-49 in `reconciliation.md`; amend the `conversations` spec and design AD9 for ruling 45 (one stored line accounts for one provider line).
+- [x] 0b.2 Serialize `SyncAvatarConfig` runs per config (ruling 49).
+  - RED: `service/tests/Feature/SyncSerializationTest.php` (9 tests): a run that finds another in flight queues a fresh copy and is not released, the lock is freed after a run and after an exception, other configs and accounts are not held up, and two runs make one provider call.
+  - GREEN: `service/app/Jobs/Middleware/SerializeConfigSync.php`, `SyncAvatarConfig::middleware()`.
+- [x] 0b.3 `DatabaseConnectionTest` compares the database name exactly in both runners (`hra_test` serially, `hra_test_test_<token>` under `--parallel`), so `php artisan test --parallel` passes.
 
 ## Slice 25: Conversation lifecycle and end
 

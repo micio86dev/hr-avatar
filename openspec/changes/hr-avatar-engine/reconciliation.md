@@ -129,3 +129,11 @@ match this list; where they still differ, this file wins.
 42. `POST /v1/voice-preview` has its own per-key throttle (`throttle:preview`, `HRA_RATE_LIMIT_PREVIEW`, default 10 a minute), in addition to the general secret-key budget; over it the answer is 429 `rate_limited` with `Retry-After` and `X-RateLimit-*`.
 43. `CatalogueSample` (task 19.2) is dropped: no requirement or route uses it.
 44. The voice-preview cache key includes the credential owner and key fingerprint (more secure than the spec tuple `(vendor, voice, model, phrase version, language)`); the design wins.
+
+## Rulings on the slices 20-24 batch (2026-10-19, owner/orchestrator)
+
+45. Transcript merge matches each stored line to **one** provider line (the slice 23 behaviour). The `conversations` spec ("Transcript and reconciliation") and design AD9 are amended: a stored utterance accounts for exactly one provider utterance of the same role and normalized text, so a repeated line is not lost.
+46. `RetryClassifier` and `SecretRedactor` (task 21.2) are dropped for good. Every non-2xx is a retried attempt and `last_error` is a closed set of codes, so there is nothing to classify or redact.
+47. Slice 29 passes the **provider receipt id** (not rows) into `ReconcileTranscript`; the job reads the receipt's hidden payload where it runs, so no transcript text rides on the queue or lands in `failed_jobs`.
+48. The voice-preview budget of 10 a minute per key (`HRA_RATE_LIMIT_PREVIEW`) is accepted (item 42).
+49. `SyncAvatarConfig` runs are serialized per config (`SerializeConfigSync`, a cache lock keyed by account and config id). A run that finds another in flight queues a fresh copy a few seconds later instead of being released, so it spends none of its three attempts. This closes the residual race of item 41: the provider never receives two states at once. The lock expires after 300 s so a dead worker cannot hold a config.

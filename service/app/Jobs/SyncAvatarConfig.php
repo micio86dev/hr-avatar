@@ -8,6 +8,7 @@ use App\AvatarProviders\ProviderRegistry;
 use App\AvatarProviders\SyncBlocked;
 use App\AvatarProviders\SyncStatus;
 use App\Credentials\CredentialResolver;
+use App\Jobs\Middleware\SerializeConfigSync;
 use App\Models\AvatarConfig;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -29,9 +30,9 @@ use Throwable;
  * overtaken by a newer change is a no-op and the newer state keeps waiting for its own run. A run that
  * finds the config already past its revision when it starts makes no provider call at all.
  *
- * Known limit: a run already past that check can still send the older state to the provider while a
- * newer run does the same; the config then stays honest (the older run does not settle it) but the
- * provider-side objects hold whichever call landed last until the next sync.
+ * Runs of one config are serialized (`SerializeConfigSync`): a run that finds another in flight queues
+ * itself again a little later, so the provider never receives two states at once and the one that
+ * lands last is the newest. A run that was overtaken while it waited stops at the start check above.
  */
 final class SyncAvatarConfig implements ShouldQueue
 {
@@ -47,6 +48,14 @@ final class SyncAvatarConfig implements ShouldQueue
     public function backoff(): array
     {
         return [30, 120];
+    }
+
+    /**
+     * @return list<SerializeConfigSync>
+     */
+    public function middleware(): array
+    {
+        return [new SerializeConfigSync];
     }
 
     public function handle(ProviderRegistry $providers, CredentialResolver $credentials): void
