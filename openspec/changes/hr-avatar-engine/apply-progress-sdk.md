@@ -216,3 +216,40 @@ Decisions and deviations:
   now rejects `transport_error` like the other controls.
 - The speaking tracker (audio edges plus "a final line is speaking until its audio starts, bounded
   2 s") is shared by both transports instead of copied.
+
+## Slice 39: IIFE build, size budget, Playwright smoke, SDK CI
+
+| Task | RED (observed) | GREEN | REFACTOR |
+|------|----------------|-------|----------|
+| 39.1 build outputs | `build-outputs.spec.ts`: 4 failed (no `hr-avatar.global.js`); `global-entry.spec.ts`: suite failed (`src/global` not found). After the IIFE existed, 3 failed again: tsup skips `external` for an IIFE and inlined both peers (719 KB); an eval-based global check also failed because the file's `"use strict"` scopes `var` to an eval | `src/global.ts`, two-config `tsup.config.ts` (peers listed through `esbuildOptions`), `build` script `rm -rf dist && tsup`; 21 passed | n/a |
+| 39.2 size gate | `size-script.spec.ts`: 5 failed (`scripts/size.ts` not found) | `scripts/size.ts`; 5 passed | n/a |
+| 39.3 smoke | `bunx playwright test e2e/smoke.spec.ts` with no config, page or server: 1 failed (`page.goto('/')` cannot navigate) | `e2e/smoke.html`, `e2e/serve.ts`, `playwright.config.ts`; chromium and webkit passed | n/a |
+| 39.4 CI | `ci-workflow.spec.ts`: suite failed (no `.github/workflows/sdk.yml`) | `.github/workflows/sdk.yml`; 13 passed | n/a |
+
+### Work Unit Evidence (slice 39)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd sdk && bun run test -- build-outputs global-entry size-script ci-workflow` -> exit 0; full suite 26 files, 359 tests |
+| Runtime harness | `cd sdk && bunx playwright test` -> exit 0, 2 passed (chromium 4.3 s, webkit 4.9 s): the real IIFE in a browser, mock transport, `page.route`-faked service, a 503 on the first `/events` delivery then a retry with identical idempotency keys, then `/end` once |
+| Size | `bun run size` -> exit 0: `index.js` 5,527 B and `hr-avatar.global.js` 5,895 B gzipped (budget 20,000 B) |
+| Coverage | `bun run test:coverage` exit 0 (thresholds 90): all files 100 stmts / 98.58 branches / 100 funcs / 100 lines; `bunx tsc --noEmit` exit 0 (now also checks `scripts/`, `e2e/`, `playwright.config.ts`) |
+| Rollback boundary | `tsup.config.ts` (back to the single ESM+CJS config), `src/global.ts`, `scripts/`, `e2e/`, `playwright.config.ts`, `.github/workflows/sdk.yml`, the four new specs, the `build` script and the tsconfig include/`resolveJsonModule` |
+
+Decisions and deviations:
+- The IIFE entry is `src/global.ts`, not `src/index.ts`: the package entry hangs `connect` off an
+  `HrAvatar` object, so an IIFE of it would be `window.HrAvatar.HrAvatar.connect`. The global
+  exposes `connect`, `HrAvatarError` and `createMockTransport`.
+- All ESM/CJS/IIFE outputs are minified, and the ESM build no longer splits chunks, so
+  `dist/index.js` is the whole core and the size gate measures what an app loads.
+- `size.ts` and `serve.ts` use `node:zlib` and `node:http` (run by Bun) instead of `Bun.gzipSync`
+  and `Bun.serve`: `@types/bun` is not a pinned dependency, and this keeps both files inside
+  `tsc --noEmit`. Budget is 20,000 bytes (decimal KB, the stricter reading).
+- The CI workflow pins actions by release tag (`checkout@v4`, `setup-bun@v2`, `setup-node@v4`,
+  `upload-artifact@v4`) per the session brief, replacing the task's 40-hex SHA rule; no remote was
+  contacted. The workflow test lives in the SDK (`ci-workflow.spec.ts`), not in `service/`.
+- `build-outputs.spec.ts` runs `bun run build` itself in `beforeAll`, so `test:coverage` passes in
+  CI before the `build` step and without a prior local build.
+- Playwright browsers were already installed (chromium 1228, webkit 2311, ffmpeg 1011): no download.
+- `tsup.config.ts` imports `peerDependencies` from `package.json` (`resolveJsonModule`), so no
+  provider package name is hardcoded in the build config.

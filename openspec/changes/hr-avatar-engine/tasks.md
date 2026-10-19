@@ -845,22 +845,22 @@ Specs: client-sdk (provider transports). Port map: `app/providers/heygen.ts` -> 
 Commit: `build(sdk): add the IIFE bundle, size budget, Playwright smoke on Chromium and WebKit, and SDK CI`
 Specs: client-sdk (build outputs and size budget, SDK test gates). Reconciliation: 34, 36.
 
-- [ ] 39.1 Build outputs and IIFE.
+- [x] 39.1 Build outputs and IIFE.
   - RED: `sdk/tests/unit/build-outputs.spec.ts` scenarios "Outputs exist" (`dist/index.{js,cjs,d.ts}`, `dist/mock.*`, `dist/hr-avatar.global.js`), "IIFE global" (`window.HrAvatar.connect` is a function), "Peers excluded" (neither provider library inlined); fails until the IIFE is configured.
   - GREEN: extend `sdk/tsup.config.ts` (IIFE, `globalName HrAvatar`, file `dist/hr-avatar.global.js`, provider libraries external).
   - Verify: `cd sdk && bun run build && bun run test -- build-outputs`.
-- [ ] 39.2 Size gate.
+- [x] 39.2 Size gate.
   - RED: `sdk/tests/unit/size-script.spec.ts` scenario "Size gate": `scripts/size.ts` exits non-zero when the ESM core entry or the IIFE exceeds 20 KB minified + gzip (fixture over budget fails, under passes).
-  - GREEN: `sdk/scripts/size.ts` (`Bun.gzipSync`), script `size`.
+  - GREEN: `sdk/scripts/size.ts` (`node:zlib` gzip, run by Bun, so it is type-checked without a new dependency), script `size`.
   - Verify: `cd sdk && bun run build && bun run size`.
-- [ ] 39.3 Playwright smoke.
+- [x] 39.3 Playwright smoke.
   - RED: `sdk/e2e/smoke.spec.ts` (Chromium + WebKit): on `sdk/e2e/smoke.html` loading the IIFE with `page.route`-faked API responses, connect returns transport `mock`, a scripted avatar line is shown, the transcript is forwarded to `/events` with batch shape and stable idempotency keys, and the end call is made; fails until the page, server and config exist.
-  - GREEN: `sdk/e2e/smoke.html`, `sdk/e2e/serve.ts` (`Bun.serve` of `dist/` and the page), `sdk/playwright.config.ts` (projects `chromium`, `webkit`; Playwright `1.61.1`).
+  - GREEN: `sdk/e2e/smoke.html`, `sdk/e2e/serve.ts` (`node:http` server of `dist/` and the page, run by Bun), `sdk/playwright.config.ts` (projects `chromium`, `webkit`; Playwright `1.61.1`).
   - Verify: `cd sdk && bunx playwright install --with-deps chromium webkit && bunx playwright test`.
-- [ ] 39.4 SDK CI workflow.
-  - RED: `service/tests/Feature/SdkWorkflowTest.php` (or an SDK-side spec) parses `.github/workflows/sdk.yml`: every `uses:` pinned to a 40-hex SHA, steps `bun install --frozen-lockfile`, `bunx tsc --noEmit`, `bun run test:coverage`, `bun run build`, `bun run size`, `bunx playwright install --with-deps chromium webkit`, `bunx playwright test`. SHAs come from an authorized source (see task 2.7).
+- [x] 39.4 SDK CI workflow.
+  - RED: `sdk/tests/unit/ci-workflow.spec.ts` (SDK-side; the session brief pins by release tag, not SHA) parses `.github/workflows/sdk.yml`: every `uses:` pinned to a release tag (`@v4`, `@v2`), steps `bun install --frozen-lockfile`, `bunx tsc --noEmit`, `bun run test:coverage`, `bun run build`, `bun run size`, `bunx playwright install --with-deps chromium webkit`, `bunx playwright test`. Tags need no lookup, so no remote is contacted.
   - GREEN: `.github/workflows/sdk.yml`.
-  - Verify: `cd service && php artisan test --filter=SdkWorkflowTest && cd ../sdk && bun run test:coverage && bun run size`.
+  - Verify: `cd sdk && bun run test -- ci-workflow && bun run test:coverage && bun run size`.
 
 ## Slice 40: Documentation
 

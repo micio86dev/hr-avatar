@@ -25,7 +25,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "rm -rf dist && tsup",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "size": "bun scripts/size.ts"
