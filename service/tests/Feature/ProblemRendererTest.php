@@ -164,11 +164,12 @@ it('answers a server error without a catalogue entry as an opaque internal_error
 it('renders a provider failure as 502 provider_error without the provider\'s words', function (int $status) {
     Route::get('/v1/_probe', fn () => throw ProviderException::fromStatus($status));
 
-    $response = $this->getJson('/v1/_probe');
+    // The request id is the caller's or a random ULID and may spell the status by chance: it is the one member the check leaves out.
+    $response = $this->getJson('/v1/_probe', ['X-Request-Id' => "req-{$status}"]);
 
     expectProblem($response, 502, 'provider_error');
     expect($response->json('detail'))->toBe('The avatar provider request failed.')
-        ->and($response->getContent())->not->toContain((string) $status);
+        ->and(str_replace("req-{$status}", '', $response->getContent()))->not->toContain((string) $status);
 })->with([400, 401, 404, 500, 503]);
 
 it('renders a provider throttle as 429 provider_concurrency_limited', function () {
