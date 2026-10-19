@@ -1,0 +1,56 @@
+{
+  "name": "@hr-avatar/sdk",
+  "version": "0.0.0",
+  "description": "Browser SDK for HR-Avatar real-time avatar conversations.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./mock": {
+      "types": "./dist/mock.d.ts",
+      "import": "./dist/mock.js",
+      "require": "./dist/mock.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "size": "bun scripts/size.ts"
+  },
+  "peerDependencies": {
+    "@daily-co/daily-js": "0.91.0",
+    "@heygen/liveavatar-web-sdk": "0.0.18"
+  },
+  "peerDependenciesMeta": {
+    "@daily-co/daily-js": {
+      "optional": true
+    },
+    "@heygen/liveavatar-web-sdk": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@daily-co/daily-js": "0.91.0",
+    "@heygen/liveavatar-web-sdk": "0.0.18",
+    "@playwright/test": "1.61.1",
+    "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "^3.0.0",
+    "jsdom": "^26.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "5.9.3",
+    "vitest": "^3.0.0"
+  }
+}

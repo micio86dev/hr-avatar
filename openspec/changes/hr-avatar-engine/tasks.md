@@ -745,23 +745,23 @@ Specs: service-foundation (documentation and deployment config as code). Reconci
 Commit: `feat(sdk): scaffold the TypeScript SDK with Bun, tsup, Vitest, error type and API client`
 Specs: client-sdk (connect - error surface and secrets stay private, test gates). Reconciliation: 34.
 
-- [ ] 33.1 Toolchain preflight (STOP gate).
+- [x] 33.1 Toolchain preflight (STOP gate). Local Bun is 1.4.2 (pin 1.4.0); see apply-progress-sdk.md.
   - RED: `bun --version` must print `1.4.0`; `bunx tsc --version` must print `5.9.3` after install. Missing Bun -> STOP and report.
   - GREEN: none.
   - Verify: `bun --version`.
-- [ ] 33.2 Package pins test, then package files.
+- [x] 33.2 Package pins test, then package files.
   - RED: `sdk/tests/unit/package-pins.spec.ts` asserts `name @hr-avatar/sdk`, `type module`, `exports` for `.` and `./mock`, optional peers `@daily-co/daily-js 0.91.0` and `@heygen/liveavatar-web-sdk 0.0.18`, exact `typescript 5.9.3`, `@playwright/test 1.61.1`, `vitest ^3`, `tsup ^8`; fails (no package).
   - GREEN: `sdk/package.json` (scripts `build`, `test`, `test:coverage`, `size`), `sdk/tsconfig.json` (strict), `sdk/tsup.config.ts` (entries `src/index.ts`, `src/mock.ts`; ESM + CJS + dts; IIFE added in slice 39), `sdk/vitest.config.ts` (jsdom, thresholds 90 for lines, branches, functions), `sdk/.gitignore`; `cd sdk && bun install`. Unresolved pin -> STOP.
   - Verify: `cd sdk && bun run test -- package-pins`.
-- [ ] 33.3 `HrAvatarError`.
+- [x] 33.3 `HrAvatarError`.
   - RED: `sdk/tests/unit/errors.spec.ts`: fields `code`, `message`, `recoverable`, `status`, `request_id`; `instanceof Error`.
   - GREEN: `sdk/src/errors.ts`.
   - Verify: `cd sdk && bun run test -- errors`.
-- [ ] 33.4 API client.
+- [x] 33.4 API client.
   - RED: `sdk/tests/unit/api.spec.ts` scenarios "Service error is surfaced" (Problem+JSON -> `HrAvatarError{code,status,request_id}`; 401 `client_secret_expired` etc. mapped), "Secrets stay private" (publishable key and client secret sent only to `baseUrl`, never logged or stored on the returned object), network failure -> recoverable error.
   - GREEN: `sdk/src/api.ts`.
   - Verify: `cd sdk && bun run test -- api`.
-- [ ] 33.5 Anonymity scan.
+- [x] 33.5 Anonymity scan.
   - RED: port `provider-anonymity.spec.ts` (`../frontend/tests/unit/provider-anonymity.spec.ts`, read-only) as `sdk/tests/unit/anonymity.spec.ts`: a file scan of `sdk/src` for the host vocabulary ban list; fails if any term appears.
   - GREEN: keep `sdk/src` clean.
   - Verify: `cd sdk && bun run test -- anonymity && bunx tsc --noEmit && bun run build`.
