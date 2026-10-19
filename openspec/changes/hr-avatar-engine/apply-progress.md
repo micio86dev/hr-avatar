@@ -1316,3 +1316,203 @@ Only mechanical moves, no assertion changed: `ConversationCreateTest` lost the d
 10. **CI memory**: the covered test run needs more than PHP's default 128 MB at this suite size; the workflow now sets `memory_limit=1G` in `setup-php` (follow-up commit `cce6cfa`).
 11. **Client end returns the full conversation resource to the browser**, including the host's `external_ref` and `metadata`, as the spec says.
 12. **Contract notes still pending from earlier batches** (not touched here): `liveavatar` provider-token security scheme wording, LiveAvatar session-token lifetime, Tavus persona `editable` flag; the earlier open decisions 6 and 7 of batch 1 (`trimStrings` exception, endpoint limit answer).
+
+---
+
+# Batch 3: unit 0c and slices 30, 31, 32, 40
+
+Rulings 50-56 of the slices 25-29 review are recorded in `reconciliation.md` (items 50-56) in the unit 0c commit. Baseline before this batch:
+2408 tests. Final: 2666 tests, 8402 assertions, line coverage 100.0 %. Authored lines exclude the generated `openapi.json`.
+
+| Unit | Commit | Full suite after | Authored lines (tests) |
+|---|---|---|---|
+| 0c rulings 50-56 | `520770d` | 2433 | 327 (173) |
+| 30 inbound provider webhook endpoint | `83bdda7` | 2479 | 678 (468) |
+| 31 final service hardening | `4563ccc` | 2609 | 1,111 (930) |
+| (flake fix: the request id in a disclosure check) | `59ef8d4` | 2609 | 5 (5) |
+| 32 Railway configuration as code | `4dd6ea3` | 2650 | 401 (257) |
+| 40 documentation | `4917b13` | 2666 | 1,239 (216; the rest is prose) |
+
+Slices 31 and 40 and slice 30 are above the 400 budget (cohesive: an arch and isolation suite, a documentation set, one endpoint with its
+matrix): recommend `size:exception` for 30, 31 and 40.
+
+## Unit 0c: Rulings 50-56 (tasks 0c.1-0c.6) - complete
+
+Commit subject: `fix(service): read only documented Tavus end statuses, fail a missing-credential transcript job at once and gate readiness on the public base url`
+
+| Item | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 50, 51, 56 | n/a (documentation) | n/a | n/a | recorded in `reconciliation.md`; the provider-webhooks spec, design and task 29.1 amended for 51; README "Known assumptions" for 56 (slice 40) |
+| 52 | `tests/Arch/WalkedAccountsCeilingTest.php` (2) | 2 of 2 failed | 2/2 | `ponytail:` comments at both account loops naming the ceiling and the way past it |
+| 53 | `TavusSessionStatusTest` | 5 failed (4 statuses read as ended; the log case) | 24/24 | allow-list: only `ended`; an unrecognised status is logged by value cut to 32 characters |
+| 54 | `ReconcileTranscriptTest` | 2 failed (the job threw) | 21/21 | `CredentialMissing`; the job fails itself like an unreadable transcript; the failure hook finishes `partial` |
+| 55 | `HealthTest`, `CallbackTokenTest` | 17 of 37 failed | 69/69 | `PublicBaseUrl`; readiness check `public_base_url` while a registered adapter calls back; connect answers 503 `service_unavailable` before any change |
+
+### Work Unit Evidence (unit 0c)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `DB_PORT=55442 php artisan test --filter='TavusSessionStatusTest\|ReconcileTranscriptTest\|HealthTest\|CallbackTokenTest\|WalkedAccountsCeilingTest'`: passed, exit 0 |
+| Full suite | `php artisan test --parallel --processes=4`: 2433 passed, exit 0, 100.0 % |
+| Static analysis / style / OpenAPI | pint, phpstan level 8 (0 errors), `scramble:export` + drift test, Spectral: all exit 0 |
+| Rollback boundary | `PublicBaseUrl`, `CredentialMissing`, the health check, the connect pre-check, the Tavus allow-list, the comments, their tests, spec/design/reconciliation edits |
+
+### Deviations and decisions (unit 0c)
+
+- **Existing assertions changed by a ruling (as asked, said here):** `TavusSessionStatusTest` no longer expects `completed` and `failed` to be ended (53);
+  `ReconcileTranscriptTest` no longer expects `ProviderException` for a missing credential (54); the three exact `checks` bodies of `HealthTest` gain
+  `public_base_url` (55).
+- **Ruling 55, connect.** The earlier behaviour failed the conversation as `provider_error` and answered 500. It now answers 503 `service_unavailable`
+  with a clear detail, before the claim, so the conversation stays `created` and can be connected once the address is set. The log names the setting.
+- The Guardian Angel review of this commit reported `$this->fail()` as undefined on `ReconcileTranscript`: false, the framework's `Queueable` trait includes
+  `InteractsWithQueue` (the tests with a mocked queue job prove the call). Commit passed.
+
+## Slice 30: Inbound provider webhook endpoint (tasks 30.1-30.3) - complete
+
+Commit subject: `feat(service): add the token-authenticated inbound provider webhook endpoint`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 30.1 | `LimitWebhookBodyTest` (5) | part of 34 of 46 failed with the route absent (11 refusal checks passed) | green | exactly 256 KB accepted, one byte over 413, declared Content-Length alone, a body bigger than declared, before the token is judged |
+| 30.2 | `ProviderWebhookTest` (24), `ProviderWebhookIdempotencyTest` (3) | same run | green | valid callback (receipt for the conversation and account, processing queued, ignored events stored and not queued), 11 refusals with one identical 404, a bad token beats a malformed body, malformed body after auth is 422 with nothing stored, form-encoded body malformed, the plain token in no column of any table, taken out of an echoed payload, duplicates (one receipt, one transition, one `conversation.ended`), documented as unauthenticated with a path parameter |
+| 30.2 (limiter) | `ProviderWebhookThrottleTest` (4) | same run | green | 120 a minute per address, 429 `rate_limited` with `Retry-After`, per-address budget, counts valid callbacks too, draws on no key's budget |
+| 30.3 | `ProviderWebhookConfidentialityTest` (10) | same run | green | the token in no log line for six failure modes (including a 500), route name and not path in the log context, not in any exception frame of the application, not echoed, the receipt payload returned by no endpoint |
+
+Mutation checks (not committed): removing the token redaction, the conversation-provider match, and the session-id match each failed 1 to 2 cases.
+
+### Work Unit Evidence (slice 30)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `--filter='ProviderWebhook\|LimitWebhookBodyTest'`: 41 passed, exit 0 |
+| Full suite / high integrity | 2479 passed, 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` exit 0 (the controller joins the zone; the middleware directory was already in it) |
+| Static analysis / style / OpenAPI | pint, phpstan 0 errors, export + drift, Spectral all exit 0 |
+| Runtime harness | the HTTP stack end to end in the tests; the docs run (slice 40) also had the service receive nothing from a provider (mock) |
+| Rollback boundary | `AuthenticateProviderCallback`, `LimitWebhookBody`, `ProviderCallbackRequest`, `ProviderWebhookController`, the route and limiter, the inbound helpers in `tests/Pest.php`, five test files, `openapi.json` |
+
+### Deviations and decisions (slice 30)
+
+- The first Guardian Angel review rejected an inline `Validator` in the controller (rule: validate at the boundary with Form Requests). The authentication moved to a
+  route middleware (`auth.provider`, like `auth.secret` and `auth.client`) and the validation to `ProviderCallbackRequest`. The middleware order keeps
+  the 404 before the 422.
+- The `{provider}` segment must be a registered adapter whose `ingestion()` is `Callback`: `heygen`, `mock` and unknown ids are the same 404, with no provider name in the code.
+- The controller reads the token from the route instead of taking it as an argument, so it appears in no stack trace.
+- The plain token is replaced by `[redacted]` in the raw body before it is decoded: a provider may echo the address it was given (the fixture does).
+- Shared test helpers (`callbackConversation`, `inboundCallback`, `postInbound`, `inboundReceiptCount`) live in `tests/Pest.php` so any parallel worker has them.
+- Signature: none, as Tavus documents none (research.md); the token is the credential.
+
+## Slice 31: Final service hardening (tasks 31.1-31.5) - complete
+
+Commit subject: `test(service): enforce provider-agnostic core, all-routes account isolation, secret non-disclosure and document the common error answers`
+
+| Task | Test file | RED / evidence | GREEN | Notes |
+|---|---|---|---|---|
+| 31.1 | `Arch/ProviderBranchingTest` (+ `SourceScanner`), `Arch/TransportValuesTest` | the first real-tree run found stray literals (database factories: test support, exempted); fixture cases prove detection | green | token-based scanner: comments and docblocks are not findings; transports are exactly `daily`, `liveavatar`, `mock`; a non-literal transport is reported |
+| 31.2 | `Arch/ModelRulesTest` | mutation: emptying `WebhookEndpoint::$hidden` failed 2 cases | green | every model scoped except `Account` and `LlmModel`, secrets hidden, encrypted attributes hidden, no mass-assigned `account_id`, no `var_export`/`print_r`/`var_dump`/`dd`/`dump` (also `\dd(`) in `app/` |
+| 31.3 | `AccountIsolationTest` (43) | mutation: an account scope that no longer filters failed 25 cases | green | every authenticated route (35) with a dataset, writes land in B, lists hold none of A's rows, A's rows byte-identical, a meta-test that fails when a route is missing |
+| 31.4 | `SecretExposureTest` (+3) | passed at once (no leak found); mutation: logging a provider error body failed the sweep | green | provider, LLM, key, webhook secret, callback token and the caller's key across every answer, log, queued job; a failing provider that echoes the keys; exception messages and traces |
+| 31.5 | `OpenApiTest` (+9), `OpenApiDriftTest` (+2), `CiWorkflowTest` (+1) | 5 failed (no `Problem`, no 401/429/404 everywhere); `git rm --cached` made the tracking test fail | green | see decisions |
+| open item | `TrustedProxiesTest` (7) | only the env-wiring test failed first (the framework reads `trustedproxy.proxies` already) | green | `config/trustedproxy.php`, `HRA_TRUSTED_PROXIES` |
+
+### Work Unit Evidence (slice 31)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `--filter='ProviderBranchingTest\|ModelRulesTest\|TransportValuesTest\|AccountIsolationTest\|SecretExposureTest\|OpenApi\|TrustedProxiesTest\|CiWorkflowTest'`: passed, exit 0 |
+| Full suite / high integrity / coverage | 2609 passed, 100.0 %; high integrity exit 0; `php -d memory_limit=1G artisan test --coverage --min=90` exit 0 |
+| Static analysis / style / OpenAPI | pint, phpstan 0 errors, export + drift, Spectral all exit 0 |
+| Rollback boundary | the Arch files, `AccountIsolationTest`, the `SecretExposureTest` sweep, `ProblemDocumentation`, the `OpenApi*` test additions, `config/trustedproxy.php`, the CI step and `.env.example` line, `openapi.json` |
+
+### Deviations and decisions (slice 31)
+
+- **A real defect found in the OpenAPI document.** Every `application/problem+json` response was documented with `{"type": "string"}`, and the 422 and 404 answers
+  inferred by the generator used the framework's `{message}` and `{message, errors}` shapes, which this service never returns. New `ProblemDocumentation`
+  registers the `Problem` schema once and the common `Unauthenticated`, `NotFound`, `ValidationFailed` and `RateLimited` responses, points every error response at
+  `Problem`, adds 401 and 429 to every operation that takes a credential and 404 to every operation with a path parameter, and keeps (and extends) an operation's
+  own answer. The component responses of the framework are removed. The committed `openapi.json` changed accordingly.
+- **Drift gate.** `OpenApiDriftTest` fails when `openapi.json` is not tracked by git (skipped outside a git checkout), and the CI step runs
+  `git add --intent-to-add` before `git diff --exit-code`, because `git diff` ignores an untracked file.
+- **Trusted proxies.** The framework's `TrustProxies` already reads `config('trustedproxy.proxies')`; the new config file feeds it from `HRA_TRUSTED_PROXIES`.
+  Default: none trusted (a forwarded address is ignored). On Railway set `*`; without it the proxy is one address and one caller's failures use everyone's budget.
+- **Idempotent deletes.** Deleting a credential B does not have is a quiet 204 (A's stays); a catalogue read or a voice preview for B without B's credential is a 422, never served with A's.
+- The Guardian Angel review failed the first commit three times over real gaps (`\dd(` not matched, a non-literal transport invisible, and a duplicate 404 in the
+  documentation when a framework response was replaced by a common one); each got a failing test first. Its non-blocking notes: the limiter's 120 is now a named constant; the
+  `trustedproxy` file-text test stays because the behavioural tests beside it prove the effect.
+- The sweep found no leak; the isolation dataset found none either (the earlier slices held).
+
+## Unit (flake): the request id in a disclosure check
+
+Commit `59ef8d4`. `ProblemRendererTest` "renders a provider failure as 502" asserted that the whole body does not contain the provider status (`401`); the body holds the random
+request id, which spells it by chance. Red: with a fixed request id `req-401` the old comparison fails 5 of 5; the id is now the one member left out. Found when the high-integrity
+run failed once with no defect behind it.
+
+## Slice 32: Railway configuration as code (tasks 32.1-32.2) - complete
+
+Commit subject: `build(service): add Railway config files and deployment topology doc (never applied)`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 32.1 | `RailwayFilesTest` (22) | 15 failed (files absent) | green | three files, `$schema`, the Dockerfile build, pre-deploy `migrate` then `LlmModelSeeder`, healthcheck `/v1/health`, the two start commands matching the compose file, the scheduler on one replica, every key within the Railway schema |
+| 32.2 | `Arch/DocsBoundaryTest` | 20 errors (document absent) | green | the variable table parsed and compared with every setting the configuration reads; required/optional marks; host vocabulary; nothing in the repository calls Railway |
+
+### Work Unit Evidence (slice 32)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `--filter='RailwayFilesTest\|DocsBoundaryTest'`: passed, exit 0 |
+| Full suite / high integrity | 2650 passed, 100.0 %; high integrity exit 0 (a first run failed on the flake fixed in `59ef8d4`) |
+| Rollback boundary | the three `railway*.json`, `docs/railway.md`, `RailwayFilesTest`, `DocsBoundaryTest` (railway parts) |
+
+### Deviations and decisions (slice 32)
+
+- **Config as code is deprecated by Railway.** Its reference says files like these keep working for existing services until 2026-12-01 and recommends Infrastructure
+  as Code afterwards. The files follow the brief; `docs/railway.md` says so. Migrating is a later change and the owner's call.
+- No Railway CLI or API was used or called, and nothing was deployed. The schema keys and the config-file-path rule (absolute from the repository root) were read from
+  Railway's public documentation.
+- The healthcheck is liveness (`/v1/health`), as the task says. Readiness also depends on the database, Redis and the public base url; the guide recommends monitoring it instead.
+- The first commit attempt failed the review because the change touched `tests/Arch/VocabularyScanner.php` (a guard that must name the terms it bans): see the open decisions.
+  The change was reverted and the documents are copied into a directory for the unchanged scanner instead.
+
+## Slice 40: Documentation (tasks 40.1-40.3) - complete
+
+Commit subject: `docs: add README, architecture, API and SDK usage guides and record the retention open item`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 40.1 | `Arch/DocsBoundaryTest` (README / architecture / service and SDK READMEs) | 14 of 39 failed (documents absent) | green | retention open item in both documents, local ports, test commands, ratification pointer, known assumptions, the contract, the lazy start, the state machine and the key model |
+| 40.2 | same | same run | green | the curl sequence in order, keys and scopes, webhook verification, every curl call exists in `openapi.json` with its method, no real key |
+| 40.3 | same | same run | green | options, events, controls, error codes, `./mock`, the script-tag recipe, the pinned peer libraries |
+| links | same | a probe document with a missing file and a bad anchor | green | every relative link and heading anchor resolves |
+
+### Work Unit Evidence (slice 40)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `--filter=DocsBoundaryTest`: 39 passed, exit 0 |
+| Runtime harness | the curl sequence of `docs/api-usage.md` run against a local service (`php artisan serve` on a scratch database in the repository's own PostgreSQL, the mock provider, Redis database 9, a loopback receiver); the answers pasted are the real ones. The PHP and Node verification snippets were run against the three real signed deliveries: valid, tampered body and expired timestamp each judged correctly. Scratch database and Redis keys removed afterwards. |
+| Gates | service: full suite 2666 passed 100.0 %; `php -d memory_limit=1G artisan test --coverage --min=90` exit 0 (100.0 %); high integrity `--min=95` exit 0; pint, phpstan, export + drift, Spectral exit 0. SDK: `bunx tsc --noEmit`, `bun run test:coverage` (358 passed, 100 % lines), `bun run build`, `bun run size` (5,511 B and 5,880 B gzipped) all exit 0 |
+| Rollback boundary | `README.md`, `service/README.md`, `sdk/README.md`, `docs/architecture.md`, `docs/api-usage.md`, `docs/sdk-usage.md`, the `DocsBoundaryTest` additions |
+
+### Deviations and decisions (slice 40)
+
+- The task names `docs/sdk-usage.md` (40.3); the brief also asked for `sdk/README.md`. Both exist: the README is short and points at the guide.
+- The mermaid diagrams (state machine, components, event flow) were not rendered here (no renderer offline); their syntax is standard but unverified. The sequence diagram avoids the
+  `participant` keyword because the documents are scanned for host vocabulary.
+- The CDN `loaders` in the SDK guide are examples (esm.sh); the SDK's tests use stand-in libraries, so the guide tells readers to try theirs once.
+- The README states the Tavus and LiveAvatar assumptions of ruling 56 under "Known assumptions".
+
+## Batch 3 summary and open decisions
+
+Existing tests edited: the three rulings above (53, 54, 55); `ProblemRendererTest` (flake); `tests/Pest.php` gained shared helpers; `DocsBoundaryTest`, `OpenApiTest`, `OpenApiDriftTest`,
+`CiWorkflowTest`, `SecretExposureTest` only gained tests.
+
+Open decisions for the owner:
+
+1. **Guard tooling and the Guardian Angel rule.** `service/tests/Arch/VocabularyScanner.php` has to name the host terms it bans, and the review gate reads that as a violation of the
+   boundary rule whenever the file is part of a commit (it passed so far only because it was unchanged and cached). Decide whether `CLAUDE.md` should say that guard tooling under
+   `service/tests/Arch/` is exempt, as `BoundaryTest` already does in code.
+2. **Railway config as code** is deprecated (works for existing services until 2026-12-01); decide when to move to Infrastructure as Code.
+3. **`HRA_TRUSTED_PROXIES`** defaults to trusting none. On Railway it must be `*` (documented); confirm that is the production setting.
+4. **Railway healthcheck** is liveness; confirm that readiness should not gate a rollout.
+5. **Retention** (unchanged): no purge; owner decision pending, recorded in the README.
+6. Slices 30, 31 and 40 exceed the 400-line budget: recommend `size:exception`.
