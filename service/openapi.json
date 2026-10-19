@@ -36,6 +36,9 @@
             "name": "Health"
         },
         {
+            "name": "Provider webhooks"
+        },
+        {
             "name": "Webhook endpoints"
         }
     ],
@@ -1573,6 +1576,130 @@
                 ]
             }
         },
+        "/webhooks/providers/{provider}/{token}": {
+            "post": {
+                "operationId": "webhooks.providers.receive",
+                "description": "Authenticated by the unguessable token in the path alone (a provider cannot send a key). The event is\nstored first, so it is not lost, and is processed afterwards; a callback seen before is answered the\nsame and changes nothing. A token, provider or conversation id that does not match is one identical\n404: the answer does not say which part was wrong. A body above 256 KB is refused before anything else.",
+                "summary": "Receive a provider callback",
+                "tags": [
+                    "Provider webhooks"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProviderCallbackRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "received": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "received"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp` (`validation_failed`).",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Errors overview."
+                                        },
+                                        "errors": {
+                                            "type": "object",
+                                            "description": "A detailed description of each field that failed validation.",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "errors"
+                                    ]
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The token, the provider or the conversation id does not match (`not_found`); the answer is the same for each.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "The body is above 256 KB (`payload_too_large`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "More than 120 callbacks a minute from one address (`rate_limited`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
         "/webhook-endpoints": {
             "get": {
                 "operationId": "webhook-endpoints.index",
@@ -2942,6 +3069,30 @@
                     "enabled"
                 ],
                 "title": "LlmModelResource"
+            },
+            "ProviderCallbackRequest": {
+                "type": "object",
+                "description": "The envelope of a provider callback: a JSON object with the conversation, the event and its time. What a\nprovider adds beyond that is kept as sent. The callback address carries the credential, and a provider may\necho it, so the token is taken out of the body before anything reads it.",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "The provider's own id of the conversation; it must be the one the callback address was minted for."
+                    },
+                    "event_type": {
+                        "type": "string",
+                        "description": "What happened, in the provider's words."
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "When it happened, as the provider wrote it."
+                    }
+                },
+                "required": [
+                    "conversation_id",
+                    "event_type",
+                    "timestamp"
+                ],
+                "title": "ProviderCallbackRequest"
             },
             "ProviderCredentialResource": {
                 "type": "object",

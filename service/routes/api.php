@@ -9,10 +9,12 @@ use App\Http\Controllers\V1\HealthController;
 use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
 use App\Http\Controllers\V1\ProviderCredentialController;
+use App\Http\Controllers\V1\ProviderWebhookController;
 use App\Http\Controllers\V1\TranscriptController;
 use App\Http\Controllers\V1\VoicePreviewController;
 use App\Http\Controllers\V1\WebhookDeliveryController;
 use App\Http\Controllers\V1\WebhookEndpointController;
+use App\Http\Middleware\LimitWebhookBody;
 use App\Http\Middleware\RejectKeyInQuery;
 use Illuminate\Support\Facades\Route;
 
@@ -79,3 +81,8 @@ Route::middleware([RejectKeyInQuery::class, 'auth.client', 'throttle:publishable
     Route::post('conversations/{conversation}/events', [ClientConversationController::class, 'events'])->name('client.conversations.events');
     Route::post('conversations/{conversation}/end', [ClientConversationController::class, 'end'])->name('client.conversations.end');
 });
+
+// Provider callbacks: no key. The token in the path is the credential; calls are limited per address, not per key.
+Route::post('webhooks/providers/{provider}/{token}', [ProviderWebhookController::class, 'receive'])
+    ->middleware(['throttle:provider-webhook', LimitWebhookBody::class, 'auth.provider'])
+    ->name('webhooks.providers.receive');

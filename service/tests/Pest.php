@@ -1,17 +1,21 @@
 <?php
 
 use App\Accounts\CurrentAccount;
+use App\Conversations\ConversationStatus;
 use App\Keys\ClientSecret;
 use App\Keys\KeyGenerator;
 use App\Keys\KeyMode;
 use App\Keys\KeyType;
 use App\Models\Account;
 use App\Models\ApiKey;
+use App\Models\AvatarConfig;
 use App\Models\Conversation;
+use App\Models\ProviderWebhookReceipt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /*
@@ -95,4 +99,39 @@ function captureLogs(): ArrayObject
     });
 
     return $logged;
+}
+
+/**
+ * A connecting Tavus conversation whose callback token (plain) is `$token`; only its hash is stored.
+ */
+function callbackConversation(Account $account, string $token, string $sessionRef = 'c9f2a1c7e4b3d4a1', string $provider = 'tavus'): Conversation
+{
+    $config = inAccount($account, fn () => AvatarConfig::factory()->create(['provider' => 'tavus', 'config' => ['replica_id' => 'r_1', 'persona_id' => 'p_1']]));
+
+    return inAccount($account, fn () => Conversation::factory()->create([
+        'avatar_config_id' => $config->id, 'provider' => $provider, 'status' => ConversationStatus::Connecting,
+        'connecting_at' => now()->subMinute(), 'provider_session_ref' => $sessionRef, 'callback_token_hash' => hash('sha256', $token),
+    ]));
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function inboundCallback(array $overrides = []): array
+{
+    return [...json_decode((string) file_get_contents(__DIR__.'/Fixtures/Tavus/callback_shutdown.json'), true, flags: JSON_THROW_ON_ERROR), ...$overrides];
+}
+
+/** @param array<string, mixed>|string $body */
+function postInbound(string $provider, string $token, array|string $body, array $headers = []): TestResponse
+{
+    $content = is_string($body) ? $body : json_encode($body, JSON_THROW_ON_ERROR);
+
+    return test()->call('POST', "/v1/webhooks/providers/{$provider}/{$token}", [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', ...$headers], $content);
+}
+
+function inboundReceiptCount(): int
+{
+    return ProviderWebhookReceipt::withoutGlobalScopes()->count();
 }

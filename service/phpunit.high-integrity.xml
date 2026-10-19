@@ -16,7 +16,8 @@
         </testsuite>
     </testsuites>
     <!-- Same suite, narrower coverage source: the zones held to 95 %. Slice 25 adds the conversation
-         state machine; slice 26 adds the connect compare-and-set. -->
+         state machine; slice 26 adds the connect compare-and-set; slice 30 adds the inbound webhook
+         authentication. -->
     <source>
         <include>
             <directory>app/Keys</directory>
@@ -26,6 +27,7 @@
             <file>app/Conversations/ConversationLifecycle.php</file>
             <file>app/Conversations/IllegalTransition.php</file>
             <file>app/Conversations/ConnectConversation.php</file>
+            <file>app/Http/Controllers/V1/ProviderWebhookController.php</file>
         </include>
     </source>
     <coverage>

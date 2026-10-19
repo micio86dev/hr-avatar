@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\AuthenticateClient;
+use App\Http\Middleware\AuthenticateProviderCallback;
 use App\Http\Middleware\AuthenticateSecretKey;
 use App\Http\Middleware\ClientCors;
 use App\Http\Middleware\RejectKeyInQuery;
@@ -30,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.secret' => AuthenticateSecretKey::class,
             'auth.client' => AuthenticateClient::class,
+            'auth.provider' => AuthenticateProviderCallback::class,
             'scope' => RequireScope::class,
         ]);
         // Authentication must run before the per-key rate limit (which reads the key) and before

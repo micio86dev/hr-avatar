@@ -48,6 +48,9 @@ class AppServiceProvider extends ServiceProvider
                 ->by((string) ($request->attributes->get('api_key_id') ?? $request->ip())));
         }
 
+        // Provider callbacks carry no key, so their budget is the caller's address (120 a minute, fixed by the spec).
+        RateLimiter::for('provider-webhook', fn (Request $request) => Limit::perMinute(120)->by((string) $request->ip()));
+
         Scramble::configure()
             ->withDocumentTransformers(DocumentIdentity::apply(...))
             ->withDocumentTransformers(SecurityDocumentation::document(...))

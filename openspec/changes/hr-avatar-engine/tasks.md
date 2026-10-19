@@ -729,17 +729,19 @@ Reconciliation: 50, 51, 52, 53, 54, 55, 56.
 Commit: `feat(service): add the token-authenticated inbound provider webhook endpoint`
 Specs: provider-webhooks (inbound endpoint authentication, receipt confidentiality). Reconciliation: 25.
 
-- [ ] 30.1 Body limit middleware.
+- [x] 30.1 Body limit middleware.
   - RED: `service/tests/Feature/LimitWebhookBodyTest.php` scenario "Oversize": above 256 KB (checked on `Content-Length` and on the actual body) -> `413 payload_too_large`.
   - GREEN: `service/app/Http/Middleware/LimitWebhookBody.php`.
   - Verify: `cd service && php artisan test --filter=LimitWebhookBodyTest`.
-- [ ] 30.2 `ProviderWebhookController`.
+- [x] 30.2 `ProviderWebhookController`.
   - RED: `service/tests/Feature/ProviderWebhookTest.php` (security row "Inbound forgery") scenarios "Valid token and matching conversation id" (`200 {"received": true}`), "Unknown token", "Token of another conversation" (payload `conversation_id` != ref), "Unsupported provider segment" (`heygen`, `mock` and unknown ids), "Responses are indistinguishable" (identical 404 body for all failures, nothing persisted), "Malformed body after auth" (422 `validation_failed`, nothing stored), "Plain token never stored"; `ProviderWebhookIdempotencyTest`: duplicate -> 200, one receipt, one transition.
+  - Note (apply): the `{provider}` segment must be a registered provider whose `ingestion()` is `Callback` (no provider name in the controller); the token and the provider are judged before the body, so a malformed body with a bad token is a 404, never a 422.
   - GREEN: `service/app/Http/Controllers/V1/ProviderWebhookController.php`, route `POST /v1/webhooks/providers/{provider}/{token}` (`AssignRequestId` -> `throttle:provider-webhook` per IP -> `LimitWebhookBody`), `RateLimiter::for('provider-webhook')` 120/min, `hash_equals` on the stored hash.
   - Verify: `cd service && php artisan test --filter='ProviderWebhookTest|ProviderWebhookIdempotencyTest'`.
-- [ ] 30.3 Confidentiality.
+- [x] 30.3 Confidentiality.
   - RED: `service/tests/Feature/ProviderWebhookConfidentialityTest.php` scenarios "Token redacted in logs" (the token never appears in log output of a failing callback; log context holds the route name, not the path), "No customer-facing exposure" (receipt payload returned by no endpoint).
   - GREEN: adjust `AssignRequestId` log context and exception reporting if needed.
+  - Note (apply): nothing in `AssignRequestId` had to change. The controller reads the token from the route instead of taking it as an argument, so it is in no stack trace; the plain token is also taken out of the stored payload, since a provider may echo the address it was given.
   - Verify: `cd service && php artisan test --filter=ProviderWebhookConfidentialityTest && php artisan test --coverage --min=90`.
 
 ## Slice 31: Final service hardening
