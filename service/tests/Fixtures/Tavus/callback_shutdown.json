@@ -1,0 +1,8 @@
+{
+  "properties": { "shutdown_reason": "participant_left" },
+  "conversation_id": "c9f2a1c7e4b3d4a1",
+  "webhook_url": "https://hra.example.test/webhooks/providers/tavus/TOKEN",
+  "event_type": "system.shutdown",
+  "message_type": "system",
+  "timestamp": "2026-10-19T12:10:00.000000Z"
+}

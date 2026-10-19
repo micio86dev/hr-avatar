@@ -354,15 +354,15 @@ Specs: provider-adapters (provider contract, mock adapter, error redaction, cont
 Commit: `feat(service): add Tavus adapter start with payload mapping and concurrency guard`
 Specs: provider-adapters (Tavus adapter start, concurrency guard, provider key never leaks). Reconciliation: 17, 33.
 
-- [ ] 10.1 `TavusLanguage` and `TavusPayload` (pure).
+- [x] 10.1 `TavusLanguage` and `TavusPayload` (pure).
   - RED: port from BEAI `TavusProviderTest` (`../api/tests/Unit/C7a/TavusProviderTest.php`, read-only) the pure mapping cases: language map, body shape `conversational_context`, `custom_greeting`, `properties.{language, max_call_duration, participant_left_timeout?}`, `callback_url`, `replica_id`/`persona_id` from config.
   - GREEN: `service/app/AvatarProviders/Tavus/{TavusLanguage,TavusPayload}.php`.
   - Verify: `cd service && php artisan test --filter='TavusLanguage|TavusPayload'`.
-- [ ] 10.2 `TavusConcurrencyGuard`.
+- [x] 10.2 `TavusConcurrencyGuard`.
   - RED: port BEAI `TavusConcurrencyGuardTest` (`../api/tests/Unit/C7a/TavusConcurrencyGuardTest.php`, read-only): scenarios "Retry then succeed", "Exhausted" (`FailureClass::Throttle`), "Non-concurrency 4xx and 5xx are not retried", "Retries disabled" (`tavus.concurrency_retries` 0); `TavusConcurrencyGuardScanTest` (file scan) scenario "Never reaps other conversations": no list or end call to other conversations.
   - GREEN: `service/app/AvatarProviders/Tavus/TavusConcurrencyGuard.php`.
   - Verify: `cd service && php artisan test --filter='TavusConcurrencyGuard'`.
-- [ ] 10.3 `TavusProvider::start`.
+- [x] 10.3 `TavusProvider::start`.
   - RED: `service/tests/Unit/AvatarProviders/Tavus/TavusProviderStartTest.php` scenarios "Request mapping" (verb, path `POST /v2/conversations`, headers and body pinned with `Http::fake`), "Join material" (transport `daily`, `sessionToken` null, `expiresAt`), "Provider key never leaks" (`KeyNeverLeaksTest`: key absent from exceptions, logs, `JoinMaterial`), golden-body `ContractFixtureTest` port (`rg -l 'ProviderContractFixtureTest' ../api/tests`, read-only), 4xx/5xx -> `ProviderException`.
   - GREEN: `service/app/AvatarProviders/Tavus/TavusProvider.php` (`ingestion()` returns `Callback`; other operations arrive in slice 11), `tavus` entry in `service/config/hr-avatar.php` (`credential: true`).
   - Verify: `cd service && php artisan test --filter='TavusProviderStartTest|KeyNeverLeaksTest|ContractFixtureTest'`.
@@ -372,15 +372,15 @@ Specs: provider-adapters (Tavus adapter start, concurrency guard, provider key n
 Commit: `feat(service): add Tavus teardown, transcript, session status and callback event mapping`
 Specs: provider-adapters (teardown, transcript reconciliation, session status), provider-webhooks (mapping). Reconciliation: 20, 25.
 
-- [ ] 11.1 Teardown.
+- [x] 11.1 Teardown.
   - RED: `service/tests/Unit/AvatarProviders/Tavus/TavusTeardownTest.php` scenarios "Normal teardown" (`POST /v2/conversations/{id}/end`, returns true), "Already gone" (404 counts as released), "Provider failure" (returns false, never throws, no message leak).
   - GREEN: `TavusProvider::teardown`.
   - Verify: `cd service && php artisan test --filter=TavusTeardownTest`.
-- [ ] 11.2 Transcript and session status.
+- [x] 11.2 Transcript and session status.
   - RED: `TavusTranscriptTest`: scenario "Tavus mapping" (`assistant`/`replica` -> `avatar`, `user` -> `user`, `system` excluded), "Unknown role" (`TranscriptShapeError`), "Empty transcript" (`TranscriptNotReady`); `TavusSessionStatusTest`: status not active -> `ended`, an HTTP error throws `ProviderException` (an error is never an end).
   - GREEN: `TavusProvider::fetchTranscript`, `fetchSession`.
   - Verify: `cd service && php artisan test --filter='TavusTranscriptTest|TavusSessionStatusTest'`.
-- [ ] 11.3 `TavusEventMapper` and `parseCallback`.
+- [x] 11.3 `TavusEventMapper` and `parseCallback`.
   - RED: `service/tests/Unit/AvatarProviders/Tavus/TavusEventMapperTest.php`: `system.pal_joined` and legacy `system.replica_joined` -> `Joined`; `system.shutdown` -> `Ended` with `providerEndReason` from `properties.shutdown_reason`, else `properties.reason`, else `unknown`; `application.transcription_ready` -> `TranscriptReady` carrying rows; anything else -> `Ignored`; idempotency key `sha256(conversation_id|event_type|timestamp)`.
   - GREEN: `service/app/AvatarProviders/Tavus/TavusEventMapper.php`, `TavusProvider::parseCallback`.
   - Verify: `cd service && php artisan test --filter='TavusEventMapperTest' && php artisan test --coverage --min=90`.

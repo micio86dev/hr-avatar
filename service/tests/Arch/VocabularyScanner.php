@@ -28,6 +28,12 @@ final class VocabularyScanner
         'score', 'scores',
     ];
 
+    /**
+     * Identifiers a provider's own wire format dictates, so an adapter can send them: removed from
+     * a line before it is read, which leaves the rest of that line scanned.
+     */
+    private const PROVIDER_WIRE_IDENTIFIERS = ['participant_left_timeout'];
+
     private const EXEMPT_DIRECTORY = '/tests/Arch/';
 
     /**
@@ -78,7 +84,7 @@ final class VocabularyScanner
         $findings = [];
 
         foreach (file($file, FILE_IGNORE_NEW_LINES) ?: [] as $index => $line) {
-            preg_match_all('/[A-Z]+(?![a-z])|[A-Z]?[a-z]+/', $line, $matches);
+            preg_match_all('/[A-Z]+(?![a-z])|[A-Z]?[a-z]+/', str_replace(self::PROVIDER_WIRE_IDENTIFIERS, '', $line), $matches);
 
             foreach (array_unique(array_map('strtolower', $matches[0])) as $word) {
                 if (in_array($word, self::TERMS, true)) {

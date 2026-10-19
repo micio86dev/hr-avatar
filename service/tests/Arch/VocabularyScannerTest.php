@@ -82,3 +82,12 @@ it('scans every file under every root and skips a missing root', function () {
     expect($findings)->toHaveCount(1);
     expect((new VocabularyScanner)->scan([$this->root.'/does-not-exist']))->toBe([]);
 });
+
+it('allows the provider wire key whose name contains a banned term, and nothing else on that line', function () {
+    expect(scanSource($this->root, "<?php\n\$x = ['participant_left_timeout' => 60];\n"))->toBe([]);
+
+    $findings = scanSource($this->root, "<?php\n\$x = ['participant_left_timeout' => \$participant];\n");
+
+    expect($findings)->toHaveCount(1)->and($findings[0]['term'])->toBe('participant');
+    expect(scanSource($this->root, "<?php\n\$x = 'participant_left';\n"))->toHaveCount(1);
+});

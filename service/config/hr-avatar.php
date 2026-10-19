@@ -2,11 +2,12 @@
 
 use App\AvatarProviders\LiveAvatar\LiveAvatarProvider;
 use App\AvatarProviders\Mock\MockProvider;
+use App\AvatarProviders\Tavus\TavusProvider;
 
 /*
  * The only place the product name lives (plus the key prefix constants in Keys\KeyGenerator).
  * A key is added by the slice that reads it. Still to come: the release delay, the duration ceiling,
- * the Tavus retry settings, the catalogue cache lifetime and the voice vendor classes.
+ * the catalogue cache lifetime and the voice vendor classes.
  */
 return [
 
@@ -28,6 +29,17 @@ return [
     'providers' => [
         'mock' => ['adapter' => MockProvider::class, 'credential' => false],
         'heygen' => ['adapter' => LiveAvatarProvider::class, 'credential' => true, 'event_key_prefix' => 'liveavatar'],
+        'tavus' => ['adapter' => TavusProvider::class, 'credential' => true],
+    ],
+
+    /*
+    | Tavus refuses a new conversation while the account is at its concurrent limit, and frees the slot
+    | of one that just ended a few seconds late: a create is retried this many times, this many
+    | milliseconds apart. 0 retries disables retrying.
+    */
+    'tavus' => [
+        'concurrency_retries' => 3,
+        'concurrency_backoff_ms' => 2000,
     ],
 
     /*
