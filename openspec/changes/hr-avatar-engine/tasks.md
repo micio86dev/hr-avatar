@@ -780,13 +780,15 @@ Specs: service-foundation (boundary rules, account scoping, coverage gates), api
 Commit: `build(service): add Railway config files and deployment topology doc (never applied)`
 Specs: service-foundation (documentation and deployment config as code). Reconciliation: 36.
 
-- [ ] 32.1 Railway files.
+- [x] 32.1 Railway files.
   - RED: `service/tests/Feature/RailwayFilesTest.php` scenario "Railway files are valid": three files parse as JSON; `service/railway.json` has a Dockerfile build, pre-deploy `php artisan migrate --force` followed by `php artisan db:seed --class=LlmModelSeeder --force`, healthcheck `/v1/health`; `service/railway.worker.json` start `php artisan queue:work`; `service/railway.scheduler.json` start `php artisan schedule:work`.
   - GREEN: the three files.
+  - Note (apply): the worker and scheduler restart always; the scheduler is pinned to one replica; a test limits every key to those the Railway schema defines (read from `railway.com/railway.schema.json` on 2026-10-19). Railway deprecated config as code (files keep working for existing services until 2026-12-01); recorded in `docs/railway.md` and the report.
   - Verify: `cd service && php artisan test --filter=RailwayFilesTest`.
-- [ ] 32.2 `docs/railway.md` and docs boundary scan.
+- [x] 32.2 `docs/railway.md` and docs boundary scan.
   - RED: `service/tests/Arch/DocsBoundaryTest.php` scenarios "Env documentation completeness" (table names `APP_KEY`, `DB_URL`, `REDIS_URL`, `HRA_JWT_SECRET`, `HRA_PUBLIC_BASE_URL`, `TAVUS_API_KEY`, `HEYGEN_API_KEY`, `CARTESIA_API_KEY`, `ELEVENLABS_API_KEY`, the optional `HRA_RATE_LIMIT_SECRET`, `HRA_RATE_LIMIT_PUBLISHABLE`, `HRA_RELEASE_DELAY_SECONDS`, `HRA_MAX_DURATION_CEILING`, with the four provider keys marked optional) and "Docs are boundary-clean" (vocabulary scan over `README.md` and `docs/`), plus "never run from this repo".
   - GREEN: `docs/railway.md` (topology: api, worker, scheduler, PostgreSQL, Redis; one config file per service).
+  - Note (apply): the variable table is parsed, so a setting read by `config/hr-avatar.php` or `config/trustedproxy.php` and missing from it fails; the document set is every README plus `docs/*.md` that exists, copied into one directory for the unchanged `VocabularyScanner`, so the slice 40 documents join the scan when they are written. `HRA_TRUSTED_PROXIES` and `HRA_RATE_LIMIT_PREVIEW` are documented too.
   - Verify: `cd service && php artisan test --filter='RailwayFilesTest|DocsBoundaryTest'`.
 
 ## Slice 33: SDK scaffold
