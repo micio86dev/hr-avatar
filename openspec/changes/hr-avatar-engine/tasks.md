@@ -464,15 +464,15 @@ Specs: avatar-configs (resource and CRUD). Reconciliation: 30, 32.
 Commit: `feat(service): add queued avatar config sync with Tavus persona and LiveAvatar registration`
 Specs: avatar-configs (sync requirement). Reconciliation: 30, 33.
 
-- [ ] 17.1 `TavusPersonaSync`.
+- [x] 17.1 `TavusPersonaSync`.
   - RED: port BEAI `TavusPalSync` tests (locate: `rg -l 'TavusPalSync' ../api/tests`, read-only): `PATCH /v2/pals/{palId}` layers + LLM binding body pinned, idempotent, credentials from `ProviderAuth`.
   - GREEN: `service/app/AvatarProviders/Tavus/TavusPersonaSync.php`.
   - Verify: `cd service && php artisan test --filter=TavusPersonaSync`.
-- [ ] 17.2 Adapter `sync` and `SyncResult`.
+- [x] 17.2 Adapter `sync` and `SyncResult`.
   - RED: `service/tests/Unit/AvatarProviders/SyncTest.php`: Tavus delegates to `TavusPersonaSync`; LiveAvatar calls both registrars and stores refs; Mock returns `SyncResult::notRequired()`; `ProviderException` propagates redacted.
   - GREEN: add `sync` to the interface and adapters, `service/app/AvatarProviders/SyncResult.php`.
   - Verify: `cd service && php artisan test --filter=SyncTest`.
-- [ ] 17.3 `SyncAvatarConfig` job and endpoint.
+- [x] 17.3 `SyncAvatarConfig` job and endpoint.
   - RED: `service/tests/Feature/SyncAvatarConfigTest.php`: success -> `synced` + `synced_at`; tries 3, backoff `[30,120]`; `failed()` -> `failed` with `sync_error` through `SecretRedactor`-style redaction (no key, no provider body); `POST /v1/avatar-configs/{id}/sync` -> 202 and dispatches; create/PATCH of a `pending` config dispatches; `Queue::fake` and a real run with `Http::fake`.
   - GREEN: `service/app/Jobs/SyncAvatarConfig.php`, `service/app/Conversations/AvatarConfigSync.php` (dispatch helper), route, controller wiring. If redaction needs the `SecretRedactor` from slice 21, implement the minimal `Redact` helper here and have slice 21 reuse it (no duplicate).
   - Verify: `cd service && php artisan test --filter=SyncAvatarConfigTest && php artisan test --coverage --min=90`.

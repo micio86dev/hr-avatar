@@ -1,15 +1,18 @@
 <?php
 
 use App\AvatarProviders\SyncStatus;
+use App\Jobs\SyncAvatarConfig;
 use App\Models\Account;
 use App\Models\AvatarConfig;
 use App\Models\LlmModel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 
 const AVATAR_CONFIG_MEMBERS = ['id', 'name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref', 'sync_status', 'sync_error', 'synced_at', 'created_at', 'updated_at'];
 
 beforeEach(function () {
+    Queue::fake();
     $this->account = Account::factory()->create();
     [, $this->raw] = issueKey($this->account, ['scopes' => ['avatar_configs:read', 'avatar_configs:write']]);
     [, $this->readOnly] = issueKey($this->account, ['scopes' => ['avatar_configs:read']]);
@@ -443,6 +446,100 @@ describe('DELETE /v1/avatar-configs/{id}', function () {
         avcCall('delete', "/v1/avatar-configs/{$config->id}")->assertNoContent();
 
         avcCall('patch', "/v1/avatar-configs/{$config->id}", ['name' => 'x'])->assertNotFound();
+    });
+});
+
+describe('sync dispatch', function () {
+    it('queues a sync for a config that starts pending, and for none that does not', function (array $body, bool $queued) {
+        $id = avcCall('post', '/v1/avatar-configs', $body)->assertCreated()->json('id');
+
+        $queued ? Queue::assertPushed(SyncAvatarConfig::class, fn (SyncAvatarConfig $job) => $job->accountId === $this->account->id && $job->avatarConfigId === $id) : Queue::assertNothingPushed();
+    })->with([
+        'tavus' => [fn () => avcTavusBody(), true],
+        'heygen with a model' => [['name' => 'H', 'provider' => 'heygen', 'config' => ['avatarId' => 'a'], 'llm_model_id' => 'gem-1'], true],
+        'heygen plain' => [['name' => 'H', 'provider' => 'heygen', 'config' => ['avatarId' => 'a']], false],
+        'mock' => [['name' => 'M', 'provider' => 'mock'], false],
+    ]);
+
+    it('queues a sync when a patch really changes what the provider holds, and only then', function (array $patch, bool $queued) {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'sync_status' => SyncStatus::Synced]);
+
+        avcCall('patch', "/v1/avatar-configs/{$config->id}", $patch)->assertOk();
+
+        $queued ? Queue::assertPushed(SyncAvatarConfig::class, 1) : Queue::assertNothingPushed();
+    })->with([
+        'persona' => [['persona' => ['llm_temperature' => 1]], true],
+        'config' => [['config' => ['replica_id' => 'r2', 'persona_id' => 'p']], true],
+        'name only' => [['name' => 'Renamed'], false],
+        'same config, other key order' => [['config' => ['persona_id' => 'p', 'replica_id' => 'r']], false],
+    ]);
+
+    it('queues nothing for a patch that settles a config as not required', function () {
+        $config = avcMake(['provider' => 'heygen', 'config' => ['avatarId' => 'a'], 'llm_model_id' => 'gem-1', 'sync_status' => SyncStatus::Synced]);
+
+        avcCall('patch', "/v1/avatar-configs/{$config->id}", ['llm_model_id' => null])->assertOk();
+
+        Queue::assertNothingPushed();
+    });
+
+    it('queues the sync that removes a stale LLM configuration when the model is unbound', function () {
+        $config = avcMake(['provider' => 'heygen', 'config' => ['avatarId' => 'a'], 'llm_model_id' => 'gem-1', 'provider_state' => ['llm_configuration_id' => 'llm-1'], 'sync_status' => SyncStatus::Synced]);
+
+        avcCall('patch', "/v1/avatar-configs/{$config->id}", ['llm_model_id' => null])->assertOk()->assertJsonPath('sync_status', 'pending');
+
+        Queue::assertPushed(SyncAvatarConfig::class, 1);
+    });
+});
+
+describe('POST /v1/avatar-configs/{id}/sync', function () {
+    it('queues a sync of a failed config and answers 202 with it pending', function () {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'sync_status' => SyncStatus::Failed, 'sync_error' => 'Provider request failed (status 500)']);
+
+        $response = avcCall('post', "/v1/avatar-configs/{$config->id}/sync")->assertStatus(202);
+
+        expect(array_keys($response->json()))->toBe(AVATAR_CONFIG_MEMBERS)
+            ->and($response->json('sync_status'))->toBe('pending')
+            ->and($response->json('sync_error'))->toBeNull()
+            ->and($config->refresh()->sync_status)->toBe(SyncStatus::Pending);
+        Queue::assertPushed(SyncAvatarConfig::class, fn (SyncAvatarConfig $job) => $job->avatarConfigId === $config->id);
+    });
+
+    it('syncs a synced config again', function () {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'sync_status' => SyncStatus::Synced]);
+
+        avcCall('post', "/v1/avatar-configs/{$config->id}/sync")->assertStatus(202)->assertJsonPath('sync_status', 'pending');
+
+        Queue::assertPushed(SyncAvatarConfig::class, 1);
+    });
+
+    it('refuses a config whose provider needs no objects: a Mock config is never synchronized', function () {
+        $config = avcMake();
+
+        $response = avcCall('post', "/v1/avatar-configs/{$config->id}/sync")->assertStatus(409);
+
+        expect($response->json('code'))->toBe('invalid_state')->and($config->refresh()->sync_status)->toBe(SyncStatus::NotRequired);
+        Queue::assertNothingPushed();
+    });
+
+    it('answers 404 to another account and for a deleted config', function () {
+        $foreign = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p']], Account::factory()->create());
+        $gone = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p']]);
+        $gone->delete();
+
+        avcCall('post', "/v1/avatar-configs/{$foreign->id}/sync")->assertNotFound();
+        avcCall('post', "/v1/avatar-configs/{$gone->id}/sync")->assertNotFound();
+        Queue::assertNothingPushed();
+    });
+
+    it('needs the write scope and a key', function () {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'sync_status' => SyncStatus::Failed]);
+
+        $response = avcCall('post', "/v1/avatar-configs/{$config->id}/sync", raw: $this->readOnly)->assertStatus(403);
+        expect($response->json('code'))->toBe('insufficient_scope');
+        $this->postJson("/v1/avatar-configs/{$config->id}/sync")->assertStatus(401);
+
+        expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed);
+        Queue::assertNothingPushed();
     });
 });
 

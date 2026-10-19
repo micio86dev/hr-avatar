@@ -562,7 +562,7 @@ PATCH of a synced config reset it to `pending`): the controller now compares the
 
 ### Deviations and decisions (slice 16)
 
-- Authored size about 950 lines (about 575 tests), above the 400 budget: five routes, three requests and a resource with the full
+- Authored size about 950 lines (about 500 tests, 450 app), above the 400 budget: five routes, three requests and a resource with the full
   validation matrix; recommend `size:exception`.
 - Route parameter is `{avatarConfig}` (implicit binding applies the account scope and hides soft-deleted rows), not `{id}`.
 - PATCH replaces each member it sends as a whole (`config` is not merged); a member left out is kept. The validation checks the state
@@ -577,3 +577,60 @@ PATCH of a synced config reset it to `pending`): the controller now compares the
   table and stay in slice 20, as the task says.
 - `external_ref` filter: exact and case-sensitive, 1-255 characters (an empty value is a 422, not "no filter").
 - Common 401/403/429 Problem responses remain undocumented in `openapi.json` (slice 31).
+
+## Slice 17: Config sync (tasks 17.1-17.3) - complete
+
+Commit subject: `feat(service): add queued avatar config sync with Tavus persona and LiveAvatar registration`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 17.1 | `tests/Unit/AvatarProviders/Tavus/TavusPersonaSyncTest.php` | `TavusPersonaSync` / `SyncResult` / `SyncBlocked` not found (41 tests with 17.2: 0 passed) | 28/28 | ported from BEAI `TavusPalSyncTest` (one `add /layers` operation, 304 is synced, empty layers send nothing, binding merged next to the temperature, key re-sent every sync, status-only failures) |
+| 17.2 | `tests/Unit/AvatarProviders/SyncTest.php` | `sync` undefined on all three adapters | 15/15 | Tavus delegates; LiveAvatar calls both registrars and the references land in `provider_state` / the ledger; Mock is `SyncResult::notRequired()`; a blocked sync sends nothing |
+| 17.3 | `tests/Feature/SyncAvatarConfigTest.php`, additions to `AvatarConfigEndpointTest.php` | job and `AvatarConfigSync` missing, no `/sync` route, no dispatch on create or patch | 118 across both files | real runs use `dispatchSync` with `Http::fake`; the endpoint tests run under `Queue::fake()` |
+
+A real defect surfaced by the LiveAvatar test (RED): a model built by `create()` holds `provider_state` as null until it is read back,
+and the registrar spread it. `AvatarConfig` now declares the column defaults (`config`, `provider_state` = `{}`), with a model test.
+
+### Work Unit Evidence (slice 17)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='TavusPersonaSync\|SyncTest\|SyncAvatarConfigTest\|AvatarConfigEndpointTest'`: 161 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1404 passed, 3659 assertions; `--coverage --min=90`: total 100.0 %, exit 0 |
+| High integrity | `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 1404 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed |
+| OpenAPI | regenerated (`POST /avatar-configs/{avatarConfig}/sync`: 202, 404, 409); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `serve --port=8100`, bootstrap account: create a Tavus config -> `pending`; `POST .../sync` -> 202 with `sync_status` `pending`; the same call on a Mock config -> 409 `invalid_state`. Three jobs landed on the local Redis queue (`queue:clear` reported 3) and were cleared; the harness rows were deleted |
+| Rollback boundary | `SyncAvatarConfig`, `AvatarConfigSync`, `SyncResult`, `SyncBlocked`, `TavusPersonaSync`, the `sync` interface method and adapter methods, the LiveAvatar constructor dependencies, the `sync` controller action and route, the `AvatarConfig` defaults, the scan-test allowance, their tests, `openapi.json` |
+
+### Deviations and decisions (slice 17)
+
+- Authored size about 1,158 lines (about 750 tests), above the 400 budget: three tasks (persona sync, adapter sync, job plus
+  endpoint) with the failure matrix; recommend `size:exception`.
+- **No `SecretRedactor`/`Redact` helper:** `sync_error` is written from a closed set by construction (a `ProviderException`'s generic
+  sentence, a `SyncBlocked` fixed sentence, or `Synchronization failed.`), so there is nothing to scrub and no second redactor to keep
+  in step with slice 21's. Slice 21 does not need to reuse anything from here.
+- `SyncBlocked` (new, `App\AvatarProviders`): a precondition failure with fixed sentences (provider, language-model or voice-vendor
+  credential missing; config incomplete). Slice 12 had raised these as `ProviderException::noResponse()`, which reads as a network
+  fault. The job fails such a sync at once (`$this->fail()`), without the retries.
+- The Tavus update targets `/v2/pals/{id}` as BEAI's proven call did; the persona must already exist (`persona_id` is required),
+  so the spec scenario "exactly one persona was created" does not apply: the sync updates, it never creates a persona. Creating one
+  on demand would need the persona id stored in `provider_state`; not in the task, left as an open decision.
+- A persona with nothing to push (no knob, no external voice, no model) is not touched and counts as synced; removing the last knob
+  leaves the old value on the persona (documented in the class). The persona's LLM binding is likewise not removed when unbound.
+- `POST /v1/avatar-configs/{id}/sync` answers 202 with the config (`pending`), and 409 `invalid_state` for a config whose provider
+  needs no objects (the spec says "re-dispatch and 202" and also "a mock config is never synchronized"; refusing is the honest
+  reading of both). Decision for the orchestrator if 202 with no job is preferred.
+- A PATCH dispatches only when `config`, `persona`, `llm_model_id` or `voice` really changed and the new state is `pending`; a config
+  that settles as `not_required` queues nothing. Known race (documented on the job): a run that reads the config before a PATCH and
+  finishes after the PATCH's own job can mark the config synced for the older state.
+- `Tavus` sends the model as `layers.tts.tts_model_name` always for an external voice (default per engine), because the update replaces
+  the whole `layers` node.
+- The Tavus file scan (`TavusConcurrencyGuardScanTest`) allows exactly one new call: a PATCH addressed with `rawurlencode($personaId)`,
+  and a new test asserts that only `TavusPersonaSync.php` patches. The ban on listing or ending conversations is unchanged.
+- `TavusProvider` takes `TavusPersonaSync` as a second constructor argument with a default (`new TavusPersonaSync`), so
+  `new TavusProvider` still works in every existing test.
+- `AvatarConfigSync` lives in `App\Conversations` as the task names it, although it is about configs.
+- Guardian Angel findings fixed: the sync state (`sync_status`, `sync_error`, `synced_at`) and `provider_state` are no longer mass-assignable
+  on `AvatarConfig` (written with `forceFill`; a test helper that relied on it was corrected), the controller docs no longer name providers,
+  and two stray comments (`ponytail:` marker, an adapter named in the contract docblock) were reworded.

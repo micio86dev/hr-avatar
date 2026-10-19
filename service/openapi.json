@@ -497,6 +497,57 @@
                 ]
             }
         },
+        "/avatar-configs/{avatarConfig}/sync": {
+            "post": {
+                "operationId": "avatar-configs.sync",
+                "description": "Queues a sync of the provider-side objects the config needs (for example a persona, a\nlanguage-model configuration or a bound voice) and answers 202 with the config, now `pending`.\nUse it to retry a `failed` config or to push again a `synced` one. A config whose provider\nneeds no such objects is refused with 409 `invalid_state`.",
+                "summary": "Synchronize an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "409": {
+                        "description": "The config needs no provider-side objects (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
         "/provider-credentials": {
             "get": {
                 "operationId": "provider-credentials.index",

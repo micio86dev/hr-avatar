@@ -51,15 +51,24 @@ it('never reaches for a conversation list or an active status', function (string
         ->not->toMatch('/\/conversations\?/');
 })->with(fn () => array_map(fn (string $code, string $file) => [$file, $code], tavusAdapterCode(), array_keys(tavusAdapterCode())));
 
-it('only creates a conversation or addresses the one it was given', function (string $file, string $code) {
+it('only creates a conversation, addresses the one it was given, or updates the one persona it syncs', function (string $file, string $code) {
     preg_match_all('/->(get|post|put|patch|delete|head)\(([^;]*)/', $code, $calls, PREG_SET_ORDER);
 
     $strangers = array_filter($calls, function (array $call): bool {
         [, $verb, $arguments] = $call;
         $isCreate = $verb === 'post' && preg_match('/^[^,)]*[\'"]\/conversations[\'"]\s*[,)]/', $arguments) === 1;
 
-        return ! $isCreate && ! str_contains($arguments, '$sessionRef');
+        // The persona update of TavusPersonaSync: one PATCH on the persona id of the config being synced.
+        $isPersonaUpdate = $verb === 'patch' && str_contains($arguments, 'rawurlencode($personaId)');
+
+        return ! $isCreate && ! $isPersonaUpdate && ! str_contains($arguments, '$sessionRef');
     });
 
     expect(array_column($strangers, 0))->toBe([], $file);
 })->with(fn () => array_map(fn (string $code, string $file) => [$file, $code], tavusAdapterCode(), array_keys(tavusAdapterCode())));
+
+it('updates a persona from the persona sync alone', function () {
+    $patchers = array_keys(array_filter(tavusAdapterCode(), fn (string $code) => preg_match('/->patch\(/', $code) === 1));
+
+    expect($patchers)->toBe(['TavusPersonaSync.php']);
+});

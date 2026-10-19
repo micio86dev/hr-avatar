@@ -185,3 +185,9 @@ it('clears a persona and a voice by setting them to null', function () {
     expect($config->fresh()->persona)->toBeNull()->and($config->fresh()->voice)->toBeNull()
         ->and(DB::table('avatar_configs')->where('id', $config->id)->value('persona'))->toBeNull();
 });
+
+it('holds the column defaults before it is read back, so an adapter never meets a null state', function () {
+    $config = new AvatarConfig(['name' => 'Fresh', 'provider' => 'mock']);
+
+    expect($config->config)->toBe([])->and($config->provider_state)->toBe([]);
+});

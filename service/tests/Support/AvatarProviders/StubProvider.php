@@ -10,6 +10,7 @@ use App\AvatarProviders\JoinMaterial;
 use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\SyncResult;
 use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
@@ -35,6 +36,11 @@ abstract class StubProvider implements AvatarProvider
     public function syncRequired(AvatarConfig $config): bool
     {
         return false;
+    }
+
+    public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult
+    {
+        return SyncResult::notRequired();
     }
 
     public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession

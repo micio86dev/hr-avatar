@@ -11,11 +11,15 @@ use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\SyncBlocked;
+use App\AvatarProviders\SyncResult;
 use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptNotReady;
 use App\AvatarProviders\TranscriptShapeError;
 use App\AvatarProviders\VoiceBinding;
+use App\Credentials\CredentialResolver;
 use App\Credentials\ProviderAuth;
+use App\Llm\LlmBindingResolver;
 use App\Models\AvatarConfig;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
@@ -46,7 +50,13 @@ final class LiveAvatarProvider implements AvatarProvider
     /** The context delete runs inside a request, so it is bounded well under the client's default. */
     private const CONTEXT_DELETE_TIMEOUT_SECONDS = 5;
 
-    public function __construct(private readonly LiveAvatarApi $api, private readonly LiveAvatarVoiceRegistrar $voices) {}
+    public function __construct(
+        private readonly LiveAvatarApi $api,
+        private readonly LiveAvatarVoiceRegistrar $voices,
+        private readonly LiveAvatarLlmRegistrar $llm,
+        private readonly LlmBindingResolver $bindings,
+        private readonly CredentialResolver $credentials,
+    ) {}
 
     public function ingestion(): Ingestion
     {
@@ -78,6 +88,38 @@ final class LiveAvatarProvider implements AvatarProvider
         return $config->llm_model_id !== null
             || VoiceBinding::fromArray($config->voice)?->isExternal() === true
             || is_string($config->provider_state['llm_configuration_id'] ?? null);
+    }
+
+    /**
+     * Registers what a session of this config uses and LiveAvatar has to hold: the language-model
+     * configuration (created or updated, or deleted when the model is no longer bound) and the
+     * external voice (bound once, found again through the ledger). The references are kept by the
+     * registrars: the configuration id in `provider_state`, the voice in the ledger.
+     *
+     * Everything that can be missing is checked before the first request, so a sync that is
+     * blocked has sent nothing.
+     */
+    public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult
+    {
+        $binding = $config->llm_model_id === null ? null : ($this->bindings->resolve($config) ?? throw SyncBlocked::llmCredentialMissing());
+        $voice = VoiceBinding::fromArray($config->voice);
+        $external = $voice?->isExternal() === true ? $voice : null;
+
+        if ($external !== null && $this->credentials->for($config->account_id, $external->engine) === null) {
+            throw SyncBlocked::voiceCredentialMissing();
+        }
+
+        if ($binding === null) {
+            $this->llm->forget($config, $auth);
+        } else {
+            $this->llm->ensureConfiguration($config, $binding, $auth);
+        }
+
+        if ($external !== null) {
+            $this->voices->ensureVoice($config->account_id, $auth, $external->engine, $external->voiceId);
+        }
+
+        return SyncResult::synced();
     }
 
     /**
@@ -264,7 +306,7 @@ final class LiveAvatarProvider implements AvatarProvider
     }
 
     /**
-     * ponytail: the unit of `absolute_timestamp` is undocumented, so a number below 1e11 is read as epoch
+     * Assumption: the unit of `absolute_timestamp` is undocumented, so a number below 1e11 is read as epoch
      * seconds and anything above as milliseconds (both are valid until the year 5138); replace with the
      * documented unit once the transcript contract is confirmed. A value that is no time is null.
      */

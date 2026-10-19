@@ -39,10 +39,16 @@ class AvatarConfig extends Model
     /** @use HasFactory<AvatarConfigFactory> */
     use BelongsToAccount, HasFactory, HasPrefixedId, SoftDeletes;
 
-    protected $fillable = [
-        'name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref',
-        'sync_status', 'sync_error', 'synced_at', 'provider_state',
-    ];
+    /**
+     * The column defaults, so a model that was just created holds what the table holds (an object,
+     * never null) before it is read back.
+     *
+     * @var array<string, string>
+     */
+    protected $attributes = ['config' => '{}', 'provider_state' => '{}'];
+
+    /** The members a client may set. The sync state and the adapter's own state are written with forceFill. */
+    protected $fillable = ['name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref'];
 
     protected static function idPrefix(): string
     {

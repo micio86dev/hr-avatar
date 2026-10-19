@@ -10,7 +10,7 @@ use App\Models\AvatarConfig;
  */
 function syncSubject(string $provider, array $attributes = []): AvatarConfig
 {
-    return new AvatarConfig(['name' => 'Subject', 'provider' => $provider, 'config' => [], ...$attributes]);
+    return (new AvatarConfig)->forceFill(['name' => 'Subject', 'provider' => $provider, 'config' => [], ...$attributes]);
 }
 
 it('is always required for Tavus: its persona must carry the config', function (array $attributes) {

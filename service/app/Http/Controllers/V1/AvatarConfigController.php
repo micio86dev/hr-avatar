@@ -4,6 +4,10 @@ namespace App\Http\Controllers\V1;
 
 use App\AvatarProviders\ProviderRegistry;
 use App\AvatarProviders\SyncStatus;
+use App\Conversations\AvatarConfigSync;
+use App\Http\ApiProblem;
+use App\Http\ErrorCode;
+use App\Http\Problem;
 use App\Http\Requests\CreateAvatarConfigRequest;
 use App\Http\Requests\ListAvatarConfigsRequest;
 use App\Http\Requests\UpdateAvatarConfigRequest;
@@ -11,6 +15,7 @@ use App\Http\Resources\AvatarConfigResource;
 use App\Http\Resources\PagedCollection;
 use App\Models\AvatarConfig;
 use Dedoc\Scramble\Attributes\Group;
+use Dedoc\Scramble\Attributes\Response as ResponseDoc;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -59,6 +64,7 @@ class AvatarConfigController
         $config = new AvatarConfig($request->values());
         $config->sync_status = $this->syncStatusFor($config);
         $config->save();
+        AvatarConfigSync::dispatchWhenPending($config);
 
         return (new AvatarConfigResource($config->refresh()))->response()->setStatusCode(201);
     }
@@ -84,15 +90,41 @@ class AvatarConfigController
     public function update(UpdateAvatarConfigRequest $request, AvatarConfig $avatarConfig): AvatarConfigResource
     {
         $avatarConfig->fill($request->changes());
+        $changed = array_any(self::SYNCED_MEMBERS, fn (string $member) => self::differs($avatarConfig, $member));
 
-        if (array_any(self::SYNCED_MEMBERS, fn (string $member) => self::differs($avatarConfig, $member))) {
+        if ($changed) {
             $avatarConfig->sync_status = $this->syncStatusFor($avatarConfig);
             $avatarConfig->sync_error = null;
         }
 
         $avatarConfig->save();
 
+        if ($changed) {
+            AvatarConfigSync::dispatchWhenPending($avatarConfig);
+        }
+
         return new AvatarConfigResource($avatarConfig->refresh());
+    }
+
+    /**
+     * Synchronize an avatar config
+     *
+     * Queues a sync of the provider-side objects the config needs (for example a persona, a
+     * language-model configuration or a bound voice) and answers 202 with the config, now `pending`.
+     * Use it to retry a `failed` config or to push again a `synced` one. A config whose provider
+     * needs no such objects is refused with 409 `invalid_state`.
+     */
+    #[ResponseDoc(409, description: 'The config needs no provider-side objects (`invalid_state`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
+    public function sync(AvatarConfig $avatarConfig): JsonResponse
+    {
+        if (! $this->providers->get($avatarConfig->provider)->syncRequired($avatarConfig)) {
+            throw new ApiProblem(ErrorCode::InvalidState, 'This avatar configuration needs no synchronization.');
+        }
+
+        $avatarConfig->forceFill(['sync_status' => SyncStatus::Pending, 'sync_error' => null])->save();
+        AvatarConfigSync::dispatchWhenPending($avatarConfig);
+
+        return (new AvatarConfigResource($avatarConfig->refresh()))->response()->setStatusCode(202);
     }
 
     /**

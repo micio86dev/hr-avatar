@@ -41,6 +41,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
     Route::middleware('scope:avatar_configs:write')->group(function () {
         Route::post('avatar-configs', [AvatarConfigController::class, 'store'])->name('avatar-configs.store');
         Route::patch('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'update'])->name('avatar-configs.update');
+        Route::post('avatar-configs/{avatarConfig}/sync', [AvatarConfigController::class, 'sync'])->name('avatar-configs.sync');
         Route::delete('avatar-configs/{avatarConfig}', [AvatarConfigController::class, 'destroy'])->name('avatar-configs.destroy');
     });
 

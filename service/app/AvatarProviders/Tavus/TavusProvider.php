@@ -11,6 +11,7 @@ use App\AvatarProviders\ProviderDescription;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\SyncResult;
 use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptNotReady;
 use App\AvatarProviders\TranscriptShapeError;
@@ -37,7 +38,10 @@ final class TavusProvider implements AvatarProvider
 {
     private const BASE_URL = 'https://tavusapi.com/v2';
 
-    public function __construct(private readonly TavusConcurrencyGuard $guard = new TavusConcurrencyGuard) {}
+    public function __construct(
+        private readonly TavusConcurrencyGuard $guard = new TavusConcurrencyGuard,
+        private readonly TavusPersonaSync $personas = new TavusPersonaSync,
+    ) {}
 
     public function ingestion(): Ingestion
     {
@@ -65,6 +69,11 @@ final class TavusProvider implements AvatarProvider
     public function syncRequired(AvatarConfig $config): bool
     {
         return true;
+    }
+
+    public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult
+    {
+        return $this->personas->sync($config, $auth);
     }
 
     /**

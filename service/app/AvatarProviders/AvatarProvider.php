@@ -12,7 +12,7 @@ use App\Models\AvatarConfig;
  *
  * Every network operation receives the resolved ProviderAuth (last, except that `start` is
  * followed by its optional callback URL). This interface grows slice by slice with the operations
- * that have an implementation; the sync and catalogue operations arrive with theirs.
+ * that have an implementation; the catalogue operation arrives with its own.
  */
 interface AvatarProvider
 {
@@ -39,11 +39,20 @@ interface AvatarProvider
     public function syncRequired(AvatarConfig $config): bool;
 
     /**
+     * Creates the provider-side objects the config needs, or updates the ones it already has, and
+     * never duplicates. Runs in a queued job, outside any database transaction.
+     *
+     * @throws ProviderException the provider refused the request or could not be reached
+     * @throws SyncBlocked something the sync needs is missing; nothing was sent
+     */
+    public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult;
+
+    /**
      * Starts a provider session for a conversation. Runs outside any database transaction.
      *
      * The conversation id is not part of the contract's ConversationSpec (which holds exactly the
      * host-neutral settings), so it is its own argument: adapters that name provider objects after
-     * the conversation, and the Mock, need it.
+     * the conversation, or derive their references from it, need it.
      *
      * @throws ProviderException
      */
