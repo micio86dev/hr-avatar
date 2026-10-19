@@ -53,7 +53,7 @@ final class ConversationLifecycle
                 ->whereIn('status', array_column(self::sources($to), 'value'))
                 ->update($this->values($to, $reason, $providerEndReason));
 
-            $conversation->refresh();
+            $conversation->reload();
 
             if ($changed === 0) {
                 if ($conversation->status === $to) {
@@ -160,7 +160,7 @@ final class ConversationLifecycle
 
         if ($conversation->provider_session_ref === null) {
             $this->transcripts->reconcile($conversation, []);
-            $conversation->refresh();
+            $conversation->reload();
 
             return;
         }

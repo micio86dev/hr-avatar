@@ -677,9 +677,10 @@ Specs: conversations (client event ingestion, end, transcript). Reconciliation: 
 Commit: `feat(service): add the conversation sweeper and schedule`
 Specs: conversations (max-duration sweeper). Reconciliation: 16.
 
-- [ ] 28.1 `hra:conversations:sweep`.
+- [x] 28.1 `hra:conversations:sweep`.
   - RED: `service/tests/Feature/SweepConversationsTest.php` scenarios "Overrun live conversation" (`connecting_at + max_duration_seconds + 30 s` -> `ended` `max_duration`), "Within limits", "Never connected" (`created_at + 900 s` -> `ended` `expired`), "Inside the connect window", "Two sweepers" (one `conversation.ended`), goes through `transition()`.
   - GREEN: `service/app/Console/Commands/SweepConversations.php`, `service/routes/console.php` (`everyMinute()->withoutOverlapping()`).
+  - Note (apply): the command walks the accounts table and reads and ends each account's conversations under that account (no unscoped conversation read). `Conversation::reload()` (a scoped re-read) replaces `refresh()` in the lifecycle and connect.
   - Verify: `cd service && php artisan test --filter=SweepConversationsTest && php artisan test --coverage --min=90`.
 
 ## Slice 29: Provider event ingestion and polling

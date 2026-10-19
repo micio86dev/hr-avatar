@@ -82,6 +82,17 @@ class Conversation extends Model
     }
 
     /**
+     * Re-reads the row into this model under the account scope. `refresh()` reads by id alone; a reload
+     * keeps the rule that a conversation is only ever read together with the account it belongs to.
+     */
+    public function reload(): static
+    {
+        $this->setRawAttributes(static::query()->useWritePdo()->whereKey($this->getKey())->firstOrFail()->getAttributes(), true);
+
+        return $this;
+    }
+
+    /**
      * @return BelongsTo<AvatarConfig, $this>
      */
     public function avatarConfig(): BelongsTo

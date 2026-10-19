@@ -1202,3 +1202,33 @@ Mutation checks (not committed): removing the row lock, the grace window, the du
 - A terminal conversation with `ended_at` exactly 60 s ago still accepts events; 61 s is `conversation_closed` (`ended_at + 60 s` in the past).
 - `live` is acted on only for the first stored copy of that key and only when the conversation is `connecting`, under the row lock; a `live` after `live`, in `created`, or after the end is stored without effect.
 - The client end returns the full conversation resource to the browser (the spec says "the conversation resource"), including the host's `external_ref` and `metadata`, which the host already chose to put on a conversation the browser holds.
+
+## Slice 28: Sweeper (task 28.1) - complete
+
+Commit subject: `feat(service): add the conversation sweeper and schedule`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 28.1 | `tests/Feature/SweepConversationsTest.php` (24 cases) | see the note below: 0 of 24 passed with the command and the schedule absent | 24/24 | overrun live and connecting conversations -> `max_duration`, release queued, one `conversation.ended`; boundary (1829 and exactly 1830 s left alone, 1831 ended), the maximum is read per conversation, within limits byte-identical, no session -> ended with an immediate `ready` transcript and no release; never connected -> `expired` at 901 s with `transcript.ready` and no release, 899 and exactly 900 s left alone, a connecting conversation is not "never connected"; ended / failed conversations untouched; two sweepers (one after the other, and one that was already reading a conversation another process ended first: the first reason stands, one event); each account swept under itself with webhooks to its own endpoints only and a quiet account untouched; no conversation is read without its account (every statement carries the account predicate); 103 conversations in chunks; one conversation that cannot be ended (a trigger refuses its update) does not stop the others, is logged by id and exception class (not message) and the command exits 1; output; the schedule is every minute and without overlapping |
+
+**RED honesty note.** The command and the schedule entry were written in the same step as the test file, and the first run of the tests was already green (after two test-side corrections: the shape of the account statement and the log helper, which hides a string-valued `exception` key). RED was then shown by removing the command and the schedule entry: 0 of 24 passed (23 failed on the missing command, one on the missing schedule entry). Mutation checks (not committed): `<=` instead of `<` on either boundary, and a zero margin, each failed 1 to 2 cases.
+
+### Work Unit Evidence (slice 28)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter=SweepConversationsTest`: 24 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2311 passed, 6372 assertions, exit 0; line coverage 100.0 % |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 2311 passed, exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors; `openapi.json` unchanged (no route); Spectral unchanged |
+| Runtime harness | `php artisan hra:conversations:sweep` against a seeded overrun row: the feature test drives the command through `Artisan::call` against the real database; the scheduler wiring is asserted on the `Schedule` |
+| Rollback boundary | `SweepConversations`, `routes/console.php`, `Conversation::reload()` and its two call sites, `ClientSecret::CONNECT_WINDOW_SECONDS` made public, `SweepConversationsTest` |
+
+### Deviations and decisions (slice 28)
+
+- Authored size 434 lines (315 tests): slightly above the 400 budget (the command is about 100 lines; the rest is the test matrix).
+- **No unscoped reads (Guardian Angel finding).** A first version found the accounts with work through one statement that read `conversations` across accounts for their account ids only. The review rejected it: the boundary rule allows exactly two unscoped reads (the key resolver and the inbound token lookup), and a scheduler is no exception. The command now walks the `accounts` table (the tenant root, exempt from scoping; ids only, lazily in chunks of 100) and runs its two scoped queries inside `CurrentAccount::runAs` for each account. The price is two indexed queries per account per run each minute: small for a modest number of accounts, and the point at which it stops being small (a platform-level index of due conversations would need a documented exception to the rule) is recorded under the open decisions.
+- **`Conversation::reload()`** replaces `refresh()` in `ConversationLifecycle` and `ConnectConversation`: `refresh()` reads by id alone, a reload keeps the account scope. Behaviour is otherwise the same.
+- `ClientSecret::CONNECT_WINDOW_SECONDS` (900) is now public so the sweeper and the secret's expiry share one definition of the connect window.
+- A failure while ending one conversation is caught per conversation, logged with the id and the exception class only, and turns the exit code into a failure after the rest have been processed.
+- The polling schedule entry is added by slice 29 in the same file.

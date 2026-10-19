@@ -30,7 +30,7 @@ final class ClientSecret
     private const AUDIENCE = 'hr-avatar-client';
 
     /** How long after creation a conversation may still be connected, before its own duration. */
-    private const CONNECT_WINDOW_SECONDS = 900;
+    public const CONNECT_WINDOW_SECONDS = 900;
 
     /**
      * @throws RuntimeException when HRA_JWT_SECRET is not configured

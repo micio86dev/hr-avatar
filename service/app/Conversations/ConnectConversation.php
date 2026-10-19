@@ -161,7 +161,7 @@ final class ConnectConversation
     private function keep(Conversation $conversation, ProviderSession $session): JoinMaterial
     {
         Conversation::query()->whereKey($conversation->id)->update(['provider_session_ref' => $session->sessionRef, 'provider_context_ref' => $session->contextRef]);
-        $conversation->refresh();
+        $conversation->reload();
 
         if ($conversation->status->isTerminal()) {
             ReleaseProviderSession::dispatch($conversation->account_id, $conversation->id)->delay(config()->integer('hr-avatar.release_delay_seconds'));
