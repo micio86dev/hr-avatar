@@ -60,3 +60,30 @@ Decisions:
   away and `end()` must always resolve.
 - "Interim ignored" is asserted at the conversation level in slice 36 (the outbox is generic; the
   conversation only enqueues final utterances).
+
+## Slice 35: Transport infrastructure and mock
+
+| Task | RED (observed) | GREEN | REFACTOR |
+|------|----------------|-------|----------|
+| 35.1 Transport interface and `loadTransport` | `types.spec.ts` and `load-transport.spec.ts` failed: modules not found | `src/transports/types.ts`, `src/transports/index.ts`; 7 + 9 passed (the default-loader test first logged jsdom canvas errors from the real `daily-js`; the specifiers are now mocked with `vi.mock`) | none |
+| 35.2 mount resolution | `media.spec.ts` failed: `src/media` not found | `src/media.ts`; 4 passed | none |
+| 35.3 mock transport and `./mock` | `mock-transport.spec.ts` failed: `src/mock` not found; after the mock existed, `loadTransport("mock")` still threw `unsupported_transport` (second RED) and a `srcObject` null assertion failed because jsdom leaves it `undefined` (test fixed) | `src/transports/mock.ts`, `src/mock.ts`, `mock` case in `loadTransport`, `src/mock.ts` entry in `tsup.config.ts`; 14 + 1 passed | none |
+
+### Work Unit Evidence (slice 35)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd sdk && bun run test -- load-transport mock-transport media` -> exit 0; full suite 10 files, 110 tests |
+| Runtime harness | `cd sdk && bun run build` -> `dist/mock.{js,cjs,d.ts,d.cts}` emitted next to `dist/index.*`; `bunx tsc --noEmit` exit 0 |
+| Coverage | `bun run test:coverage` exit 0 (thresholds 90): every new file 100% statements/lines/functions; branches 100% |
+| Rollback boundary | `src/transports/{types,index,mock}.ts`, `src/mock.ts`, `src/media.ts`, their four specs and the `src/mock.ts` tsup entry |
+
+Decisions and open points:
+- `JoinMaterial.transport` is an opaque `string` in `src/api.ts` (gga flagged a provider-name union in
+  core). `TransportName` lives in `src/transports/types.ts`, the adapter side.
+- `loadTransport('daily' | 'liveavatar')` resolves the peer library (so a missing package reports
+  `provider_library_missing`) and then rejects with `unsupported_transport`, because the Daily and
+  LiveAvatar transports land in slices 37 and 38. Those slices replace that rejection with their
+  builders and update the "imports the installed library by default" test.
+- The mock emits scripted lines in a `setTimeout(0)` after `start()` resolves, so a host that
+  subscribes right after `await connect()` sees them.

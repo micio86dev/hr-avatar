@@ -785,15 +785,15 @@ Specs: client-sdk (transcript auto-forwarding outbox, completion phrases). Recon
 Commit: `feat(sdk): add transport loading, the scripted mock transport and the ./mock export`
 Specs: client-sdk (provider transports and peer dependencies, exported mock provider). Reconciliation: 34. Design AD12.
 
-- [ ] 35.1 Transport interface and `loadTransport`.
+- [x] 35.1 Transport interface and `loadTransport`.
   - RED: rewrite `../frontend/tests/unit/provider-factory.spec.ts` and `interview-provider-types.spec.ts` (read-only) as `sdk/tests/unit/load-transport.spec.ts` and `types.spec.ts`: scenarios "Lazy import" (library imported only when its transport is chosen), "Missing library" (`HrAvatarError('provider_library_missing')` naming the package), "Override" (`transports` replaces a whole factory, `loaders` replaces only the import), the single switch on `daily|liveavatar|mock`; no `window.__mock*` globals.
   - GREEN: `sdk/src/transports/types.ts`, `sdk/src/transports/index.ts`.
   - Verify: `cd sdk && bun run test -- load-transport types`.
-- [ ] 35.2 Mount resolution.
+- [x] 35.2 Mount resolution.
   - RED: `sdk/tests/unit/media.spec.ts`: a `<video>` mount is used as-is; any other element gets a created `<video>`.
   - GREEN: `sdk/src/media.ts`.
   - Verify: `cd sdk && bun run test -- media`.
-- [ ] 35.3 Mock transport and `./mock` export.
+- [x] 35.3 Mock transport and `./mock` export.
   - RED: `sdk/tests/unit/mock-transport.spec.ts` scenarios "Scripted line" (avatar lines emitted as final `avatar` transcripts once live), simulated avatar speech start/stop, "Simulated close" (transport close -> reason `provider` handled by the conversation in slice 36), every control supported, no network or media I/O.
   - GREEN: `sdk/src/transports/mock.ts`, `sdk/src/mock.ts` (`createMockTransport`, `MockScript`, `MockControls`).
   - Verify: `cd sdk && bun run test -- mock-transport && bun run build && bun run test:coverage`.
