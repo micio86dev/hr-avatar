@@ -825,7 +825,7 @@ Specs: client-sdk (connect, events, controls). Reconciliation: 34. Design SDK ar
 Commit: `feat(sdk): add the Daily transport harvested from the BEAI Tavus provider`
 Specs: client-sdk (provider transports). Port map: `app/providers/tavus.ts` -> `src/transports/daily.ts`.
 
-- [ ] 37.1 Port specs first.
+- [x] 37.1 Port specs first.
   - RED: port `../frontend/tests/unit/tavus-provider.spec.ts` and `tavus-provider-ended.spec.ts` (read-only) to `sdk/tests/unit/daily-transport.spec.ts` and `daily-transport-ended.spec.ts` with an injected fake `daily-js`; rewrite `tavus-provider-steering.spec.ts` as `sdk/tests/unit/send-context.spec.ts` (`append_llm_context`, other transports reject `unsupported_operation`). Cases: replica/pal utterance dedupe, call object rendered into the mount's `<video>`, speaking signals, mic mute with `audioDeviceId`, echo via `conversation.echo`, ended handling. Removed: boundary steering ack, echo filter, `end_interview` tool call.
   - GREEN: `sdk/src/transports/daily.ts`, register in `loadTransport`.
   - Verify: `cd sdk && bun run test -- daily-transport send-context && bun run test:coverage`.
