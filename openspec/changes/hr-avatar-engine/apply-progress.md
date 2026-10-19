@@ -858,6 +858,8 @@ repeated refusals run in a savepoint (`refused()`), as in slice 7.
 
 ## Slice 21: Consumer webhooks - endpoints, signing, destination safety (tasks 21.1-21.3) - complete
 
+Slice 21 commit: `8d7d203`.
+
 Commit subject: `feat(service): add webhook endpoint management, HMAC signing and verification, and destination guard`
 
 | Task | Test file | RED (observed) | GREEN | Notes |
@@ -912,3 +914,44 @@ Test defects fixed on the way (no assertion weakened): none beyond the dataset l
   endpoint cascades to its deliveries once slice 22 adds that table with `ON DELETE CASCADE`.
 - Authored size 1,265 lines (592 tests), above the 400 budget: signer, guard, the validation rule and the endpoint family
   with the full matrices. Recommend `size:exception`.
+
+## Slice 22: Consumer webhooks - dispatch and delivery (tasks 22.1-22.3) - complete
+
+Commit subject: `feat(service): add webhook dispatcher, signed delivery with retries and the delivery log`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 22.1 | `tests/Feature/WebhookDispatcherTest.php` (about 25 cases), `WebhookDispatchTransactionTest.php` (3) | the suite could not load (`DeliveryStatus` / dispatcher missing, dataset error) | green | not subscribed, disabled, other accounts, exact body (compared with an independently built envelope; no provider refs, prompt, token hash or secret), `{}` stays `{}`, `failed` status, `transcript.ready` member for `ready` and `partial` only, one `evt_` per emission and a new one for the next, re-record is a no-op, DB unique, payload hidden, cascade, scoping, CHECKs |
+| 22.2 | `tests/Feature/DeliverWebhookTest.php` (about 40 cases) | same | green | ported from BEAI `DeliverWebhookJobTest` with the HR-Avatar semantics: headers and exact bytes, receiver can verify, 10 s timeout and no redirects (asserted on the real client options), re-signing, every non-2xx retried, the `[10,60,300,1800,7200]` schedule through the sixth failure, recovery, `timeout` / `connection_failed`, terminal rows and missing rows ignored, endpoint disabled during retries, lost-race write is a no-op, DNS rebinding (`destination_not_allowed`, no request), connection pinned with `CURLOPT_RESOLVE` (port, IPv6, no pin for a literal / unresolved / not enforced), job carries the account and delivery ids only, a job of another account does nothing, `failed()` safety net |
+| 22.3 | `tests/Feature/WebhookDeliveryLogTest.php` (about 20), `WebhookExposureTest.php` (4) | same | green | log content, no payload / body / secret / URL, status filter (and across pages), paging, other endpoint's rows, 404 for a foreign endpoint, scope; the secret is in no log line across a failing cycle whatever the receiver or transport says |
+
+The after-commit tests use the real synchronous queue: `Queue::fake()` records a push the moment it is made, so it cannot show
+that a job waits for the commit. With the sync driver "queued after the commit" is observable as "the request is made after the
+commit" (and a rolled-back transaction makes no request). Removing `->afterCommit()` fails three of them (mutation check, not committed).
+
+### Work Unit Evidence (slice 22)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='WebhookDispatcherTest\|WebhookDispatchTransactionTest\|DeliverWebhookTest\|WebhookDeliveryLogTest\|WebhookExposureTest'`: 91 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 1985 passed, 5337 assertions, exit 0; `--coverage`: every new class 100.0 % |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors |
+| OpenAPI | `scramble:export` regenerated (`GET /webhook-endpoints/{webhookEndpoint}/deliveries`, `DeliveryStatus` schema); `OpenApiDriftTest` green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `serve --port=8100`, bootstrap account, endpoint + mock config + conversation created through the API, one delivery row inserted (no outbound request is made from the harness): `GET /v1/webhook-endpoints/{id}/deliveries` -> `{"data":[{"id":...,"event_id":"evt_harness","event_type":"conversation.ended","status":"pending","attempts":1,"last_response_status":500,"last_error":"http_500","next_attempt_at":...,"completed_at":null}],"next_cursor":null}` with no payload; `?status=failed` -> empty. Harness rows deleted |
+| Rollback boundary | migration 100011, `WebhookDelivery`, `DeliveryStatus`, `WebhookDispatcher`, `DeliverWebhook`, `WebhookDeliveryController`, `ListWebhookDeliveriesRequest`, `WebhookDeliveryResource`, the route, their tests, `openapi.json` |
+
+### Deviations and decisions (slice 22)
+
+- Authored size 1,542 lines (1,047 tests), above the 400 budget: dispatcher, job and log with the failure matrices. Recommend `size:exception`.
+- **Retry semantics follow the spec, not BEAI's:** every non-2xx (including a 4xx) is a failed attempt and is retried; there is no permanent-failure class. `last_error` codes: `timeout`, `connection_failed`, `destination_not_allowed`, `http_<status>`, plus two from the design that the spec's list ("a short safe code or message") allows: `endpoint_disabled` (the endpoint was disabled or is gone when the attempt was due) and `internal_error` (the `failed()` safety net).
+- `DeliverWebhook` does not use the queue's retries (`tries` 1): the row's `attempts` is the count, and a failed attempt queues the job again with the next delay. A duplicated job cannot count an attempt twice because every write is `UPDATE ... WHERE status = 'pending' AND attempts = <read>`; the retry is queued only when that write landed.
+- A delivery whose endpoint is disabled (or deleted) at attempt time becomes `failed` without a request; `attempts` stays at what was made. Deleting an endpoint cascades to its deliveries, so a retry queued for it finds no row.
+- **Pinning:** the job connects to the addresses `OutboundHostGuard::vettedAddresses()` returned, through `CURLOPT_RESOLVE` (`host:port:addr1,[ipv6]`, port 443 when the URL names none). It is skipped for an address literal, a host that did not resolve (the attempt then fails as `connection_failed`) and where destinations are not enforced. Verified against the options handed to the HTTP client; no real connection was made.
+- Timeout detection reads the transport exception message for cURL error 28 / "timed out"; every other transport error is `connection_failed`. The message itself is never stored or logged.
+- **The job carries the account id with the delivery id** (like `SyncAvatarConfig`), and loads the delivery under that account: the first version read the row unscoped by id and bound the account from it, which the Guardian Angel review rejected (a ULID is not a credential, and the boundary rule allows only the two credential lookups to read unscoped). A job for the wrong account finds nothing and does nothing (tested, RED first: 35 failures after the signature change). The account id is not a secret, so the queue still holds no URL, secret or body.
+- `failed()` logs the delivery id and the exception class only (an exception message may hold a URL).
+- `webhook_deliveries` rows are written with `insertOrIgnore` (the unique key decides whether this is a repeat) and so carry no Eloquent events; the model is `$guarded = ['*']` and is read, and updated by query, only.
+- The dispatcher binds the conversation's account itself (`CurrentAccount::runAs`), so callers (lifecycle in slice 25, jobs, the sweeper) need not.
+- The dispatcher takes the utterance count as an argument for `transcript.ready`; slice 23 passes it. `transcript.status` in the payload is the conversation's `transcript_status` at the time, so the caller must have set it first.
+- `DeliveryStatus` lives in `App\Webhooks\Outbound` next to `EventType`; the delivery id is a plain lowercase ULID (design: only conversations, configs and endpoints have prefixed ids).
+- Retry delays are not configuration (nothing varies them); they are a constant of the job.

@@ -1507,6 +1507,93 @@
                 ]
             }
         },
+        "/webhook-endpoints/{webhookEndpoint}/deliveries": {
+            "get": {
+                "operationId": "webhook-endpoints.deliveries.index",
+                "description": "Newest first, optionally only those in one `status`. Each entry says how many attempts were made,\nthe last response status, a short `last_error` code (`timeout`, `connection_failed`,\n`destination_not_allowed`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery\nwaiting for a retry, when the next attempt is due. Neither the body that was sent nor anything a\nreceiver answered is ever returned. An endpoint of another account is a 404.",
+                "summary": "List the deliveries of a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "$ref": "#/components/schemas/DeliveryStatus"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WebhookDeliveryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/WebhookDeliveryResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
         "/health": {
             "get": {
                 "operationId": "health.live",
@@ -2259,6 +2346,16 @@
                 ],
                 "title": "CredentialSource"
             },
+            "DeliveryStatus": {
+                "type": "string",
+                "description": "Where a delivery is: `pending` until an attempt gets a 2xx (and while attempts remain), then `succeeded`, or `failed` once the last attempt has failed or the delivery was stopped.\n",
+                "enum": [
+                    "pending",
+                    "succeeded",
+                    "failed"
+                ],
+                "title": "DeliveryStatus"
+            },
             "EndedReason": {
                 "type": "string",
                 "description": "Why a conversation reached a terminal state. The first writer wins and the value never changes.\n",
@@ -2690,6 +2787,66 @@
                     "language"
                 ],
                 "title": "VoicePreviewRequest"
+            },
+            "WebhookDeliveryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "event_id": {
+                        "type": "string"
+                    },
+                    "event_type": {
+                        "$ref": "#/components/schemas/EventType"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/DeliveryStatus"
+                    },
+                    "attempts": {
+                        "type": "integer"
+                    },
+                    "last_response_status": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "last_error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "next_attempt_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "event_id",
+                    "event_type",
+                    "status",
+                    "attempts",
+                    "last_response_status",
+                    "last_error",
+                    "next_attempt_at",
+                    "created_at",
+                    "completed_at"
+                ],
+                "title": "WebhookDeliveryResource"
             },
             "WebhookEndpointResource": {
                 "type": "object",

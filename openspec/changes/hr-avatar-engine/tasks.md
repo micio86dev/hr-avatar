@@ -557,15 +557,15 @@ Commit: `feat(service): add webhook dispatcher, signed delivery with retries and
 Specs: consumer-webhooks (event emission, delivery/retries/backoff, delivery log, non-disclosure). Reconciliation: 27, 28.
 Note: lifecycle-driven emission scenarios are asserted end to end in slice 25; here the dispatcher is driven directly with factory conversations.
 
-- [ ] 22.1 Deliveries schema and `WebhookDispatcher::record`.
+- [x] 22.1 Deliveries schema and `WebhookDispatcher::record`.
   - RED: `service/tests/Feature/WebhookDispatcherTest.php` scenarios "Not subscribed", "Disabled endpoint", "Other accounts' endpoints", "Opaque host data echoed" (exact body: `{id: evt_..., type, created_at, data.conversation{...}}`, `transcript {status, utterance_count}` for `transcript.ready`, no transcript text/provider refs/tokens), one `evt_` id shared across the fan-out, unique `(endpoint, event_type, conversation)` so a re-record is a no-op, rows inserted inside the caller's transaction, `DeliverWebhook` dispatched `afterCommit`.
   - GREEN: migration `webhook_deliveries`, `service/app/Models/WebhookDelivery.php` (`payload` hidden), `service/app/Webhooks/Outbound/WebhookDispatcher.php`.
   - Verify: `cd service && php artisan test --filter=WebhookDispatcherTest`.
-- [ ] 22.2 `DeliverWebhook`.
+- [x] 22.2 `DeliverWebhook`.
   - RED: port BEAI `DeliverWebhookJob` tests (read-only locate) to `service/tests/Feature/DeliverWebhookTest.php`: headers `X-HRA-Signature/Timestamp/Event-Id/Event-Type`, "Success", "Retry schedule" (`[10,60,300,1800,7200]`, sixth failure -> `failed` with `completed_at`), "Timeout" (10 s), "Recovery mid-way", "Endpoint disabled during retries" (marks `failed`, no request), "Retries are re-signed" (fresh timestamp each attempt), "Redirects not followed", "DNS rebinding at delivery" (request pinned to the checked address; blocked address = failed attempt `destination_not_allowed`, no request sent), "Signing zone coverage", "Does not block the request", `failed()` safety net, `last_error` only `timeout|connection_failed|destination_not_allowed|http_<status>`.
   - GREEN: `service/app/Jobs/DeliverWebhook.php`.
   - Verify: `cd service && php artisan test --filter=DeliverWebhookTest`.
-- [ ] 22.3 Delivery log and non-disclosure.
+- [x] 22.3 Delivery log and non-disclosure.
   - RED: `service/tests/Feature/WebhookDeliveryLogTest.php` scenarios "Log content", "No bodies or secrets", "Filter" (`status`), "Foreign endpoint" (404); `WebhookExposureTest` "Failed job record" (the failed-job payload holds only the delivery id).
   - GREEN: `service/app/Http/Controllers/V1/WebhookDeliveryController.php`, resource, route.
   - Verify: `cd service && php artisan test --filter='WebhookDeliveryLogTest|WebhookExposureTest' && php artisan test --coverage --min=90`.

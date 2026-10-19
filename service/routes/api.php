@@ -9,6 +9,7 @@ use App\Http\Controllers\V1\LlmCredentialController;
 use App\Http\Controllers\V1\LlmModelController;
 use App\Http\Controllers\V1\ProviderCredentialController;
 use App\Http\Controllers\V1\VoicePreviewController;
+use App\Http\Controllers\V1\WebhookDeliveryController;
 use App\Http\Controllers\V1\WebhookEndpointController;
 use App\Http\Middleware\RejectKeyInQuery;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +59,7 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::get('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'show'])->name('webhook-endpoints.show');
         Route::patch('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'update'])->name('webhook-endpoints.update');
         Route::delete('webhook-endpoints/{webhookEndpoint}', [WebhookEndpointController::class, 'destroy'])->name('webhook-endpoints.destroy');
+        Route::get('webhook-endpoints/{webhookEndpoint}/deliveries', [WebhookDeliveryController::class, 'index'])->name('webhook-endpoints.deliveries.index');
     });
 
     Route::post('conversations', [ConversationController::class, 'store'])->middleware('scope:conversations:write')->name('conversations.store');
