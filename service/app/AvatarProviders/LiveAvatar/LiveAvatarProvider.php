@@ -9,11 +9,16 @@ use App\AvatarProviders\JoinMaterial;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\TranscriptLine;
+use App\AvatarProviders\TranscriptNotReady;
+use App\AvatarProviders\TranscriptShapeError;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use LogicException;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -31,6 +36,9 @@ final class LiveAvatarProvider implements AvatarProvider
 {
     /** LiveAvatar documents no token lifetime; the browser joins right after connect, so one hour is a ceiling, not a promise. */
     private const JOIN_WINDOW_SECONDS = 3600;
+
+    /** The `SessionEndReasonEnum` value recorded when this service ends a session itself. */
+    private const STOP_REASON = 'USER_CLOSED';
 
     /** The context delete runs inside a request, so it is bounded well under the client's default. */
     private const CONTEXT_DELETE_TIMEOUT_SECONDS = 5;
@@ -79,24 +87,76 @@ final class LiveAvatarProvider implements AvatarProvider
         ));
     }
 
+    /**
+     * `POST /sessions/stop` is the only way LiveAvatar offers to end a session (`DELETE /sessions/{id}`
+     * answers 405 and leaves it running). A session that is already gone (404) counts as released.
+     * The context is deleted only once the session is released: one still attached to a live session
+     * must not be deleted from under it. A failed context delete never changes the result.
+     */
     public function teardown(string $sessionRef, ?string $contextRef, ProviderAuth $auth): bool
     {
-        throw new LogicException('LiveAvatar teardown arrives with slice 14.');
+        try {
+            $response = $this->api->call($auth, 'POST', '/sessions/stop', ['session_id' => $sessionRef, 'reason' => self::STOP_REASON]);
+        } catch (ProviderException $error) {
+            Log::warning('LiveAvatar teardown failed', $error->context());
+
+            return false;
+        }
+
+        if (! $response->successful() && $response->status() !== 404) {
+            Log::warning('LiveAvatar teardown failed', ['status_class' => intdiv($response->status(), 100).'xx']);
+
+            return false;
+        }
+
+        $this->deleteContext($contextRef, $auth);
+
+        return true;
     }
 
+    /**
+     * `GET /sessions/{id}/transcript` answers `data.transcript_data[]` rows of `{role, transcript,
+     * absolute_timestamp, relative_timestamp}` and `data.session_active`. Only the first page is
+     * read: how `next_timestamp` paginates is undocumented (open item in the research notes).
+     */
     public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array
     {
-        throw new LogicException('LiveAvatar transcript arrives with slice 14.');
+        $response = $this->api->orFail($this->api->call($auth, 'GET', '/sessions/'.rawurlencode($sessionRef).'/transcript'));
+
+        if ($response->json('data.session_active') === true) {
+            throw new TranscriptNotReady('The LiveAvatar session is still active.');
+        }
+
+        $rows = $response->json('data.transcript_data');
+
+        if (! is_array($rows) || ! array_is_list($rows)) {
+            throw new TranscriptShapeError('The LiveAvatar transcript has no list of rows.');
+        }
+
+        return array_map($this->line(...), $rows);
     }
 
+    /**
+     * `GET /sessions/{id}`: a session is over when `end_at` or `end_reason` is set. A reply that is
+     * not a session is a failure, never an end: a wrong "ended" would cut a live conversation.
+     */
     public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus
     {
-        throw new LogicException('LiveAvatar session status arrives with slice 14.');
+        $session = $this->api->orFail($this->api->call($auth, 'GET', '/sessions/'.rawurlencode($sessionRef)))->json('data');
+
+        if (! is_array($session)) {
+            throw ProviderException::noResponse();
+        }
+
+        $reason = $session['end_reason'] ?? null;
+        $ended = ($session['end_at'] ?? null) !== null || $reason !== null;
+
+        return new SessionStatus($ended, $ended ? (is_string($reason) && $reason !== '' ? $reason : 'unknown') : null);
     }
 
     public function parseCallback(array $payload): array
     {
-        throw new LogicException('LiveAvatar callbacks arrive with slice 14.');
+        return [];
     }
 
     /**
@@ -136,10 +196,14 @@ final class LiveAvatarProvider implements AvatarProvider
      * Best effort and silent on failure: the session it served is gone or was never created, so a
      * context that survives costs a stale entry, not a conversation. An already deleted one is success.
      */
-    private function deleteContext(string $contextId, ProviderAuth $auth): void
+    private function deleteContext(?string $contextRef, ProviderAuth $auth): void
     {
+        if ($contextRef === null || $contextRef === '') {
+            return;
+        }
+
         try {
-            $response = $this->api->call($auth, 'DELETE', '/contexts/'.rawurlencode($contextId), timeout: self::CONTEXT_DELETE_TIMEOUT_SECONDS);
+            $response = $this->api->call($auth, 'DELETE', '/contexts/'.rawurlencode($contextRef), timeout: self::CONTEXT_DELETE_TIMEOUT_SECONDS);
 
             if (! $response->successful() && $response->status() !== 404) {
                 Log::warning('LiveAvatar context delete failed', ['status_class' => intdiv($response->status(), 100).'xx']);
@@ -147,5 +211,53 @@ final class LiveAvatarProvider implements AvatarProvider
         } catch (ProviderException $error) {
             Log::warning('LiveAvatar context delete failed', $error->context());
         }
+    }
+
+    /**
+     * `user` and `avatar` are the contract. `assistant` and `agent` are read as the avatar because the
+     * vocabulary the transcript endpoint uses was never confirmed beyond them; any other role is drift
+     * and raises, so a new one cannot be quietly attributed to the wrong side.
+     */
+    private function line(mixed $row): TranscriptLine
+    {
+        if (! is_array($row) || ! is_string($row['role'] ?? null) || ! is_string($row['transcript'] ?? null)) {
+            throw new TranscriptShapeError('A LiveAvatar transcript row has no role or text.');
+        }
+
+        $role = match ($row['role']) {
+            'user' => TranscriptLine::USER,
+            'avatar', 'assistant', 'agent' => TranscriptLine::AVATAR,
+            default => throw new TranscriptShapeError('A LiveAvatar transcript row has an unknown role.'),
+        };
+
+        return new TranscriptLine($role, $row['transcript'], self::instant($row['absolute_timestamp'] ?? null), self::offsetSeconds($row['relative_timestamp'] ?? null));
+    }
+
+    /**
+     * ponytail: the unit of `absolute_timestamp` is undocumented, so a number below 1e11 is read as epoch
+     * seconds and anything above as milliseconds (both are valid until the year 5138); replace with the
+     * documented unit once the transcript contract is confirmed. A value that is no time is null.
+     */
+    private static function instant(mixed $value): ?DateTimeInterface
+    {
+        if (is_numeric($value)) {
+            return CarbonImmutable::createFromTimestampMsUTC((int) ($value < 1e11 ? $value * 1000 : $value));
+        }
+
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    /** `relative_timestamp` is milliseconds from the start of the session (assumed, like its sibling). */
+    private static function offsetSeconds(mixed $value): ?float
+    {
+        return is_numeric($value) ? (float) $value / 1000 : null;
     }
 }

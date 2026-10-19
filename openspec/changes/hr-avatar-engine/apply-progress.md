@@ -434,3 +434,50 @@ cleanup is shown for the delete succeeding, 404, 5xx and timing out.
 - Guardian Angel notes from slice 12 handled here: `isUnknownSecret` now documents the observed message it matches. The voice
   registrar's `noResponse()` for a precondition failure and the LLM secret name carrying a truncated hash of the model key
   (the vendor already holds the key itself; the label is not a credential) are kept and recorded above.
+
+Slice 13 commit: `863028e`.
+
+## Slice 14: LiveAvatar adapter - remaining operations (tasks 14.1-14.3) - complete (LiveAvatar lane)
+
+Commit subject: `feat(service): add LiveAvatar teardown, transcript and session status`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 14.1 | `tests/Unit/AvatarProviders/LiveAvatar/LiveAvatarTeardownTest.php` | the slice 13 placeholder threw `LogicException` in every case | 21/21 | ported from BEAI `HeygenProviderTest` teardown cases; the context delete reuses the slice 13 private method (now null-safe) |
+| 14.2 | `LiveAvatarTranscriptTest.php` | `LogicException` instead of `TranscriptNotReady` / `TranscriptShapeError` / lines | 28/28 | ported from BEAI `reconcileTranscript` cases, rewritten for the `data.transcript_data` / `absolute_timestamp` shape the research found |
+| 14.3 | `LiveAvatarSessionStatusTest.php` | `LogicException` | 21/21 (RED for the three files together: 62 tests, 0 passed) | `parseCallback` returns `[]` |
+
+Triangulation: roles, timestamp shapes, malformed rows and answers, end reasons and failure statuses are datasets.
+
+### Work Unit Evidence (slice 14)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='LiveAvatar'`: 204 passed, 436 assertions, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test --coverage --min=90`: 944 passed, 2736 assertions, total 100.0 %, every LiveAvatar class 100.0 %, exit 0 |
+| High integrity | `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 944 passed, 100.0 %, exit 0 |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8): passed; Scramble drift tests (`--filter=OpenApiDrift`) 2 passed; `openapi.json` unchanged |
+| Runtime harness | N/A-WIRE by task: no route or process consumes these operations until slices 23-29 (reconciler, release job, poller); each request is pinned with `Http::fake` (verb, URL, header, body) under `Http::preventStrayRequests()` |
+| Rollback boundary | the `teardown`, `fetchTranscript`, `fetchSession`, `parseCallback` bodies and the timestamp helpers in `LiveAvatarProvider.php` (back to the slice 13 placeholders), and the three test files |
+
+### Deviations and decisions (slice 14)
+
+- Authored size 476 changed lines (119 added and 7 removed in the adapter, 350 in tests): slightly above the 400 budget for three cohesive
+  operations of one class; recommend `size:exception`.
+- **Roles:** `user` and `avatar` pass through as the spec says; `assistant` and `agent` are also read as the avatar, because BEAI's
+  fixtures used `assistant` and the vocabulary of the transcript endpoint was never confirmed. BEAI's `candidate` role is dropped
+  (host vocabulary) and is now a shape error, like any other unknown role. If a live check shows only `user`/`avatar`, the two
+  synonyms can go.
+- **Timestamps (assumptions, flagged `ponytail:` in the code):** `absolute_timestamp` may be epoch milliseconds, epoch seconds
+  (below 1e11), a numeric string or an ISO 8601 string; `relative_timestamp` is read as milliseconds. A value that is none of these
+  is null (the contract allows null), never invented. BEAI's `time_ms` field was wrong per the research and is not read.
+- `session_active` is read from `data.session_active` (same envelope as `transcript_data`); only the first transcript page is read,
+  since `next_timestamp` pagination is undocumented (research open item). Both are recorded for slice 23 (reconciler) to revisit
+  with a live session.
+- `fetchSession` returns `endReason` `unknown` when LiveAvatar reports `end_at` without a reason (or a reason that is not text), so
+  an ended session always carries a reason as the spec requires. A `200` whose body has no `data` object is a `ProviderException`, not an end.
+- A failed transcript fetch raises `ProviderException` (BEAI returned `[]` for a non-2xx): the contract says an error is never an
+  empty transcript, and an empty one would let the reconciler replace stored lines with nothing.
+- A transcript shape error message never quotes the row (no text, no role).
+- Nothing in the adapter calls `LiveAvatarApi::call` without catching `ProviderException` where the contract says "never throws"
+  (`teardown`, the context delete); `fetchTranscript` and `fetchSession` let it propagate as the contract says.

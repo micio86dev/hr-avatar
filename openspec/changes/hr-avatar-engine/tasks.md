@@ -418,15 +418,15 @@ Specs: provider-adapters (HeyGen LiveAvatar adapter start). Reconciliation: 23.
 Commit: `feat(service): add LiveAvatar teardown, transcript and session status`
 Specs: provider-adapters (teardown, transcript reconciliation, session status polling surface). Reconciliation: 20, 24.
 
-- [ ] 14.1 Teardown.
+- [x] 14.1 Teardown.
   - RED: `LiveAvatarTeardownTest`: scenarios "Normal teardown" (`POST /v1/sessions/stop {session_id, reason: USER_CLOSED}` then context delete), "Already gone", "Provider failure" (false, no throw), "Context removal".
   - GREEN: `LiveAvatarProvider::teardown`.
   - Verify: `cd service && php artisan test --filter=LiveAvatarTeardownTest`.
-- [ ] 14.2 Transcript.
+- [x] 14.2 Transcript.
   - RED: `LiveAvatarTranscriptTest`: scenario "LiveAvatar mapping" (`GET /v1/sessions/{id}/transcript`, rows `{role, transcript, absolute_timestamp}` -> lines), `session_active=true` -> `TranscriptNotReady`, "Unknown role"/shape drift -> `TranscriptShapeError`.
   - GREEN: `LiveAvatarProvider::fetchTranscript`.
   - Verify: `cd service && php artisan test --filter=LiveAvatarTranscriptTest`.
-- [ ] 14.3 Session status and callbacks.
+- [x] 14.3 Session status and callbacks.
   - RED: `LiveAvatarSessionStatusTest`: scenarios "LiveAvatar active", "LiveAvatar ended" (`end_at` or `end_reason` non-null; `endReason` = `end_reason`), "Error is not an end" (HTTP error throws `ProviderException`); `parseCallback` returns `[]`.
   - GREEN: `LiveAvatarProvider::fetchSession`, `parseCallback`.
   - Verify: `cd service && php artisan test --filter='LiveAvatarSessionStatusTest' && php artisan test --coverage --min=90`.
