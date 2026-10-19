@@ -54,7 +54,7 @@ it('survives a dependency failure for liveness', function () {
 it('reports readiness when both dependencies answer', function () {
     $this->get('/v1/health/ready')
         ->assertOk()
-        ->assertExactJson(['status' => 'ok', 'checks' => ['database' => 'ok', 'redis' => 'ok']]);
+        ->assertExactJson(['status' => 'ok', 'checks' => ['database' => 'ok', 'redis' => 'ok', 'public_base_url' => 'ok']]);
 });
 
 it('reports readiness failure with the failing dependency named', function (string $broken, array $checks) {
@@ -68,8 +68,8 @@ it('reports readiness failure with the failing dependency named', function (stri
         ->and($response->json('checks'))->toBe($checks)
         ->and($response->json('request_id'))->toBe($response->headers->get('X-Request-Id'));
 })->with([
-    'redis down' => ['redis', ['database' => 'ok', 'redis' => 'failed']],
-    'database down' => ['database', ['database' => 'failed', 'redis' => 'ok']],
+    'redis down' => ['redis', ['database' => 'ok', 'redis' => 'failed', 'public_base_url' => 'ok']],
+    'database down' => ['database', ['database' => 'failed', 'redis' => 'ok', 'public_base_url' => 'ok']],
 ]);
 
 it('exposes no versions, hostnames or connection strings when a dependency fails', function () {
@@ -99,4 +99,52 @@ it('logs which dependency failed, never why', function () {
     $this->get('/v1/health/ready')->assertStatus(503);
 
     Log::shouldHaveReceived('warning')->once()->with('Readiness check failed.', ['dependency' => 'redis']);
+});
+
+// Ruling 55: a provider that calls back needs an address to call, so readiness fails without one.
+describe('the public base url', function () {
+    it('fails readiness when it is unset and a registered provider calls back', function (?string $value) {
+        config()->set('hr-avatar.public_base_url', $value);
+
+        $response = $this->get('/v1/health/ready');
+
+        $response->assertStatus(503);
+        expect($response->json('code'))->toBe('service_unavailable')
+            ->and($response->json('checks'))->toBe(['database' => 'ok', 'redis' => 'ok', 'public_base_url' => 'failed']);
+    })->with([
+        'unset' => [null],
+        'empty' => [''],
+        'blank' => ['   '],
+        'no scheme' => ['hra.example.test'],
+        'not http' => ['ftp://hra.example.test'],
+        'no host' => ['https://'],
+    ]);
+
+    it('accepts an http or https address, with or without a trailing slash', function (string $value) {
+        config()->set('hr-avatar.public_base_url', $value);
+
+        $this->get('/v1/health/ready')->assertOk()->assertJsonPath('checks.public_base_url', 'ok');
+    })->with(['https://hra.example.test', 'https://hra.example.test/', 'http://localhost:8100']);
+
+    it('is not asked for when no registered provider calls back', function () {
+        config()->set('hr-avatar.public_base_url', null);
+        config()->set('hr-avatar.providers', ['mock' => config('hr-avatar.providers.mock'), 'heygen' => config('hr-avatar.providers.heygen')]);
+
+        $this->get('/v1/health/ready')->assertOk()->assertExactJson(['status' => 'ok', 'checks' => ['database' => 'ok', 'redis' => 'ok']]);
+    });
+
+    it('logs which check failed and never the value', function () {
+        config()->set('hr-avatar.public_base_url', 'not-an-address');
+        Log::spy();
+
+        $this->get('/v1/health/ready')->assertStatus(503);
+
+        Log::shouldHaveReceived('warning')->once()->with('Readiness check failed.', ['dependency' => 'public_base_url']);
+    });
+
+    it('leaves liveness alone', function () {
+        config()->set('hr-avatar.public_base_url', null);
+
+        $this->get('/v1/health')->assertOk()->assertExactJson(['status' => 'ok']);
+    });
 });

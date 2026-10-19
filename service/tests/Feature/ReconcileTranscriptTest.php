@@ -8,6 +8,7 @@ use App\AvatarProviders\TranscriptShapeError;
 use App\Conversations\ConversationStatus;
 use App\Conversations\EndedReason;
 use App\Conversations\TranscriptStatus;
+use App\Credentials\CredentialMissing;
 use App\Credentials\ProviderAuth;
 use App\Jobs\ReconcileTranscript;
 use App\Models\Account;
@@ -200,15 +201,36 @@ describe('the provider\'s credential', function () {
         expect(storedLines($conversation))->toBe([['provider', 'user', 'Hi']]);
     });
 
-    it('is a failure to retry when the provider needs a key and there is none, without any request', function () {
+    // Ruling 54: a missing key will not appear by waiting, so the five attempts are not spent on it.
+    it('fails the job at once when the provider needs a key and there is none, without any request', function () {
         config()->set('hr-avatar.platform_keys.tavus', null);
         $conversation = endedConversation(provider: 'tavus');
         Http::fake();
+        $queueJob = Mockery::mock(QueueJob::class);
+        $queueJob->shouldReceive('fail')->once()->with(Mockery::type(CredentialMissing::class));
+        $job = new ReconcileTranscript($this->account->id, $conversation->id);
+        $job->setJob($queueJob);
 
-        expect(fn () => runReconcile($conversation))->toThrow(ProviderException::class);
+        app()->call([$job, 'handle']);
 
         Http::assertNothingSent();
         expect(reloaded($conversation)->transcript_status)->toBe(TranscriptStatus::Pending);
+    });
+
+    it('finishes the transcript as partial right away when the key is missing, with what the browser forwarded', function () {
+        config()->set('hr-avatar.platform_keys.tavus', null);
+        $conversation = endedConversation(provider: 'tavus');
+        inAccount($this->account, fn () => ConversationEvent::factory()->create(['conversation_id' => $conversation->id, 'text' => 'Hello there']));
+        $job = new ReconcileTranscript($this->account->id, $conversation->id);
+        $queueJob = Mockery::mock(QueueJob::class);
+        // What a worker does with a job that failed itself: it runs the failure hook.
+        $queueJob->shouldReceive('fail')->once()->andReturnUsing(fn (Throwable $e) => $job->failed($e));
+        $job->setJob($queueJob);
+
+        app()->call([$job, 'handle']);
+
+        expect(reloaded($conversation)->transcript_status)->toBe(TranscriptStatus::Partial)
+            ->and(storedLines($conversation))->toHaveCount(1);
     });
 
     it('never travels in the job: the job holds the two ids only', function () {

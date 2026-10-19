@@ -5,13 +5,13 @@ namespace App\Jobs;
 use App\Accounts\CurrentAccount;
 use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ProviderEventKind;
-use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderRegistry;
 use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\TranscriptShapeError;
 use App\Conversations\ConversationProviderAuth;
 use App\Conversations\TranscriptReconciler;
 use App\Conversations\TranscriptStatus;
+use App\Credentials\CredentialMissing;
 use App\Models\Conversation;
 use App\Models\ProviderWebhookReceipt;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,8 +24,9 @@ use Throwable;
  *
  * Five attempts, 30 s, 60 s, 120 s and 300 s apart: a transcript that is not ready yet and a provider
  * that fails are retried by letting the exception through. A transcript in a shape that cannot be read
- * will not improve, so the job fails itself at once. When the attempts run out (or the job fails
- * itself) the transcript is finished as `partial`, with the lines the browser forwarded.
+ * will not improve, and neither will a missing credential, so the job fails itself at once in both
+ * cases. When the attempts run out (or the job fails itself) the transcript is finished as `partial`,
+ * with the lines the browser forwarded.
  *
  * A `transcription_ready` callback already carries the transcript. The job is then given the id of its
  * receipt and reads the rows where it runs, without a provider call or a credential; with no receipt, or
@@ -73,10 +74,10 @@ final class ReconcileTranscript implements ShouldQueue
                 $lines = $this->receiptLines($adapter, $conversation);
 
                 if ($lines === []) {
-                    $auth = $auths->for($conversation) ?? throw ProviderException::noResponse();
+                    $auth = $auths->for($conversation) ?? throw new CredentialMissing;
                     $lines = $adapter->fetchTranscript($conversation->provider_session_ref, $auth);
                 }
-            } catch (TranscriptShapeError $unreadable) {
+            } catch (TranscriptShapeError|CredentialMissing $unreadable) {
                 $this->fail($unreadable);
 
                 return;

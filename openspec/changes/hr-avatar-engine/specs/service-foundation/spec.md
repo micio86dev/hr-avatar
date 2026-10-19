@@ -103,6 +103,8 @@ context of the request.
 Auth: none. `GET /v1/health` (liveness) MUST return 200 with exactly `{"status":"ok"}` without
 touching the database or Redis. `GET /v1/health/ready` (readiness) MUST verify PostgreSQL and
 Redis connectivity and return 200 `{"status":"ok","checks":{"database":"ok","redis":"ok"}}`; when
+any registered provider's adapter ingests events by callback, `checks` MUST also carry `public_base_url`
+(`ok` when `HRA_PUBLIC_BASE_URL` is an http(s) address with a host, `failed` otherwise); when
 any dependency fails it MUST return 503 with Problem+JSON `code` `service_unavailable` and a
 `checks` object naming each dependency as `ok` or `failed`. Health values are machine-facing and
 MUST NOT be localized. Responses MUST NOT expose versions, hostnames or connection strings.

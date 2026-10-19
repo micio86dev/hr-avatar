@@ -689,7 +689,7 @@ Commit: `feat(service): add idempotent provider event ingestion, event processin
 Specs: provider-webhooks (normalized event, receipts, mapping onto state, LiveAvatar polling, end independent of webhooks). Reconciliation: 24, 25.
 
 - [x] 29.1 Receipts and `ProviderEventIngestor`.
-  - RED: `service/tests/Feature/ProviderEventIngestorTest.php` scenarios "Persist then ack", "Duplicate delivery is a no-op", "Concurrent duplicates" (unique `(provider, idempotency_key)`), "Unknown event type" (`ignored` receipt, `processed_at` set, nothing dispatched), `account_id` NOT NULL from the authenticated conversation, `insertOrIgnore`, only inserted non-`ignored` rows dispatch.
+  - RED: `service/tests/Feature/ProviderEventIngestorTest.php` scenarios "Persist then ack", "Duplicate delivery is a no-op", "Concurrent duplicates" (unique `(account_id, provider, idempotency_key)`, ruling 51), "Unknown event type" (`ignored` receipt, `processed_at` set, nothing dispatched), `account_id` NOT NULL from the authenticated conversation, `insertOrIgnore`, only inserted non-`ignored` rows dispatch.
   - GREEN: migration `provider_webhook_receipts`, `service/app/Models/ProviderWebhookReceipt.php` (`payload` hidden), `service/app/Conversations/ProviderEventIngestor.php`.
   - Note (apply): `ingest($conversation, list<ProviderEvent>)` returns how many receipts were stored; a duplicate stores nothing and queues nothing (decided by the unique key, in the same statement); an `ignored` event is stored with `processed_at` set.
   - Verify: `cd service && php artisan test --filter=ProviderEventIngestorTest`.
@@ -703,6 +703,26 @@ Specs: provider-webhooks (normalized event, receipts, mapping onto state, LiveAv
   - GREEN: `service/app/Console/Commands/PollProviderSessions.php`, schedule entry.
   - Note (apply): like the sweeper, the command walks the accounts and reads every conversation under its account.
   - Verify: `cd service && php artisan test --filter=PollProviderSessionsTest && php artisan test --coverage --min=90`.
+
+## Unit 0c: Rulings 50-56 (slices 25-29 review)
+
+Commit: `fix(service): read only documented Tavus end statuses, fail a missing-credential transcript job at once and gate readiness on the public base url`
+Reconciliation: 50, 51, 52, 53, 54, 55, 56.
+
+- [x] 0c.1 Record rulings 50-56 in `reconciliation.md`; amend the provider-webhooks spec, design and task 29.1 for ruling 51, the Tavus session-status line of the design for ruling 53, and the health and connect text of the specs and design for ruling 55.
+- [x] 0c.2 Ceiling comments (ruling 52).
+  - RED: `service/tests/Arch/WalkedAccountsCeilingTest.php` requires `ponytail:`, `platform due-index` and `boundary rule` in `SweepConversations` and `PollProviderSessions`.
+  - GREEN: the comments at both account loops.
+- [x] 0c.3 Tavus allow-list (ruling 53).
+  - RED: `TavusSessionStatusTest`: only `ended` is an end; `completed`, `failed`, `paused`, `Ended` are not and are logged by value (32 characters at most); `active` and `ended` log nothing.
+  - GREEN: `TavusProvider::fetchSession`.
+- [x] 0c.4 Missing credential is non-retryable (ruling 54).
+  - RED: `ReconcileTranscriptTest`: the job fails itself with `CredentialMissing` without a request; the failure hook finishes the transcript as `partial`.
+  - GREEN: `App\Credentials\CredentialMissing`, `ReconcileTranscript::handle`.
+- [x] 0c.5 Public base url (ruling 55).
+  - RED: `HealthTest` (readiness check present only while a registered adapter calls back; unset, blank, schemeless, non-http and hostless values fail; logs name the check, never the value) and `CallbackTokenTest` (connect answers 503 `service_unavailable` before any change or provider call; works once the address is set; providers that do not call back are unaffected).
+  - GREEN: `App\Conversations\PublicBaseUrl`, `HealthController::ready`, `ConnectConversation`.
+- [x] 0c.6 Ruling 56 is documentation only: the README (slice 40) lists the LiveAvatar token wording and lifetime and the Tavus `editable` flag under "Known assumptions".
 
 ## Slice 30: Inbound provider webhook endpoint
 

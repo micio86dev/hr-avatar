@@ -22,6 +22,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * The Tavus adapter. Tavus reports what happens in a conversation by calling back, so events
@@ -174,7 +175,10 @@ final class TavusProvider implements AvatarProvider
     }
 
     /**
-     * An error is never an end: a failed call, or an answer with no usable status, raises.
+     * An error is never an end: a failed call, or an answer with no usable status, raises. Only the
+     * terminal status Tavus documents (`ended`) is an end; any other word, `active` included, is not,
+     * and an unrecognised one is logged by value (cut short) so a new status is noticed. The max-duration
+     * sweeper still bounds a conversation that is read as running for ever.
      */
     public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus
     {
@@ -185,7 +189,11 @@ final class TavusProvider implements AvatarProvider
             throw ProviderException::noResponse();
         }
 
-        if ($status === 'active') {
+        if ($status !== 'ended') {
+            if ($status !== 'active') {
+                Log::warning('Tavus returned an unrecognised conversation status', ['status' => Str::limit($status, 32, '')]);
+            }
+
             return new SessionStatus(false, null);
         }
 

@@ -108,7 +108,7 @@ After authentication, a body that is not valid JSON or lacks `conversation_id`, 
 Every accepted callback and every poller observation MUST be normalized to `{ provider,
 provider_ref, kind, occurred_at, payload }` with `kind` one of `joined`, `ended`,
 `transcript_ready`, `ignored`, and persisted FIRST as a row in `provider_webhook_receipts` with a
-unique constraint on (`provider`, `idempotency_key`). Tavus `idempotency_key` MUST be
+unique constraint on (`account_id`, `provider`, `idempotency_key`) (an account never loses an event to a key another account stored; ruling 51). Tavus `idempotency_key` MUST be
 `sha256(conversation_id|event_type|timestamp)`. The endpoint MUST respond 200 `{"received":true}`
 after persistence without performing business processing inline; processing runs on the queue. A
 delivery whose key already exists MUST return 200 and MUST NOT enqueue processing again. Under

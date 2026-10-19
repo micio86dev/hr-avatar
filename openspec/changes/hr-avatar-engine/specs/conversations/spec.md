@@ -90,7 +90,9 @@ resource, never the `client_secret`, and never provider refs or the provider cal
 Auth: PK + CS. `POST /v1/client/conversations/{id}/connect` MUST succeed only for a conversation in
 status `created`. Before changing state it MUST verify that the provider credential (and LLM
 credential when an LLM is bound) can be resolved, failing with 422 `provider_credential_missing` or
-`llm_credential_missing` and leaving the status `created`. It MUST then atomically move the
+`llm_credential_missing` and leaving the status `created`. For a provider that reports events by callback
+it MUST also verify that `HRA_PUBLIC_BASE_URL` is a usable http(s) address, failing with 503
+`service_unavailable` (no state change, no provider call) when it is not. It MUST then atomically move the
 conversation to `connecting` (setting `connecting_at`), call the adapter `start` with a
 `ConversationSpec` built from the conversation and its config, persist the provider refs, and
 return 200 with `JoinMaterial`. A second connect for the same conversation MUST yield 409

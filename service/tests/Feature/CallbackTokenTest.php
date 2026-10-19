@@ -149,3 +149,46 @@ describe('for a provider that does not call back', function () {
         expect(Conversation::withoutGlobalScopes()->findOrFail($conversation->id)->callback_token_hash)->toBeNull();
     });
 });
+
+// Ruling 55: with no public base url a provider that calls back cannot be given a target, so connecting fails closed.
+describe('without a public base url', function () {
+    it('refuses to connect a provider that calls back, with a clear detail, and leaves the conversation as it was', function (?string $base) {
+        config()->set('hr-avatar.public_base_url', $base);
+        ScriptedProvider::register();
+        ScriptedProvider::$ingestion = Ingestion::Callback;
+        $config = inAccount($this->account, fn () => AvatarConfig::factory()->create(['provider' => 'scripted']));
+        $conversation = inAccount($this->account, fn () => Conversation::factory()->create(['avatar_config_id' => $config->id, 'provider' => 'scripted']));
+        $before = Conversation::withoutGlobalScopes()->findOrFail($conversation->id)->getAttributes();
+        $logs = captureLogs();
+
+        $response = $this->postJson("/v1/client/conversations/{$conversation->id}/connect", [], browserHeaders($this->pk, clientSecretFor($conversation)));
+
+        $response->assertStatus(503);
+        expect($response->json('code'))->toBe('service_unavailable')
+            ->and($response->json('detail'))->toBe('The service is not configured to receive this provider\'s callbacks.')
+            ->and(Conversation::withoutGlobalScopes()->findOrFail($conversation->id)->getAttributes())->toBe($before)
+            ->and(ScriptedProvider::$calls)->toBe([])
+            ->and(collect($logs)->contains(fn (string $line) => str_contains($line, 'HRA_PUBLIC_BASE_URL')))->toBeTrue();
+    })->with([null, '', 'hra.example.test']);
+
+    it('still connects a provider that does not call back', function () {
+        config()->set('hr-avatar.public_base_url', null);
+
+        [$conversation] = connectWith(Ingestion::Poll);
+
+        expect(Conversation::withoutGlobalScopes()->findOrFail($conversation->id)->status->value)->toBe('connecting');
+    });
+
+    it('lets the conversation be connected once the address is set', function () {
+        config()->set('hr-avatar.public_base_url', null);
+        ScriptedProvider::register();
+        ScriptedProvider::$ingestion = Ingestion::Callback;
+        $config = inAccount($this->account, fn () => AvatarConfig::factory()->create(['provider' => 'scripted']));
+        $conversation = inAccount($this->account, fn () => Conversation::factory()->create(['avatar_config_id' => $config->id, 'provider' => 'scripted']));
+        $headers = browserHeaders($this->pk, clientSecretFor($conversation));
+
+        $this->postJson("/v1/client/conversations/{$conversation->id}/connect", [], $headers)->assertStatus(503);
+        config()->set('hr-avatar.public_base_url', 'https://hra.example.test');
+        $this->postJson("/v1/client/conversations/{$conversation->id}/connect", [], $headers)->assertOk();
+    });
+});

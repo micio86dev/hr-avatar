@@ -43,6 +43,9 @@ class SweepConversations extends Command
         $ended = 0;
         $failed = 0;
 
+        // ponytail: scoped queries per account per run, so the cost grows with the number of accounts.
+        // A platform due-index would read across accounts, which the boundary rule (CLAUDE.md: only the key
+        // resolver and the inbound token lookup are unscoped) must be extended to allow first.
         Account::query()->select('id')->lazyById(self::CHUNK)->each(function (Account $account) use ($lifecycle, &$ended, &$failed): void {
             CurrentAccount::runAs($account->id, function () use ($lifecycle, &$ended, &$failed): void {
                 $overran = Conversation::query();

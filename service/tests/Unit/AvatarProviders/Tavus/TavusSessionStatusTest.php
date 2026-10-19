@@ -34,9 +34,37 @@ it('is not ended while the conversation is active', function () {
     expect($status->ended)->toBeFalse()->and($status->endReason)->toBeNull();
 });
 
-it('is ended once the status is anything but active', function (string $state) {
-    expect(tavusSession(['status' => $state])->ended)->toBeTrue();
-})->with(['ended', 'completed', 'failed']);
+it('is ended only for the terminal status Tavus documents', function () {
+    expect(tavusSession(['status' => 'ended'])->ended)->toBeTrue();
+});
+
+// Ruling 53: an allow-list. Tavus documents `active` and `ended` only, so any other word is not read as an end.
+it('does not read an undocumented status as an end, and logs the status value only', function (string $state) {
+    $logs = captureLogs();
+
+    $status = tavusSession(['status' => $state, 'conversation_id' => 'c123', 'api_key' => 'tvs_live_SUPER_SECRET_KEY_99999']);
+
+    expect($status->ended)->toBeFalse()->and($status->endReason)->toBeNull();
+    $lines = $logs->getArrayCopy();
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0])->toBe('Tavus returned an unrecognised conversation status {"status":"'.$state.'"}');
+})->with(['completed', 'failed', 'paused', 'Ended']);
+
+it('keeps an unrecognised status from carrying anything but a short value into the log', function () {
+    $logs = captureLogs();
+
+    tavusSession(['status' => str_repeat('x', 500)]);
+
+    expect($logs->getArrayCopy()[0])->toBe('Tavus returned an unrecognised conversation status {"status":"'.str_repeat('x', 32).'"}');
+});
+
+it('logs nothing for the two documented statuses', function (string $state) {
+    $logs = captureLogs();
+
+    tavusSession(['status' => $state]);
+
+    expect($logs->getArrayCopy())->toBe([]);
+})->with(['active', 'ended']);
 
 it('carries the shutdown reason Tavus gives, wherever it gives it', function (array $body, ?string $reason) {
     expect(tavusSession($body + ['status' => 'ended'])->endReason)->toBe($reason);

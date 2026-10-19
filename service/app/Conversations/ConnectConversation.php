@@ -17,6 +17,7 @@ use App\Jobs\ReleaseProviderSession;
 use App\Llm\LlmBindingResolver;
 use App\Models\AvatarConfig;
 use App\Models\Conversation;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -42,7 +43,8 @@ final class ConnectConversation
     ) {}
 
     /**
-     * @throws ApiProblem `already_connected`, `invalid_state`, `provider_credential_missing` or `llm_credential_missing`
+     * @throws ApiProblem `already_connected`, `invalid_state`, `provider_credential_missing`, `llm_credential_missing`
+     *                    or `service_unavailable` (a provider that calls back and no public base url)
      * @throws Throwable whatever the adapter's start raised, after the conversation has been failed
      */
     public function connect(Conversation $conversation): JoinMaterial
@@ -52,11 +54,19 @@ final class ConnectConversation
 
             $config = $conversation->avatarConfig;
             $auth = $this->credentials($conversation, $config);
+            $adapter = $this->providers->get($conversation->provider);
+            $callbacks = $adapter->ingestion() === Ingestion::Callback;
+
+            // A provider that calls back needs an address to call: without one nothing is changed and nothing is sent.
+            if ($callbacks && PublicBaseUrl::get() === null) {
+                Log::error('Provider callbacks are not configured', ['setting' => 'HRA_PUBLIC_BASE_URL']);
+
+                throw new ApiProblem(ErrorCode::ServiceUnavailable, "The service is not configured to receive this provider's callbacks.");
+            }
 
             $this->claim($conversation);
 
-            $adapter = $this->providers->get($conversation->provider);
-            $callbackUrl = $adapter->ingestion() === Ingestion::Callback ? $this->callbackTarget($conversation) : null;
+            $callbackUrl = $callbacks ? $this->callbackTarget($conversation) : null;
 
             try {
                 $session = $adapter->start($conversation->id, $this->spec($conversation), $config, $auth, $callbackUrl);
@@ -130,7 +140,7 @@ final class ConnectConversation
 
         Conversation::query()->whereKey($conversation->id)->update(['callback_token_hash' => hash('sha256', $token)]);
 
-        return rtrim(config()->string('hr-avatar.public_base_url'), '/')."/v1/webhooks/providers/{$conversation->provider}/{$token}";
+        return PublicBaseUrl::get()."/v1/webhooks/providers/{$conversation->provider}/{$token}";
     }
 
     private function spec(Conversation $conversation): ConversationSpec
