@@ -771,11 +771,11 @@ Specs: client-sdk (connect - error surface and secrets stay private, test gates)
 Commit: `feat(sdk): add the transcript outbox with batching and retry, and completion phrase matching`
 Specs: client-sdk (transcript auto-forwarding outbox, completion phrases). Reconciliation: 34.
 
-- [ ] 34.1 Port outbox specs first.
+- [x] 34.1 Port outbox specs first.
   - RED: port `../frontend/tests/unit/utterance-outbox.spec.ts` (read-only) to `sdk/tests/unit/outbox.spec.ts` with the new semantics: scenarios "Batching by count" (flush at 20), "Batching by time" (2 s after the first queued event), "Retry keeps keys" (`crypto.randomUUID()` at capture, same keys on retry), "Backoff growth" (1 s doubling, cap 30 s), "Closed stops forwarding" (409 `conversation_closed` or 401 -> stop and emit error), "Opt-out" (`forwardTranscript: false`), "Final flush on end", "Interim ignored", `pagehide` keepalive flush; conversation id is a string, role `user`.
   - GREEN: `sdk/src/outbox.ts` (in-memory, ported `UtteranceOutbox`).
   - Verify: `cd sdk && bun run test -- outbox`.
-- [ ] 34.2 Completion phrases.
+- [x] 34.2 Completion phrases.
   - RED: `sdk/tests/unit/completion.spec.ts` scenarios "Phrase triggers end" (case-insensitive substring on avatar speech, then 1500 ms silence settle), "User speech ignored", "Not configured" (no-op).
   - GREEN: `sdk/src/completion.ts`.
   - Verify: `cd sdk && bun run test -- completion && bun run test:coverage`.

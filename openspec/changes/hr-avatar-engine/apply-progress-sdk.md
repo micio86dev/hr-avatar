@@ -33,3 +33,30 @@ same minor and was used as-is; `bun.lock` locks every package version. `bunx tsc
 Decisions: `JoinMaterial` is read as snake_case JSON (`provider`, `transport`, `conversation_url`,
 `session_token`, `expires_at`) because the spec leaves the wire keys open and every other resource
 is snake_case. A redirect is refused (`redirect: 'error'`) so the auth headers never leave `baseUrl`.
+
+## Slice 34: Outbox and completion phrases
+
+| Task | RED (observed) | GREEN | REFACTOR |
+|------|----------------|-------|----------|
+| 34.1 outbox | `outbox.spec.ts` failed: `src/outbox` not found | `src/outbox.ts`; 28 passed. One expectation of mine was wrong, not the code: with a synchronous enqueue loop the first drain sees all 150 events, so the first batch is 100, not 20 (`[100, 100, 50]`) | none |
+| 34.2 completion | `completion.spec.ts` failed: `src/completion` not found | `src/completion.ts`; 10 passed | none |
+
+### Work Unit Evidence (slice 34)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd sdk && bun run test -- outbox completion` -> exit 0; full suite 6 files, 75 tests |
+| Runtime harness | N/A: pure logic with injected `send` and fake timers; covered end to end by the slice 39 smoke |
+| Coverage | `bun run test:coverage`: outbox 100/97.82/100/100, completion 100/100/100/100 (stmts/branch/funcs/lines) |
+| Rollback boundary | `src/outbox.ts`, `src/completion.ts` and their two specs |
+
+Decisions:
+- `forwardTranscript: false` disables the whole outbox, including the lifecycle `live` event, because
+  the spec scenario "Opt-out" requires that no request reaches `.../events`.
+- A batch refused with a non-retryable status other than 401 or 409 `conversation_closed` (for
+  example the atomic 422) is dropped with an `error` event and forwarding continues; holding it
+  would block every later event.
+- A failed last flush (`end()` or `pagehide`) is silent and not retried: the conversation is going
+  away and `end()` must always resolve.
+- "Interim ignored" is asserted at the conversation level in slice 36 (the outbox is generic; the
+  conversation only enqueues final utterances).
