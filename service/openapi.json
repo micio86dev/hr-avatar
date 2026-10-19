@@ -18,6 +18,9 @@
             "name": "API keys"
         },
         {
+            "name": "Credentials"
+        },
+        {
             "name": "Health"
         }
     ],
@@ -240,6 +243,305 @@
                             "application/problem+json": {
                                 "schema": {
                                     "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/provider-credentials": {
+            "get": {
+                "operationId": "provider-credentials.index",
+                "description": "One entry per credential provider. `source` says whose key a call would use: `account` (the\naccount stored one), `platform` (only the platform key is set) or `none`. `last_four` is\nshown only for an account key of 12 characters or more.",
+                "summary": "List provider credentials",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "provider": {
+                                                        "type": "string"
+                                                    },
+                                                    "source": {
+                                                        "$ref": "#/components/schemas/CredentialSource"
+                                                    },
+                                                    "last_four": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                },
+                                                "required": [
+                                                    "provider",
+                                                    "source",
+                                                    "last_four"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/provider-credentials/{provider}": {
+            "put": {
+                "operationId": "provider-credentials.update",
+                "description": "Creates or replaces the account's key for the provider. The key is encrypted at rest and is\nnever returned; the answer shows only its last four characters.",
+                "summary": "Store a provider credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PutCredentialRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`ProviderCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProviderCredentialResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "provider-credentials.destroy",
+                "description": "Idempotent: removing a key that is not stored answers 204 as well. Calls then use the\nplatform key, if one is set.",
+                "summary": "Remove a provider credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-credentials": {
+            "get": {
+                "operationId": "llm-credentials.index",
+                "description": "The account's stored keys, shown as the provider and the last four characters of the key (null\nfor a key under 12 characters).",
+                "summary": "List language-model credentials",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `LlmCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/LlmCredentialResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-credentials/{llmProvider}": {
+            "put": {
+                "operationId": "llm-credentials.update",
+                "description": "Creates or replaces the account's key for a provider that appears in the model catalogue (404\notherwise). The key is encrypted at rest and never returned.",
+                "summary": "Store a language-model credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "llmProvider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PutCredentialRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`StoredLlmCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoredLlmCredentialResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "description": "The provider does not appear in the model catalogue.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "llm-credentials.destroy",
+                "description": "Idempotent: answers 204 whether or not a key was stored. A conversation whose config binds a\nmodel of this provider then fails to connect with `llm_credential_missing`.",
+                "summary": "Remove a language-model credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "llmProvider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-models": {
+            "get": {
+                "operationId": "llm-models.index",
+                "description": "The enabled entries of the platform catalogue. The catalogue is the same for every account\nand cannot be changed through the API.",
+                "summary": "List language models",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `LlmModelResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/LlmModelResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
                                 }
                             }
                         }
@@ -490,6 +792,16 @@
                 ],
                 "title": "CreateApiKeyRequest"
             },
+            "CredentialSource": {
+                "type": "string",
+                "description": "Whose key a provider call would be made with, as the credential list reports it.\n",
+                "enum": [
+                    "account",
+                    "platform",
+                    "none"
+                ],
+                "title": "CredentialSource"
+            },
             "IssuedApiKeyResource": {
                 "type": "object",
                 "properties": {
@@ -587,6 +899,102 @@
                 ],
                 "title": "KeyType"
             },
+            "LlmCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "llm_provider": {
+                        "type": "string"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "llm_provider",
+                    "last_four"
+                ],
+                "title": "LlmCredentialResource"
+            },
+            "LlmModelResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "base_url": {
+                        "type": "string"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "provider",
+                    "model",
+                    "display_name",
+                    "base_url",
+                    "enabled"
+                ],
+                "title": "LlmModelResource"
+            },
+            "ProviderCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "$ref": "#/components/schemas/CredentialSource"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "provider",
+                    "source",
+                    "last_four",
+                    "updated_at"
+                ],
+                "title": "ProviderCredentialResource"
+            },
+            "PutCredentialRequest": {
+                "type": "object",
+                "description": "The body of a credential write, shared by provider and language-model credentials.",
+                "properties": {
+                    "api_key": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                    }
+                },
+                "required": [
+                    "api_key"
+                ],
+                "title": "PutCredentialRequest"
+            },
             "RotateApiKeyRequest": {
                 "type": "object",
                 "properties": {
@@ -612,6 +1020,32 @@
                     "api_keys:manage"
                 ],
                 "title": "Scope"
+            },
+            "StoredLlmCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "llm_provider": {
+                        "type": "string"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "llm_provider",
+                    "last_four",
+                    "updated_at"
+                ],
+                "title": "StoredLlmCredentialResource"
             }
         },
         "responses": {

@@ -288,23 +288,23 @@ Commit: `feat(service): add provider and LLM credentials, resolvers and the LLM 
 Specs: credentials (all requirements).
 Reconciliation: 29. Design AD5, credentials section.
 
-- [ ] 7.1 Schema, models, seeder.
+- [x] 7.1 Schema, models, seeder.
   - RED: `service/tests/Feature/CredentialSchemaTest.php`: unique `(account_id, provider)` and `(account_id, llm_provider)`; `api_key` stored encrypted (raw column value differs from plaintext, "Encrypted at rest"); `LlmModelSeeder` idempotent (twice -> same row count); `llm_models` has no `account_id`.
   - GREEN: migrations for `provider_credentials`, `llm_models`, `llm_credentials`; models `ProviderCredential`, `LlmModel`, `LlmCredential` (encrypted cast, `$hidden`); `service/database/seeders/LlmModelSeeder.php`; `credential_providers` list and `platform_keys` in `service/config/hr-avatar.php`.
   - Verify: `cd service && php artisan test --filter=CredentialSchemaTest`.
-- [ ] 7.2 Resolvers.
+- [x] 7.2 Resolvers.
   - RED: `service/tests/Unit/CredentialResolverTest.php` scenarios "Account wins over platform", "Platform fallback", "Neither" (null), "No cross-account use", "Mock needs none" (registry `credential: false` skip is exercised in slice 26); `LlmCredentialResolverTest` (account only, no platform fallback), `ProviderAuth` fingerprint = first 16 hex of sha256 of the key and a redacting `__debugInfo`.
   - GREEN: `service/app/Credentials/{ProviderAuth,CredentialResolver,LlmCredentialResolver}.php`.
   - Verify: `cd service && php artisan test --filter='CredentialResolverTest|LlmCredentialResolverTest'`.
-- [ ] 7.3 Provider credential endpoints.
+- [x] 7.3 Provider credential endpoints.
   - RED: `service/tests/Feature/ProviderCredentialEndpointTest.php` scenarios "Create", "Replace", "Unknown provider" (404), "Scope required" (`credentials:manage`), "Sources" (`account|platform|none`), "Delete falls back", "Delete is idempotent" (204), "Short key" (`last_four` null for keys under 12 chars and for platform/none), fixed-size list not paginated, "Account isolation of listing".
   - GREEN: `service/app/Http/Controllers/V1/ProviderCredentialController.php`, request, resource, routes.
   - Verify: `cd service && php artisan test --filter=ProviderCredentialEndpointTest`.
-- [ ] 7.4 LLM models and LLM credential endpoints.
+- [x] 7.4 LLM models and LLM credential endpoints.
   - RED: `service/tests/Feature/LlmEndpointsTest.php` scenarios "Only enabled models", "Read-only" (POST -> 405), "Store and list", "Unknown LLM provider" (404), scope `llm_models:read` / `credentials:manage`, idempotent 204 delete.
   - GREEN: `LlmModelController`, `LlmCredentialController`, requests, resources, routes.
   - Verify: `cd service && php artisan test --filter=LlmEndpointsTest`.
-- [ ] 7.5 Non-disclosure sweep.
+- [x] 7.5 Non-disclosure sweep.
   - RED: `service/tests/Feature/CredentialExposureTest.php` scenarios "Model serialization", "Failed job payload" (a queued job holding a credential never serializes the plaintext), response scan and `Log::spy` for every credential response.
   - GREEN: fix any leak found (resources use explicit field lists, `$hidden`, `SensitiveParameter`).
   - Verify: `cd service && php artisan test --filter=CredentialExposureTest && php artisan test --coverage --min=90`.

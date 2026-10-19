@@ -7,6 +7,8 @@ use App\Keys\KeyType;
 use App\Models\Account;
 use App\Models\ApiKey;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -48,4 +50,23 @@ function issueKey(
     $raw = KeyGenerator::generate($type, $mode);
 
     return [inAccount($account, fn () => ApiKey::factory()->withRawKey($raw)->create($attributes)), $raw];
+}
+
+/**
+ * Records everything the application logs from now on, message, context and (for a logged
+ * exception) its message and stack trace as text, so a test can assert a secret is nowhere in it.
+ *
+ * @return ArrayObject<int, string>
+ */
+function captureLogs(): ArrayObject
+{
+    $logged = new ArrayObject;
+    Event::listen(MessageLogged::class, function (MessageLogged $event) use ($logged) {
+        $exception = $event->context['exception'] ?? null;
+        $context = array_diff_key($event->context, ['exception' => true]);
+
+        $logged->append($event->message.' '.json_encode($context).($exception instanceof Throwable ? ' '.$exception->getMessage().' '.$exception->getTraceAsString() : ''));
+    });
+
+    return $logged;
 }

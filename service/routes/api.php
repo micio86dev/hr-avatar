@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\V1\ApiKeyController;
 use App\Http\Controllers\V1\HealthController;
+use App\Http\Controllers\V1\LlmCredentialController;
+use App\Http\Controllers\V1\LlmModelController;
+use App\Http\Controllers\V1\ProviderCredentialController;
 use App\Http\Middleware\RejectKeyInQuery;
 use Illuminate\Support\Facades\Route;
 
@@ -18,4 +21,16 @@ Route::middleware([RejectKeyInQuery::class, 'auth.secret', 'throttle:secret'])->
         Route::post('api-keys/{apiKey}/revoke', [ApiKeyController::class, 'revoke'])->name('api-keys.revoke');
         Route::post('api-keys/{apiKey}/rotate', [ApiKeyController::class, 'rotate'])->name('api-keys.rotate');
     });
+
+    Route::middleware('scope:credentials:manage')->group(function () {
+        Route::get('provider-credentials', [ProviderCredentialController::class, 'index'])->name('provider-credentials.index');
+        Route::put('provider-credentials/{provider}', [ProviderCredentialController::class, 'update'])->whereIn('provider', config()->array('hr-avatar.credential_providers'))->name('provider-credentials.update');
+        Route::delete('provider-credentials/{provider}', [ProviderCredentialController::class, 'destroy'])->whereIn('provider', config()->array('hr-avatar.credential_providers'))->name('provider-credentials.destroy');
+
+        Route::get('llm-credentials', [LlmCredentialController::class, 'index'])->name('llm-credentials.index');
+        Route::put('llm-credentials/{llmProvider}', [LlmCredentialController::class, 'update'])->name('llm-credentials.update');
+        Route::delete('llm-credentials/{llmProvider}', [LlmCredentialController::class, 'destroy'])->name('llm-credentials.destroy');
+    });
+
+    Route::get('llm-models', [LlmModelController::class, 'index'])->middleware('scope:llm_models:read')->name('llm-models.index');
 });

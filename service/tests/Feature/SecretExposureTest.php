@@ -1,25 +1,14 @@
 <?php
 
 use App\Models\Account;
-use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 
-/**
+/*
  * A credential must never appear in a response, a log line or a stored column other than its
- * hash. Each slice that stores or returns a credential adds its case here.
+ * hash. Each slice that stores or returns a credential adds its case here (captureLogs lives in
+ * tests/Pest.php).
  */
-function captureLogs(): ArrayObject
-{
-    $logged = new ArrayObject;
-    Event::listen(MessageLogged::class, function (MessageLogged $event) use ($logged) {
-        $logged->append($event->message.' '.json_encode($event->context));
-    });
-
-    return $logged;
-}
-
 it('keeps an API key out of the logs while it is created, authenticated with and serialized', function () {
     $logged = captureLogs();
 

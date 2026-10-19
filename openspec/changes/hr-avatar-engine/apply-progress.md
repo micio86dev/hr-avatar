@@ -222,3 +222,42 @@ Triangulation: origins, bearer shapes, key states and forged tokens are datasets
 - Origin comparison is exact on the raw header (the stored list is canonical and browsers send canonical origins); the preflight echoes only a canonical origin, so `null` or a value with a path gets a 204 with no allow header.
 - A request that fails before the allowlist (unknown publishable key, rate limit) carries no `Access-Control-Allow-Origin`, so a browser cannot read that 401/429; this follows the spec ("only after the allowlist check").
 - `Vary: Origin` is set on every `v1/client/*` response, allowed or not.
+
+## Slice 7: Credentials and LLM (tasks 7.1-7.5) - complete
+
+Commit subject: `feat(service): add provider and LLM credentials, resolvers and the LLM model catalogue`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 7.1 | `tests/Feature/CredentialSchemaTest.php` | models/tables missing (8 errors, 1 failure) | 10/10 | a unique violation aborts the surrounding Postgres transaction, so the duplicate-insert assertions run inside `DB::transaction` (a savepoint) |
+| 7.2 | `ProviderAuthTest`, `CredentialResolverTest`, `LlmCredentialResolverTest` | classes missing (17 errors) | 18/18 | `ProviderAuth` refuses `serialize()` (a job cannot carry a key), redacts in dumps and omits the key from JSON |
+| 7.3 | `tests/Feature/ProviderCredentialEndpointTest.php` | 404 on every route (23 failures) | 29/29 | `updateOrCreate` answered 201 for a new row: the controller forces 200 |
+| 7.4 | `tests/Feature/LlmEndpointsTest.php` | 404 on every route (20 failures) | 26/26 | `POST/PUT/PATCH/DELETE /v1/llm-models` answer 405 with `Allow: GET` for free (a GET-only route) |
+| 7.5 | `tests/Feature/CredentialExposureTest.php` | one failure: the queue wraps the serialization refusal in a `RuntimeException` (test corrected, behaviour was right) | 8/8 | covers model serialization, queued job payload, every credential response and log line, a write that blows up, and the OpenAPI resource schemas |
+
+BEAI tests for these classes (`LlmBindingResolverTest` etc.) belong to slice 8; the BEAI credential model is platform-wide and not reusable here.
+
+### Work Unit Evidence (slice 7)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter='ProviderCredential|LlmCredential|LlmModel|LlmEndpoints|CredentialResolver|ProviderAuth|CredentialExposure|CredentialSchema'` : 103 passed; full suite 607 passed, 1936 assertions, exit 0 |
+| Coverage | `php artisan test --coverage --min=90` : 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` : 100.0 % |
+| Static analysis / style | `composer run lint` and `composer run analyse` (level 8) passed |
+| OpenAPI | regenerated (`DB_PORT=55442 php artisan scramble:export`, needs the migrated dev database for model docs); drift test green; Spectral: no results at `warn` or higher |
+| Runtime harness (H-KEY) | `db:seed --class=LlmModelSeeder`, `serve --port=8100`: `PUT /v1/provider-credentials/cartesia` -> `{"provider":"cartesia","source":"account","last_four":"89ab",...}`; `GET` lists the four providers; raw column starts `eyJpdiI6...` (ciphertext) with `last_four` 89ab; unknown provider 404; `GET /v1/llm-models` lists `gemini-flash-lite`, `gemini-pro`; `PUT /v1/llm-credentials/gemini` + `GET`; `DELETE` twice -> 204 204 |
+| Rollback boundary | three migrations, `app/Credentials`, three models and factories, `LlmModelSeeder`, three controllers, `PutCredentialRequest`, the four credential resources, the routes, the `credential_providers`/`platform_keys` config blocks, the `captureLogs` move into `tests/Pest.php`, and their tests |
+
+### Deviations and decisions (slice 7)
+
+- Authored size about 1,570 lines (about 767 are tests; migrations and `openapi.json` excluded from the count only where noted by tooling), above the 400 budget: five cohesive tasks (schema, resolvers, 2 endpoint families, sweep). Recommend `size:exception`.
+- `CredentialResolver::for()` and `LlmCredentialResolver::for()` take an account id string (not an `Account` model) so connect and jobs, which hold only `account_id`, need no extra query; they bind the account with `runAs` themselves.
+- `LlmModelSeeder` seeds two models, `gemini-flash-lite` (`gemini-3.1-flash-lite-preview`) and `gemini-pro` (`gemini-3.1-pro-preview`), provider `gemini`. BEAI's `gemini-3-flash-preview` is deliberately not seeded: its own seeder comment records that this thinking model stalls HeyGen's turn-based custom-LLM path. The catalogue file wins on every seed (a re-run restores `enabled`).
+- `PUT /v1/llm-credentials/{llm_provider}` accepts any provider present in `llm_models`, enabled or not; `DELETE` is a 204 whatever the catalogue holds, so a credential cannot get stuck when a provider leaves the catalogue.
+- Route parameters are `{provider}` and `{llmProvider}`: Scramble names the OpenAPI path parameter after the controller argument, and the existing "every route is documented" test compares the two.
+- Unknown credential providers 404 through a `whereIn` route constraint, so an unauthenticated caller also gets 404 (not 401) for them; the provider list is public configuration.
+- `ProviderAuth` refuses `serialize()`: a `dispatch()` of a job holding it fails with the queue's `RuntimeException` wrapping the refusal, and nothing is pushed.
+- An account key that cannot be decrypted (rotated `APP_KEY`) makes the resolver throw rather than fall back to the platform key, which would bill the platform for the account's call.
+- `last_four` is `null` for keys under 12 characters (`LastFour::of`, multibyte-safe).
+- The list entries for provider credentials are plain arrays with a `CredentialSource` enum (documented in OpenAPI), not a resource: they describe providers, not rows.
+- Common 401/404/429 Problem responses remain undocumented in `openapi.json` (see slice 5).

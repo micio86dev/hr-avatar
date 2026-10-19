@@ -17,6 +17,20 @@ return [
     */
     'jwt_secret' => env('HRA_JWT_SECRET'),
 
+    /* Providers an account may store a key for, in the order the credential list reports them. */
+    'credential_providers' => ['tavus', 'heygen', 'cartesia', 'elevenlabs'],
+
+    /*
+    | The platform's own key per credential provider, used when an account has none of its own.
+    | Optional: a provider with no key here and none stored by the account is simply unconfigured.
+    */
+    'platform_keys' => [
+        'tavus' => env('TAVUS_API_KEY'),
+        'heygen' => env('HEYGEN_API_KEY'),
+        'cartesia' => env('CARTESIA_API_KEY'),
+        'elevenlabs' => env('ELEVENLABS_API_KEY'),
+    ],
+
     /* Requests per minute. Every key has a budget of its own; failed authentications are counted per address. */
     'rate_limits' => [
         'secret' => (int) env('HRA_RATE_LIMIT_SECRET', 600),
