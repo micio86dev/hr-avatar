@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Providers;
+
+use Dedoc\Scramble\Scramble;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\ServiceProvider;
+use RuntimeException;
+
+class AppServiceProvider extends ServiceProvider
+{
+    private const MIN_JWT_SECRET_BYTES = 32;
+
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        // The documentation UI lives outside /v1; the committed openapi.json is the published contract.
+        Scramble::ignoreDefaultRoutes();
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        $this->guardJwtSecret();
+
+        Event::listen(RouteMatched::class, fn (RouteMatched $event) => Log::shareContext(['route' => $event->route->getName()]));
+    }
+
+    /**
+     * Refuse to run with a weak signing secret. The message names the variable, never a value.
+     */
+    private function guardJwtSecret(): void
+    {
+        if ($this->app->environment('testing')) {
+            return;
+        }
+
+        $secret = config('hr-avatar.jwt_secret');
+
+        if (! is_string($secret) || strlen($secret) < self::MIN_JWT_SECRET_BYTES) {
+            throw new RuntimeException(
+                'HRA_JWT_SECRET must be set to at least '.self::MIN_JWT_SECRET_BYTES.' bytes.'
+            );
+        }
+    }
+}

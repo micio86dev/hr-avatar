@@ -1,0 +1,32 @@
+# Local development stack. The api, worker and scheduler services arrive with the tooling slice.
+# Host ports are overridable (HRA_DB_PORT, HRA_REDIS_PORT) when the defaults are already taken.
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg17
+    environment:
+      POSTGRES_DB: hra
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${HRA_DB_PASSWORD:-postgres}
+    ports:
+      - "127.0.0.1:${HRA_DB_PORT:-55432}:5432"
+    volumes:
+      - hra-pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8.0-alpine
+    ports:
+      - "127.0.0.1:${HRA_REDIS_PORT:-56379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  hra-pgdata:

@@ -106,43 +106,43 @@ Commit: `feat(service): scaffold Laravel 13 API with Problem+JSON errors, reques
 Specs: service-foundation (versioned routing, Problem+JSON, request identification, health, config bootstrap).
 Budget note: the untouched `composer create-project` skeleton and `composer.lock` are generated and excluded from the authored count; the authored part (config, providers, middleware, Problem classes, tests) is the ~380 lines. If a reviewer counts the skeleton, this one slice needs a `size:exception`.
 
-- [ ] 1.1 Preflight the toolchain (STOP gate).
+- [x] 1.1 Preflight the toolchain (STOP gate).
   - RED: run `php -v && composer --version && php -m | rg -i 'pcov|pdo_pgsql' && docker compose version`; any missing tool is a failing precondition.
   - GREEN: nothing to write; on failure STOP and report (Dependency Resolution Policy). Required: PHP ^8.5, Composer 2.4+, pcov, pdo_pgsql, Docker + Compose v2.
   - Verify: the command above exits 0 and shows PHP 8.5.x.
-- [ ] 1.2 Create the Laravel app in `service/` (API-only) and strip the web surface.
+- [x] 1.2 Create the Laravel app in `service/` (API-only) and strip the web surface.
   - RED: a pin test comes in 1.3; this task is the generation step. Run `composer create-project laravel/laravel service "^13.8"`; if it does not resolve, STOP.
   - GREEN: delete `service/resources/views`, `service/resources/js`, `service/resources/css`, `service/routes/web.php`, `service/package.json`, `service/vite.config.js`; create `service/routes/api.php`; write `service/.env.example` with `APP_NAME`, `DB_*` (host port 55432, database `hr_avatar`), `REDIS_*` (56379), `HRA_JWT_SECRET`, `HRA_PUBLIC_BASE_URL`, `HRA_RATE_LIMIT_SECRET`, `HRA_RATE_LIMIT_PUBLISHABLE`, `HRA_RELEASE_DELAY_SECONDS`, `HRA_MAX_DURATION_CEILING`, platform provider keys; update `service/.gitignore`.
   - Verify: `cd service && php artisan about --only=environment` runs; `git status --short service/` shows only the intended tree.
-- [ ] 1.3 Pin the dependency set (RED first).
+- [x] 1.3 Pin the dependency set (RED first).
   - RED: `service/tests/Unit/ComposerPinsTest.php` reads `service/composer.json` and asserts `php ^8.5`, `laravel/framework ^13.8`, `dedoc/scramble ^0.13`, `lcobucci/jwt ^5.6`, `pestphp/pest ^4.0`, `pestphp/pest-plugin-laravel ^4.0`, `larastan/larastan ^3`, `laravel/pint ^1.27`; fails because most are absent.
   - GREEN: `cd service && composer require dedoc/scramble:^0.13 lcobucci/jwt:^5.6 && composer require --dev pestphp/pest:^4.0 pestphp/pest-plugin-laravel:^4.0 larastan/larastan:^3 laravel/pint:^1.27`; any unresolved package STOPs the work.
   - Verify: `cd service && php artisan test --filter=ComposerPinsTest`.
-- [ ] 1.4 Pest config, pcov coverage, stray-request guard.
+- [x] 1.4 Pest config, pcov coverage, stray-request guard.
   - RED: `service/tests/Feature/StrayRequestsTest.php` asserts `Http::get('https://example.test')` throws (fails until the global guard exists).
   - GREEN: `service/tests/Pest.php` (Feature/Unit/Arch bindings, `Http::preventStrayRequests()` in `beforeEach`), `service/phpunit.xml` (pgsql test connection on `hr_avatar_test`, `APP_ENV=testing`, coverage source `app/`), composer scripts `test`, `lint`, `analyse`.
   - Verify: `cd service && php artisan test --filter=StrayRequestsTest`.
-- [ ] 1.5 Local Postgres + Redis compose (api/worker/scheduler services arrive in slice 2).
+- [x] 1.5 Local Postgres + Redis compose (api/worker/scheduler services arrive in slice 2).
   - RED: `service/tests/Feature/DatabaseConnectionTest.php` runs `DB::select('select 1')` and `Redis::ping()` on the test connections; fails with the stack down.
   - GREEN: `service/docker-compose.yml` with `postgres` (`pgvector/pgvector:0.8.0-pg17`, host 55432, volume `hra-pgdata`) and `redis` (`redis:8.0-alpine`, host 56379); `service/docker/initdb/01-create-test-db.sql` creating `hr_avatar_test`.
   - Verify: `cd service && docker compose up -d postgres redis && php artisan test --filter=DatabaseConnectionTest`.
-- [ ] 1.6 `config/hr-avatar.php` and the boot guard.
+- [x] 1.6 `config/hr-avatar.php` and the boot guard.
   - RED: `service/tests/Feature/BootGuardTest.php` scenarios "Missing JWT secret" and "Short JWT secret": with env `production` and `HRA_JWT_SECRET` unset, or 16 bytes, `AppServiceProvider::boot()` throws an error naming `HRA_JWT_SECRET` and containing no value; in `testing` it does not throw.
   - GREEN: `service/config/hr-avatar.php` (`jwt_secret`, `jwt_issuer` `hr-avatar`, `jwt_audience` `hr-avatar-client`, `public_base_url`, `rate_limits`, `release_delay_seconds` 20, `max_duration_ceiling` 3600, `tavus.concurrency_retries` 3, `tavus.concurrency_backoff_ms` 2000, `catalogue_ttl_seconds` 300; later slices add their own keys), guard in `service/app/Providers/AppServiceProvider.php`.
   - Verify: `cd service && php artisan test --filter=BootGuardTest`.
-- [ ] 1.7 `AssignRequestId` middleware.
+- [x] 1.7 `AssignRequestId` middleware.
   - RED: `service/tests/Feature/RequestIdTest.php` scenarios "Supplied id is echoed", "Invalid id is replaced" (regex `^[A-Za-z0-9._-]{1,64}$`, otherwise a ULID is minted), "Error body matches header".
   - GREEN: `service/app/Http/Middleware/AssignRequestId.php`; set the log context to route name only (never the path).
   - Verify: `cd service && php artisan test --filter=RequestIdTest`.
-- [ ] 1.8 Problem+JSON: `ErrorCode`, `Problem`, `ApiProblem`, `ProblemRenderer`, bootstrap wiring.
+- [x] 1.8 Problem+JSON: `ErrorCode`, `Problem`, `ApiProblem`, `ProblemRenderer`, bootstrap wiring.
   - RED: `service/tests/Feature/ProblemRendererTest.php` and `service/tests/Unit/ProblemTest.php`: scenarios "Validation error shape" (`errors` is `{field: [messages]}`, `detail` always present), "Unhandled exception is opaque" (also with `APP_DEBUG=true`), "Codes are not localized" (same `code` under `Accept-Language: it`), unknown path `404 not_found` as `application/problem+json` (never HTML), unsupported method `405 method_not_allowed` with `Allow`, `PostTooLargeException` -> 413 `payload_too_large`, throttle -> 429 `rate_limited` with `Retry-After`, 503 `service_unavailable`, "No unversioned API surface" (`/health` and `/api/health` are 404).
   - GREEN: `service/app/Http/ErrorCode.php` (full catalogue incl. `api_key_in_query`), `Problem.php`, `ApiProblem.php`, `ProblemRenderer.php`, `service/bootstrap/app.php` (`apiPrefix 'v1'`, no web routes, `withExceptions` renderer for `v1/*` and unmatched paths, global `HandleCors` removed).
   - Verify: `cd service && php artisan test --filter='ProblemRenderer|ProblemTest'`.
-- [ ] 1.9 Health endpoints.
+- [x] 1.9 Health endpoints.
   - RED: `service/tests/Feature/HealthTest.php` scenarios "Liveness" (`200 {"status":"ok"}`, no DB/Redis touch), "Readiness ok" (checks `database`, `redis`), "Readiness with Redis down" (503 Problem+JSON `service_unavailable` with `checks`, no versions/hosts), "Liveness survives dependency failure".
   - GREEN: `service/app/Http/Controllers/V1/HealthController.php`, `service/routes/api.php` (`AssignRequestId` only).
   - Verify: `cd service && php artisan test --filter=HealthTest`.
-- [ ] 1.10 Static analysis and style baseline.
+- [x] 1.10 Static analysis and style baseline.
   - RED: `cd service && composer run analyse && composer run lint` fails (no `phpstan.neon`/`pint.json`, skeleton findings).
   - GREEN: `service/phpstan.neon` (larastan level 8 over `app`, `config`, `routes`, `database`), `service/pint.json`; fix findings in authored code only.
   - Verify: `cd service && composer run analyse && composer run lint && php artisan test --coverage --min=90`.
