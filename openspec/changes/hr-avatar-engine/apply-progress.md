@@ -960,6 +960,8 @@ commit" (and a rolled-back transaction makes no request). Removing `->afterCommi
 
 ## Slice 23: Transcript reconciler (tasks 23.1-23.2) - complete
 
+Slice 23 commit: `f81aa8d`.
+
 Commit subject: `feat(service): add merge-based transcript reconciliation job`
 
 | Task | Test file | RED (observed) | GREEN | Notes |
@@ -994,3 +996,53 @@ condition from the finishing UPDATE failed 3 of the 35 reconciler cases.
 - A provider that needs a credential and has none for the account is `ProviderException::noResponse()` (retry, then partial), not an immediate partial: the host may store the key while retries run.
 - `failed()` logs the conversation id and the exception class, never the message.
 - `ProviderAuth::none()` is the answer to the slice 9 open point (`credential: false` providers): a real object with the owner `none` and no meaningful key; it still refuses to serialize.
+
+## Slice 24: Provider release job (task 24.1) - complete
+
+Commit subject: `feat(service): add delayed provider session release job`
+
+| Task | Test file | RED (observed) | GREEN | Notes |
+|---|---|---|---|---|
+| 24.1 | `tests/Feature/ReleaseProviderSessionTest.php` (26 cases) | 26 errors: `ReleaseProviderSession` not found | 26/26 (one test expectation corrected: with a frozen clock `updated_at` does not change, so only `released_at` differs) | release after end (references passed, `released_at` stamped), no-op when released / no session / missing, failed conversations release too, only `released_at` changes; teardown false releases back with 10/30/60/120 s on attempts 1-4, gives up silently on the fifth (state untouched, log holds the conversation id and no reference or credential), false twice then true is three calls, no key is a failed teardown; reconciliation queued on the first attempt only, whatever the teardown says, delayed to `ended_at + 60 s` (0 when already past); an ended Tavus conversation with no webhook is torn down and reconciled; account isolation |
+
+### Work Unit Evidence (slice 24)
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `cd service && DB_PORT=55442 php artisan test --filter=ReleaseProviderSessionTest`: 26 passed, exit 0 |
+| Full suite | `DB_PORT=55442 php artisan test`: 2073 passed, 5535 assertions, exit 0 |
+| Coverage (batch gate) | `DB_PORT=55442 php artisan test --coverage --min=90`: total 100.0 %, exit 0; `DB_PORT=55442 vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: 2073 passed, total 100.0 % (keys, accounts, middleware, webhook signer / guard / dispatcher), exit 0 |
+| Static analysis / style | `vendor/bin/pint --test` passed; `composer run analyse` (level 8): 0 errors; `openapi.json` unchanged (no route); Spectral unchanged |
+| Runtime harness | N/A by task: a queue job, driven end to end in the slice 26 harness; here the mocked queue job reports `attempts()` and `release()`, and the Tavus path runs against `Http::fake` |
+| Rollback boundary | `ReleaseProviderSession` and its test |
+
+### Deviations and decisions (slice 24)
+
+- Authored size 353 lines (250 tests): within the budget.
+- The job takes the account id with the conversation id (the design says "scalar conversation id ... loads with `withoutGlobalScope`"). The same boundary finding as slice 22 applies: an unscoped read by id is not one of the two permitted ones, so the job loads the conversation under the account it carries.
+- "Logs the conversation id and the status class only": a teardown returns a boolean, so there is no status class to log; the log holds the conversation id and the attempt count. No reference, credential or exception message is ever logged (`failed()` logs the exception class).
+- A provider that needs a credential and has none for the account is a teardown that failed (retried, then logged), not an error.
+- The release delay (`HRA_RELEASE_DELAY_SECONDS`, 20) is configuration read by whoever queues this job, which is slice 25's lifecycle; nothing in the job reads it, so the key is added there (`config/hr-avatar.php` still lists it as to come).
+- A conversation with no provider session (never connected, or failed at connect) is a no-op: its transcript is finished immediately by the lifecycle (slice 25), not by this job.
+
+## Batch summary (unit 0 and slices 20-24)
+
+| Unit | Commit | Full suite after |
+|---|---|---|
+| 0 reconciliation 40-44 | `37d4e5f` | 1631 |
+| 20 conversations | `3b0507c` | 1741 |
+| 21 webhook endpoints, signer, guard | `8d7d203` | 1894 |
+| 22 dispatch, delivery, log | `863d32d` | 1987 |
+| 23 transcript reconciler | `f81aa8d` | 2047 |
+| 24 release job | see `git log` (commit after `f81aa8d`) | 2073 |
+
+### Open decisions (for the owner / next batches)
+
+1. **Receipt rows into `ReconcileTranscript`** (task 23.2): not built. Slice 29's `ProcessProviderEvent` should pass the receipt id so the job reads the (hidden) payload; passing rows would put transcript text on the queue and in `failed_jobs`.
+2. **Multiset transcript matching** (slice 23): a stored line accounts for one provider line only, instead of the spec's literal "any existing line blocks". Confirm, or switch to set semantics (one line change in `TranscriptReconciler::addMissing`).
+3. **Residual provider-state race** (unit 0): a sync run already past its revision check can send older state to the provider while a newer run does the same; the config stays truthful. Closing it needs per-config serialization of runs (`WithoutOverlapping` with a release that does not spend attempts).
+4. **`RetryClassifier` / `SecretRedactor` not built** (slice 21): the spec retries every failed attempt and `last_error` is a closed set of codes. Confirm they can be dropped from the task list for good.
+5. **Voice-preview default budget** (unit 0): 10 a minute per key (`HRA_RATE_LIMIT_PREVIEW`), chosen from BEAI's per-user limit.
+6. **`trimStrings` exception** (slice 20): `external_ref`, `system_prompt` and `opening_text` are no longer trimmed on any endpoint (also changes `external_ref` on avatar configs).
+7. **Endpoint limit answer** (slice 21): the 21st endpoint is a 422 with a `detail` and no field error.
+8. **Contract notes still pending from earlier batches** (not touched here): `liveavatar` provider-token security scheme wording, LiveAvatar session-token lifetime, Tavus persona `editable` flag.

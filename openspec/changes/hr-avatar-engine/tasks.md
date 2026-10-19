@@ -590,9 +590,10 @@ Specs: conversations (transcript and reconciliation). Reconciliation: 20, 21.
 Commit: `feat(service): add delayed provider session release job`
 Specs: conversations (delayed provider release). Reconciliation: 21.
 
-- [ ] 24.1 `ReleaseProviderSession`.
+- [x] 24.1 `ReleaseProviderSession`.
   - RED: `service/tests/Feature/ReleaseProviderSessionTest.php` scenarios "Release after end" (teardown called, `released_at` set), "Teardown retried" (false releases the job back; tries 5, backoff `[10,30,60,120]`), "Conversation state unaffected by teardown failure" (after the fifth false: logs conversation id and status class only, never touches state, never logs exception messages), no-op when `released_at` is set, dispatches `ReconcileTranscript` on the first attempt with a delay landing no earlier than `ended_at + 60 s`, "No webhook dependency".
   - GREEN: `service/app/Jobs/ReleaseProviderSession.php` (scalar conversation id argument, loads with `withoutGlobalScope` then `runAs`).
+  - Note (apply): the job takes the account id with the conversation id and loads the conversation under that account (the boundary rule allows no other unscoped read); the delay config `HRA_RELEASE_DELAY_SECONDS` is read by the lifecycle that queues the job (slice 25).
   - Verify: `cd service && php artisan test --filter=ReleaseProviderSessionTest && php artisan test --coverage --min=90`.
 
 ## Slice 25: Conversation lifecycle and end
