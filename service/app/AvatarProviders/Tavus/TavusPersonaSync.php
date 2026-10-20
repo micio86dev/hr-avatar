@@ -21,9 +21,11 @@ use Illuminate\Support\Facades\Http;
  * binding live there, and sent on a conversation they are ignored without an error.
  *
  * The update is one operation that replaces the whole `layers` node, so the layers are always built
- * complete from the config. A persona with nothing to say is not touched at all: an empty `layers`
- * would wipe what it holds. Known limit: removing the last persona knob therefore leaves the old
- * value on the persona until another knob is set.
+ * complete from the config. The persona a config points at is therefore owned by that config: a layer
+ * set on it through another tool or the Tavus dashboard is erased by the next sync. A persona with
+ * nothing to say is not touched at all: an empty `layers` would wipe what it holds (those layers
+ * included). Known limit: removing the last persona knob leaves the old value on the persona until
+ * another knob is set, and the config still reports `synced` (there was nothing to push).
  *
  * Tavus does not keep a previously sent `layers.llm.api_key` (omitting it is a 400, observed live
  * 2026-08-26), so the key is re-read and re-sent on every sync. A failure carries the status and

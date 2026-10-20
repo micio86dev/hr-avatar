@@ -39,6 +39,11 @@ final class TavusProvider implements AvatarProvider
 {
     private const BASE_URL = 'https://tavusapi.com/v2';
 
+    /** Seconds one call may take, and one connection may take to open: with the guard's retries this bounds a start. */
+    private const TIMEOUT_SECONDS = 15;
+
+    private const CONNECT_TIMEOUT_SECONDS = 5;
+
     public function __construct(
         private readonly TavusConcurrencyGuard $guard = new TavusConcurrencyGuard,
         private readonly TavusPersonaSync $personas = new TavusPersonaSync,
@@ -147,21 +152,16 @@ final class TavusProvider implements AvatarProvider
      */
     public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array
     {
-        $rows = null;
-
         foreach ($this->events($this->conversation($sessionRef, $auth)) as $event) {
-            if (($event['event_type'] ?? null) === 'application.transcription_ready') {
-                $rows = data_get($event, 'properties.transcript');
+            $rows = ($event['event_type'] ?? null) === 'application.transcription_ready' ? data_get($event, 'properties.transcript') : null;
 
-                break;
+            // An event with no rows is not the transcript: a later one may carry it.
+            if (is_array($rows) && $rows !== []) {
+                return $this->lines($rows);
             }
         }
 
-        if (! is_array($rows) || $rows === []) {
-            throw new TranscriptNotReady('Tavus has not delivered the transcript yet.');
-        }
-
-        return $this->lines($rows);
+        throw new TranscriptNotReady('Tavus has not delivered the transcript yet.');
     }
 
     /**
@@ -199,6 +199,7 @@ final class TavusProvider implements AvatarProvider
 
         // Only `shutdown_reason` is read at the top level: Tavus documents `reason` only inside an event's properties.
         $reason = $conversation['shutdown_reason'] ?? null;
+        $reason = is_string($reason) && $reason !== '' ? $reason : null;
 
         foreach ($this->events($conversation) as $event) {
             if (($event['event_type'] ?? null) === 'system.shutdown') {
@@ -311,6 +312,6 @@ final class TavusProvider implements AvatarProvider
 
     private function http(ProviderAuth $auth): PendingRequest
     {
-        return Http::withHeaders(['x-api-key' => $auth->apiKey()]);
+        return Http::withHeaders(['x-api-key' => $auth->apiKey()])->timeout(self::TIMEOUT_SECONDS)->connectTimeout(self::CONNECT_TIMEOUT_SECONDS);
     }
 }

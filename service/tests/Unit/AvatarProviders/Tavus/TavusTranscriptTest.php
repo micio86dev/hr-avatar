@@ -45,6 +45,16 @@ it('reads the transcript off the one conversation, verbosely, with the key', fun
         && $request->header('x-api-key') === ['tvs_live_SUPER_SECRET_KEY_99999']);
 });
 
+// Review rv12 R3-003: an empty transcription_ready event is not the transcript, so the search goes on to a later one.
+it('reads the first transcription_ready event that carries rows', function () {
+    $lines = tavusTranscript(['status' => 'ended', 'events' => [
+        ['event_type' => 'application.transcription_ready', 'properties' => ['transcript' => []]],
+        ['event_type' => 'application.transcription_ready', 'properties' => ['transcript' => [['role' => 'user', 'content' => 'Later']]]],
+    ]]);
+
+    expect(array_map(fn (TranscriptLine $l) => $l->text, $lines))->toBe(['Later']);
+});
+
 it('maps the roles, keeps provider order and leaves the system entry out', function () {
     $lines = tavusTranscript(tavusConversationWith([
         ['role' => 'system', 'content' => 'You are a friendly interviewer.'],

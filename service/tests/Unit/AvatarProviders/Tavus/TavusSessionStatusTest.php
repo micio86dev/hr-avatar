@@ -72,6 +72,10 @@ it('carries the shutdown reason Tavus gives, wherever it gives it', function (ar
     'top level' => [['shutdown_reason' => 'max_call_duration'], 'max_call_duration'],
     'shutdown event' => [['events' => [['event_type' => 'system.shutdown', 'properties' => ['shutdown_reason' => 'participant_left']]]], 'participant_left'],
     'shutdown event, legacy key' => [['events' => [['event_type' => 'system.shutdown', 'properties' => ['reason' => 'timeout']]]], 'timeout'],
+    // Review rv12 R3-001: a top-level reason that is empty or not text is no reason, so the shutdown event is still read.
+    'unusable top level, then the event' => [['shutdown_reason' => '', 'events' => [['event_type' => 'system.shutdown', 'properties' => ['shutdown_reason' => 'participant_left']]]], 'participant_left'],
+    'non-text top level, then the event' => [['shutdown_reason' => ['x'], 'events' => [['event_type' => 'system.shutdown', 'properties' => ['shutdown_reason' => 'participant_left']]]], 'participant_left'],
+    'unusable top level, no event' => [['shutdown_reason' => ''], null],
     'none given' => [['events' => [['event_type' => 'system.replica_joined', 'properties' => []]]], null],
     'no events' => [[], null],
 ]);
