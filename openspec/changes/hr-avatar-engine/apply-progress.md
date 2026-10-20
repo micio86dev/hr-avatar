@@ -1816,5 +1816,5 @@ Strict TDD. Reconciliation: rulings 92-94. Baseline at `8c69816`: 2896 service t
 
 ### Open items for the owner
 
-1. On a synchronous queue (local development only) a provider failure during a config create or update now answers a 500 (the job's exception), as it did before the queue-down handling; with a real queue the request still succeeds and the config shows `failed`.
+1. On a synchronous queue (local development only) a provider failure during a config create or update now answers the job's error (not a 2xx), as it did before the queue-down handling; with a real queue the request still succeeds and the config shows `failed`.
 2. The items of the SF-24..SF-33 unit that stay open (TLS mode on Railway, partial lists not flagged in the response, LiveAvatar paging and token lapse, re-vendoring) are unchanged.
