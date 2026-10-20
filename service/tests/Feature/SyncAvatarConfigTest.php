@@ -11,6 +11,7 @@ use App\Models\LlmModel;
 use App\Models\ProviderCredential;
 use Illuminate\Queue\InvalidPayloadException;
 use Illuminate\Queue\SyncQueue;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -35,6 +36,25 @@ function syncJobConfig(array $attributes = [], ?Account $account = null): Avatar
 function syncJobStoreKey(string $provider, string $key, ?Account $account = null): void
 {
     inAccount($account ?? test()->account, fn () => ProviderCredential::create(['provider' => $provider, 'api_key' => $key]));
+}
+
+/** A real synchronous queue whose push fails before the job runs: the payload cannot be built. */
+function syncPushFailsBeforeTheJob(): void
+{
+    $queue = new class extends SyncQueue
+    {
+        public function connection(): static
+        {
+            return $this;
+        }
+
+        protected function createPayload($job, $queue, $data = '', $delay = null)
+        {
+            throw new InvalidPayloadException('cannot serialize SECRET-JOB');
+        }
+    };
+    $queue->setContainer(app());
+    Queue::swap($queue);
 }
 
 function runSync(AvatarConfig $config): void
@@ -194,26 +214,35 @@ describe('a failed run', function () {
     it('records a push that fails before the job runs as a sync that could not be queued, and does not raise it', function () {
         $logs = captureLogs();
         $config = syncJobConfig();
-        $queue = new class extends SyncQueue
-        {
-            public function connection(): static
-            {
-                return $this;
-            }
-
-            protected function createPayload($job, $queue, $data = '', $delay = null)
-            {
-                throw new InvalidPayloadException('cannot serialize SECRET-JOB');
-            }
-        };
-        $queue->setContainer(app());
-        Queue::swap($queue);
+        syncPushFailsBeforeTheJob();
 
         AvatarConfigSync::dispatchWhenPending($config);
 
         expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe(AvatarConfigSync::NOT_QUEUED);
         $everything = implode("\n", $logs->getArrayCopy());
         expect($everything)->toContain('Avatar config sync could not be queued')->toContain('InvalidPayloadException')->not->toContain('SECRET-JOB');
+    });
+
+    // Review of SF-40 (warning): the failure to record the push must not replace the push failure. The queue and the database
+    // being down together is the case: the push failure is logged before the write is attempted, the failed write is logged
+    // too (its kind only), and it reaches the caller because the config could not be settled and is still waiting.
+    it('keeps the push failure in the log when recording it fails too, and raises the failed write', function () {
+        $logs = captureLogs();
+        $config = syncJobConfig();
+        syncPushFailsBeforeTheJob();
+        DB::beforeExecuting(function (string $query): void {
+            if (str_starts_with($query, 'update') && str_contains($query, 'avatar_configs')) {
+                throw new RuntimeException('database is down SECRET-DB');
+            }
+        });
+
+        expect(fn () => AvatarConfigSync::dispatchWhenPending($config))->toThrow(RuntimeException::class, 'database is down SECRET-DB');
+
+        $everything = implode("\n", $logs->getArrayCopy());
+        expect($everything)->toContain('Avatar config sync could not be queued')->toContain('InvalidPayloadException')
+            ->toContain('Avatar config sync failure could not be recorded')->toContain(RuntimeException::class)
+            ->not->toContain('SECRET-JOB')->not->toContain('SECRET-DB');
+        expect(strpos($everything, 'could not be queued'))->toBeLessThan(strpos($everything, 'could not be recorded'));
     });
 
     it('says what is missing when a bound model has no key', function () {
