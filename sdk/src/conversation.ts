@@ -46,6 +46,10 @@ export class Conversation {
   #liveSent = false
   #ending: Promise<void> | null = null
   #muted = false
+  #deviceMuted = false
+  #micCalls = 0
+  #micConfirmed = 0
+  #micPending = 0
   #speaking = false
   /** When the avatar last stopped speaking; null while it has never spoken. */
   #silentSince: number | null = null
@@ -126,8 +130,7 @@ export class Conversation {
 
   async setMicMuted(muted: boolean): Promise<void> {
     this.#assertActive()
-    await this.#transport.setMicMuted(muted)
-    this.#muted = muted
+    await this.#applyMic(muted)
   }
 
   /** Flips the microphone and returns the new muted state at once; a transport failure is emitted as `error`. */
@@ -135,12 +138,29 @@ export class Conversation {
     this.#assertActive()
     const requested = !this.#muted
     this.#muted = requested
-    this.#transport.setMicMuted(requested).catch((cause: unknown) => {
-      // The transport refused: the microphone is as it was, so the next toggle must flip from that.
-      if (this.#muted === requested) this.#muted = !requested
-      this.#emit('error', asError(cause))
-    })
+    this.#applyMic(requested).catch((cause: unknown) => this.#emit('error', asError(cause)))
     return requested
+  }
+
+  /**
+   * One call to the transport. `#muted` is what the host was told, optimistic while calls are in
+   * flight; `#deviceMuted` is the state of the latest call that succeeded. When the last call in
+   * flight settles the two meet, so a refusal (or two overlapping ones) restores the real state.
+   */
+  #applyMic(muted: boolean): Promise<void> {
+    const call = ++this.#micCalls
+    this.#micPending++
+    return this.#transport
+      .setMicMuted(muted)
+      .then(() => {
+        if (call > this.#micConfirmed) {
+          this.#micConfirmed = call
+          this.#deviceMuted = muted
+        }
+      })
+      .finally(() => {
+        if (--this.#micPending === 0) this.#muted = this.#deviceMuted
+      })
   }
 
   /** The avatar speaks `text` verbatim. */

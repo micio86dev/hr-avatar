@@ -51,6 +51,10 @@ const isRecoverable = (status: number): boolean => status === 429 || status >= 5
 /** A request that has not answered (headers and body) in this long is given up: a hung service must not hang the page. */
 const REQUEST_TIMEOUT_MS = 15_000
 
+// The original message is dropped on purpose: it is not ours to forward.
+const networkError = () =>
+  new HrAvatarError({ code: 'network_error', message: 'Network request failed', recoverable: true })
+
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined
 
@@ -91,16 +95,15 @@ export function createApi(config: ApiConfig) {
         ...(keepalive ? { keepalive: true } : {}),
       })
     } catch {
-      // The original message is dropped on purpose: it is not ours to forward.
-      throw new HrAvatarError({
-        code: 'network_error',
-        message: 'Network request failed',
-        recoverable: true,
-      })
+      throw networkError()
     }
 
     const request_id = response.headers.get('X-Request-Id') ?? undefined
-    const parsed: unknown = await response.json().catch(() => undefined)
+    // A body that is not JSON reads as no body; a body the timeout cut short is the timeout, not an unexpected answer.
+    const parsed: unknown = await response.json().catch(() => {
+      if (signal.aborted) throw networkError()
+      return undefined
+    })
 
     if (response.ok) {
       // Every client route answers with a JSON object; anything else would be returned as `T` and crash the caller later.

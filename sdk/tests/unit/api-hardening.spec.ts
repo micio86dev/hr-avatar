@@ -69,6 +69,41 @@ describe('a request that never settles', () => {
     expect(error.recoverable).toBe(true)
   })
 
+  /** Headers arrive at once; the body then stalls and errors only when the request is aborted, as a real one does. */
+  function stalledBody(status: number) {
+    return vi.fn(async (_url: string, init: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          init.signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')))
+        },
+      })
+      return new Response(body, { status })
+    })
+  }
+
+  it.each([200, 503])('gives up on a body that stalls after the headers (status %i) with the same recoverable network_error', async (status) => {
+    const fetchMock = stalledBody(status)
+    vi.stubGlobal('fetch', fetchMock)
+    const pending = rejection(api().end('conv_1'))
+
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(fetchMock.mock.calls[0]?.[1].signal?.aborted).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    const error = await pending
+
+    expect(error.code).toBe('network_error')
+    expect(error.recoverable).toBe(true)
+  })
+
+  it('still reads a body that is not JSON as no body, not as a timeout', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>', { status: 502 })))
+
+    const error = await rejection(api().end('conv_1'))
+
+    expect(error.code).toBe('unexpected_response')
+    expect(error.recoverable).toBe(true)
+  })
+
   it('does not abort a request that answered in time', async () => {
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response('{"id":"c"}', { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
@@ -159,6 +194,76 @@ describe('a microphone control the transport refuses', () => {
     refuse = false
 
     expect(conversation.toggleMic()).toBe(true)
+  })
+})
+
+describe('overlapping microphone toggles', () => {
+  /** A transport whose mute calls stay pending until the test settles them, in any order. */
+  async function openWithPendingMute() {
+    fakeService()
+    const calls: Array<{ muted: boolean; accept: () => void; refuse: () => void }> = []
+    const transport: Transport = {
+      start: async (_options, events) => void setTimeout(events.ready, 0),
+      stop: async () => undefined,
+      setMicMuted: (muted) =>
+        new Promise<void>((resolve, reject) => {
+          calls.push({ muted, accept: resolve, refuse: () => reject(new Error('no mic')) })
+        }),
+      say: async () => undefined,
+      interrupt: async () => undefined,
+    }
+    const conversation = await HrAvatar.connect({
+      baseUrl: BASE_URL,
+      publishableKey: PUBLISHABLE_KEY,
+      clientSecret: CLIENT_SECRET,
+      mount: document.createElement('div'),
+      transports: { mock: () => transport },
+    })
+    await settle()
+    conversation.on('error', () => undefined)
+    return { conversation, calls }
+  }
+
+  /** The state the next toggle would report is the state the device is believed to be in, inverted. */
+  async function nextToggleAfter(conversation: Awaited<ReturnType<typeof openWithPendingMute>>['conversation'], calls: Array<{ accept: () => void }>) {
+    await settle()
+    const result = conversation.toggleMic()
+    calls.at(-1)?.accept()
+    await settle()
+    return result
+  }
+
+  it('returns to the device state when both are refused, whatever order they settle in', async () => {
+    const { conversation, calls } = await openWithPendingMute()
+
+    expect(conversation.toggleMic()).toBe(true)
+    expect(conversation.toggleMic()).toBe(false)
+    calls[0]?.refuse()
+    calls[1]?.refuse()
+
+    expect(await nextToggleAfter(conversation, calls)).toBe(true)
+  })
+
+  it('keeps the confirmed state when the first is accepted and the second refused', async () => {
+    const { conversation, calls } = await openWithPendingMute()
+
+    conversation.toggleMic()
+    conversation.toggleMic()
+    calls[1]?.refuse()
+    calls[0]?.accept()
+
+    expect(await nextToggleAfter(conversation, calls)).toBe(false)
+  })
+
+  it('takes the later request as the device state when the earlier one settles last', async () => {
+    const { conversation, calls } = await openWithPendingMute()
+
+    conversation.toggleMic()
+    conversation.toggleMic()
+    calls[1]?.accept()
+    calls[0]?.accept()
+
+    expect(await nextToggleAfter(conversation, calls)).toBe(true)
   })
 })
 
