@@ -19,7 +19,6 @@ use App\Models\LlmModel;
 use App\Models\ProviderCredential;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
-use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -93,6 +92,41 @@ function connectProblem(Closure $callback): ?ErrorCode
     }
 
     return null;
+}
+
+/**
+ * Makes the statements that match throw BEFORE they run, so the write really fails and nothing is stored (a query
+ * listener runs after the statement, which would leave the write done and only the caller's view of it broken).
+ *
+ * @param  callable(string, array<int, mixed>): bool  ...$matching
+ */
+function connectBreakStatements(callable ...$matching): void
+{
+    DB::beforeExecuting(function (string $sql, array $bindings) use ($matching): void {
+        foreach ($matching as $matches) {
+            if ($matches($sql, $bindings)) {
+                throw new RuntimeException('database gone: password=hunter2');
+            }
+        }
+    });
+}
+
+/** @param  array<int, mixed>  $bindings */
+function connectSavesCallbackTarget(string $sql, array $bindings): bool
+{
+    return str_contains($sql, '"callback_token_hash"');
+}
+
+/** @param  array<int, mixed>  $bindings */
+function connectKeepsReferences(string $sql, array $bindings): bool
+{
+    return str_starts_with($sql, 'update "conversations" set "provider_session_ref"');
+}
+
+/** @param  array<int, mixed>  $bindings */
+function connectFailsConversation(string $sql, array $bindings): bool
+{
+    return str_starts_with($sql, 'update "conversations"') && in_array('failed', $bindings, true);
 }
 
 function startCalls(): int
@@ -399,15 +433,12 @@ describe('anything that goes wrong once the conversation is claimed', function (
         $config = scriptedConfig();
         ScriptedProvider::$ingestion = Ingestion::Callback;
         $conversation = connectable([], $config);
-        DB::listen(function (QueryExecuted $query) {
-            if (str_contains($query->sql, 'callback_token_hash')) {
-                throw new RuntimeException('database gone: password=hunter2');
-            }
-        });
+        connectBreakStatements(connectSavesCallbackTarget(...));
 
         $response = connectCall($conversation)->assertStatus(500);
 
         expect($response->getContent())->not->toContain('hunter2')
+            ->and(storedConversation($conversation)->callback_token_hash)->toBeNull()
             ->and(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
             ->and(storedConversation($conversation)->ended_reason)->toBe(EndedReason::ProviderError)
             ->and(startCalls())->toBe(0);
@@ -417,15 +448,12 @@ describe('anything that goes wrong once the conversation is claimed', function (
     it('fails the conversation and ends the session when the provider\'s references cannot be kept', function () {
         $config = scriptedConfig();
         $conversation = connectable([], $config);
-        DB::listen(function (QueryExecuted $query) {
-            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"')) {
-                throw new RuntimeException('database gone');
-            }
-        });
+        connectBreakStatements(connectKeepsReferences(...));
 
         connectCall($conversation)->assertStatus(500);
 
-        expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
+        expect(storedConversation($conversation)->provider_session_ref)->toBeNull()
+            ->and(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
             ->and(storedConversation($conversation)->ended_reason)->toBe(EndedReason::ProviderError)
             ->and(array_values(array_filter(ScriptedProvider::$calls, fn (array $call) => $call[0] === 'teardown')))
             ->toBe([['teardown', "scripted_{$conversation->id}", "context_{$conversation->id}", ScriptedProvider::$calls[0][3]]]);
@@ -433,16 +461,13 @@ describe('anything that goes wrong once the conversation is claimed', function (
 
     it('ends the session even when failing the conversation throws', function () {
         $conversation = connectable([], scriptedConfig());
-        DB::listen(function (QueryExecuted $query) {
-            // The references cannot be kept, and the write that would fail the conversation breaks as well.
-            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"') || (str_starts_with($query->sql, 'update "conversations"') && in_array('failed', $query->bindings, true))) {
-                throw new RuntimeException('database gone');
-            }
-        });
+        // The references cannot be kept, and the write that would fail the conversation breaks as well.
+        connectBreakStatements(connectKeepsReferences(...), connectFailsConversation(...));
 
         connectCall($conversation)->assertStatus(500);
 
-        expect(array_values(array_filter(ScriptedProvider::$calls, fn (array $call) => $call[0] === 'teardown')))
+        expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Connecting)
+            ->and(array_values(array_filter(ScriptedProvider::$calls, fn (array $call) => $call[0] === 'teardown')))
             ->toBe([['teardown', "scripted_{$conversation->id}", "context_{$conversation->id}", ScriptedProvider::$calls[0][3]]]);
     });
 
@@ -450,11 +475,7 @@ describe('anything that goes wrong once the conversation is claimed', function (
         $config = scriptedConfig();
         ScriptedProvider::$teardowns = [fn () => throw new RuntimeException('provider said: token=abc123')];
         $conversation = connectable([], $config);
-        DB::listen(function (QueryExecuted $query) {
-            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"')) {
-                throw new RuntimeException('database gone');
-            }
-        });
+        connectBreakStatements(connectKeepsReferences(...));
         $logs = captureLogs();
 
         connectCall($conversation)->assertStatus(500);
