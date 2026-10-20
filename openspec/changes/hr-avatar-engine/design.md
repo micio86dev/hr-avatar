@@ -737,12 +737,14 @@ seconds of this attempt>`, `X-HRA-Event-Id: evt_…`, `X-HRA-Event-Type: <event>
    marked `failed` and no request is sent.
 2. Resolves the host and runs `OutboundHostGuard` on every resolved address; the request is then
    pinned to the checked address (`CURLOPT_RESOLVE`), so DNS rebinding cannot swap it. A blocked
-   address is a failed attempt with `last_error destination_not_allowed`. Outside `local` and
+   address is a failed attempt with `last_error destination_not_allowed`; a host name that gave no
+   address at all (enforced destinations) is a failed attempt with `destination_unresolved`, and
+   nothing is sent. Outside `local` and
    `testing` the guard also runs at endpoint create and update.
 3. Signs the stored body with a fresh timestamp and sends it with `withBody`, a 10 s timeout and
    redirects disabled.
 4. `2xx` → `succeeded`, `completed_at`. Anything else is a failed attempt: `last_error` is
-   `timeout`, `connection_failed`, `destination_not_allowed` or `http_<status>` (never a body or
+   `timeout`, `connection_failed`, `destination_not_allowed`, `destination_unresolved` or `http_<status>` (never a body or
    secret); `last_response_status` is recorded.
 5. After a failed attempt `n < 6`, sets `next_attempt_at` and re-dispatches itself with the delay
    `[10, 60, 300, 1800, 7200][n-1]` seconds; after the sixth it is `failed` with `completed_at`.

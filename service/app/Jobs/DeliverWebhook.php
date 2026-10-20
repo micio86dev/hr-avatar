@@ -120,9 +120,10 @@ final class DeliverWebhook implements ShouldQueue
 
         // Fail closed. An enforced guard that found no address for a host name (it did not resolve, or the answer
         // was empty) leaves nothing to pin, and the client would then resolve the name again at connect time: an
-        // address nobody judged. The attempt is refused; the next one resolves afresh.
+        // address nobody judged. The attempt is refused; the next one resolves afresh. It is not a policy block (no
+        // address was judged and refused), so it has its own code: an owner reading it looks at the receiver's DNS.
         if ($addresses === [] && $guard->enforced()) {
-            return [null, 'destination_not_allowed'];
+            return [null, 'destination_unresolved'];
         }
 
         // The timestamp of THIS attempt: a retry is signed again, with the same body and event id.

@@ -387,6 +387,8 @@ describe('the destination at delivery time', function () {
 
     // Fail closed: with no vetted address the HTTP client would resolve the name itself at connect time, a second
     // resolution the guard never judged (DNS rebinding). Reversed from "attempt it and record the connection failure".
+    // The error is `destination_unresolved`, not `destination_not_allowed`: nothing was judged and refused, there was no
+    // address to judge, and a receiver whose DNS is down must not read like a policy block.
     it('sends nothing to a host that did not resolve when destinations are enforced: the client must never resolve it again', function () {
         $delivery = pendingDelivery();
         app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, fn () => []));
@@ -396,11 +398,11 @@ describe('the destination at delivery time', function () {
 
         Http::assertNothingSent();
         $row = stored($delivery);
-        expect($row->status)->toBe(DeliveryStatus::Pending)->and($row->attempts)->toBe(1)->and($row->last_error)->toBe('destination_not_allowed');
+        expect($row->status)->toBe(DeliveryStatus::Pending)->and($row->attempts)->toBe(1)->and($row->last_error)->toBe('destination_unresolved');
         Queue::assertPushed(DeliverWebhook::class, fn (DeliverWebhook $job) => $job->delay === 10);
     });
 
-    it('fails closed for a name that resolves to nothing at check time and to a private address at connect time', function () {
+    it('sends nothing and asks the guard once for a name that resolved to nothing, leaving no second resolution to the client', function () {
         $delivery = pendingDelivery();
         $lookups = 0;
         app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, function () use (&$lookups): array {

@@ -20,7 +20,7 @@ class WebhookDeliveryController
      *
      * Newest first, optionally only those in one `status`. Each entry says how many attempts were made,
      * the last response status, a short `last_error` code (`timeout`, `connection_failed`,
-     * `destination_not_allowed`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery
+     * `destination_not_allowed`, `destination_unresolved`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery
      * waiting for a retry, when the next attempt is due. Neither the body that was sent nor anything a
      * receiver answered is ever returned. An endpoint of another account is a 404.
      */

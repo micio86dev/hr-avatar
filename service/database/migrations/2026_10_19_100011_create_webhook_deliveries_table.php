@@ -25,7 +25,7 @@ return new class extends Migration
             $table->timestamp('next_attempt_at')->nullable();
             $table->timestamp('last_attempt_at')->nullable();
             $table->smallInteger('last_response_status')->nullable();
-            // A short code from a closed set (timeout, connection_failed, destination_not_allowed, endpoint_disabled, internal_error, http_<status>); never a body.
+            // A short code from a closed set (timeout, connection_failed, destination_not_allowed, destination_unresolved, endpoint_disabled, internal_error, http_<status>); never a body.
             $table->string('last_error', 32)->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

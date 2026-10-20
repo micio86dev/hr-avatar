@@ -2056,7 +2056,7 @@
         "/webhook-endpoints/{webhookEndpoint}/deliveries": {
             "get": {
                 "operationId": "webhook-endpoints.deliveries.index",
-                "description": "Newest first, optionally only those in one `status`. Each entry says how many attempts were made,\nthe last response status, a short `last_error` code (`timeout`, `connection_failed`,\n`destination_not_allowed`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery\nwaiting for a retry, when the next attempt is due. Neither the body that was sent nor anything a\nreceiver answered is ever returned. An endpoint of another account is a 404.",
+                "description": "Newest first, optionally only those in one `status`. Each entry says how many attempts were made,\nthe last response status, a short `last_error` code (`timeout`, `connection_failed`,\n`destination_not_allowed`, `destination_unresolved`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery\nwaiting for a retry, when the next attempt is due. Neither the body that was sent nor anything a\nreceiver answered is ever returned. An endpoint of another account is a 404.",
                 "summary": "List the deliveries of a webhook endpoint",
                 "tags": [
                     "Webhook endpoints"

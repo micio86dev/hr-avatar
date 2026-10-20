@@ -83,6 +83,12 @@ blocked delivery attempt counts as a failed attempt with a safe error `destinati
 - WHEN a delivery attempt runs
 - THEN no request is sent and the attempt is recorded as failed with `destination_not_allowed`
 
+#### Scenario: Host that gave no address at delivery
+
+- GIVEN destinations are enforced and the hostname resolves to no address
+- WHEN a delivery attempt runs
+- THEN no request is sent and the attempt is recorded as failed with `destination_unresolved`, not `destination_not_allowed`
+
 #### Scenario: Redirects not followed
 
 - GIVEN the endpoint answers 302 with a Location header
@@ -262,7 +268,7 @@ Auth: SK with scope `webhook_endpoints:manage`. `GET /v1/webhook-endpoints/{id}/
 (paginated, optional `status` filter) MUST return per delivery: `id`, `event_id`, `event_type`,
 `status`, `attempts`, `last_response_status|null`, `last_error|null`, `next_attempt_at|null`,
 `created_at`, `completed_at|null`. `last_error` MUST be a short safe code or message
-(`timeout`, `connection_failed`, `destination_not_allowed`, `http_<status>`) and MUST NOT contain
+(`timeout`, `connection_failed`, `destination_not_allowed`, `destination_unresolved`, `http_<status>`) and MUST NOT contain
 the secret, response body, or request body. The delivery payload MUST be retained while the delivery
 exists but MUST NOT be returned by the log.
 
