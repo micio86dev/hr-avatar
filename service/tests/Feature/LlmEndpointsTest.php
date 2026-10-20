@@ -78,6 +78,20 @@ describe('LLM credentials', function () {
             ->and($listed->getContent())->not->toContain('gm_abcdefgh5678');
     });
 
+    it('answers 200 and keeps one row when a concurrent first PUT stored the credential between the read and the insert', function () {
+        $raced = false;
+        DB::listen(function ($query) use (&$raced) {
+            if (! $raced && str_starts_with($query->sql, 'select * from "llm_credentials"')) {
+                $raced = true;
+                inAccount(test()->account, fn () => LlmCredential::factory()->create(['llm_provider' => 'gemini', 'api_key' => 'gm_winner_key_0001']));
+            }
+        });
+
+        $response = llmCall('put', '/v1/llm-credentials/gemini', body: ['api_key' => 'gm_loser_key_0002'])->assertOk();
+
+        expect($raced)->toBeTrue()->and($response->json('last_four'))->toBe('0002')->and(DB::table('llm_credentials')->count())->toBe(1);
+    });
+
     it('stores the key encrypted and replaces it in place', function () {
         llmCall('put', '/v1/llm-credentials/gemini', body: ['api_key' => 'gm_first_key_0001'])->assertOk();
         llmCall('put', '/v1/llm-credentials/gemini', body: ['api_key' => 'gm_second_key_0002'])->assertOk();

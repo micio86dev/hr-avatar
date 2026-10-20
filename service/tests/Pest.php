@@ -95,7 +95,11 @@ function captureLogs(): ArrayObject
         $exception = $event->context['exception'] ?? null;
         $context = array_diff_key($event->context, ['exception' => true]);
 
-        $logged->append($event->message.' '.json_encode($context).($exception instanceof Throwable ? ' '.$exception->getMessage().' '.$exception->getTraceAsString() : ''));
+        // json_encode returns false for a context it cannot encode (invalid UTF-8, say), and concatenating false drops
+        // the whole context: a "secret is absent" assertion would then pass without having read that line.
+        $encoded = json_encode($context);
+
+        $logged->append($event->message.' '.($encoded === false ? print_r($context, true) : $encoded).($exception instanceof Throwable ? ' '.$exception->getMessage().' '.$exception->getTraceAsString() : ''));
     });
 
     return $logged;
@@ -104,12 +108,12 @@ function captureLogs(): ArrayObject
 /**
  * A connecting Tavus conversation whose callback token (plain) is `$token`; only its hash is stored.
  */
-function callbackConversation(Account $account, string $token, string $sessionRef = 'c9f2a1c7e4b3d4a1', string $provider = 'tavus'): Conversation
+function callbackConversation(Account $account, string $token, string $sessionRef = 'c9f2a1c7e4b3d4a1'): Conversation
 {
     $config = inAccount($account, fn () => AvatarConfig::factory()->create(['provider' => 'tavus', 'config' => ['replica_id' => 'r_1', 'persona_id' => 'p_1']]));
 
     return inAccount($account, fn () => Conversation::factory()->create([
-        'avatar_config_id' => $config->id, 'provider' => $provider, 'status' => ConversationStatus::Connecting,
+        'avatar_config_id' => $config->id, 'provider' => 'tavus', 'status' => ConversationStatus::Connecting,
         'connecting_at' => now()->subMinute(), 'provider_session_ref' => $sessionRef, 'callback_token_hash' => hash('sha256', $token),
     ]));
 }
@@ -131,7 +135,11 @@ function postInbound(string $provider, string $token, array|string $body, array 
     return test()->call('POST', "/v1/webhooks/providers/{$provider}/{$token}", [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', ...$headers], $content);
 }
 
+/**
+ * How many provider receipts exist in all accounts together. Read one account at a time, each under its own account,
+ * like the sweeper: the total is global, no read removes the account scope.
+ */
 function inboundReceiptCount(): int
 {
-    return ProviderWebhookReceipt::withoutGlobalScopes()->count();
+    return Account::query()->pluck('id')->sum(fn (string $id): int => CurrentAccount::runAs($id, fn (): int => ProviderWebhookReceipt::count()));
 }

@@ -42,7 +42,9 @@ it('stores a credential encrypted at rest and decrypts it back', function (strin
     $credential = inAccount($this->account, fn () => $model::create([...$attributes, 'api_key' => $plaintext]));
 
     $raw = DB::table($credential->getTable())->where('id', $credential->id)->value('api_key');
-    expect($raw)->not->toBeEmpty()->not->toContain($plaintext)->not->toContain('1234')
+    // Only the whole plaintext is asserted absent: the cast uses a random IV, so a short fragment such as the last four
+    // characters can appear in the ciphertext by chance.
+    expect($raw)->not->toBeEmpty()->not->toContain($plaintext)
         ->and(inAccount($this->account, fn () => $model::findOrFail($credential->id)->api_key))->toBe($plaintext);
 })->with([
     'provider credential' => [ProviderCredential::class, ['provider' => 'tavus']],

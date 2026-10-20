@@ -5,6 +5,8 @@ use App\Credentials\CredentialResolver;
 use App\Credentials\ProviderAuth;
 use App\Models\Account;
 use App\Models\ProviderCredential;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     $this->account = Account::factory()->create();
@@ -79,4 +81,16 @@ it('resolves only the configured credential providers', function () {
 
     expect($this->resolver->for($this->account->id, 'acme'))->toBeNull()
         ->and($this->resolver->for($this->account->id, 'mock'))->toBeNull();
+});
+
+// Documented in CredentialResolver: an account key that cannot be decrypted (a rotated APP_KEY, a corrupt row) is not
+// skipped. Falling back to the platform key would bill the platform for a call the account meant to pay for.
+it('throws for an undecryptable account key and never falls back to the platform key', function () {
+    storeFor($this->account, 'tavus', 'account-key-123456');
+    config()->set('hr-avatar.platform_keys.tavus', 'platform-key-123456');
+    DB::table('provider_credentials')->where('account_id', $this->account->id)->update(['api_key' => 'not-a-valid-ciphertext']);
+
+    $resolve = fn () => $this->resolver->for($this->account->id, 'tavus');
+
+    expect($resolve)->toThrow(DecryptException::class);
 });

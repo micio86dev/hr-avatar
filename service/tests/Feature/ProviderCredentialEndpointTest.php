@@ -163,3 +163,24 @@ it('shows and changes only the calling account\'s credentials', function () {
     expect(storedKey($this->account, 'tavus'))->toBe('tv_account_a_key_1111')
         ->and(storedKey($other, 'tavus'))->toBeNull();
 });
+
+// Two first PUTs for one account and provider both take the insert path; the loser meets the unique
+// (account_id, provider) index. It must read the winner's row and replace the key, answering 200, never 500.
+it('answers 200 and keeps one row when a concurrent first PUT stored the credential between the read and the insert', function () {
+    $raced = false;
+    DB::listen(function ($query) use (&$raced) {
+        // The loser's read found nothing; before it inserts, the other request's row lands.
+        if (! $raced && str_starts_with($query->sql, 'select * from "provider_credentials"')) {
+            $raced = true;
+            inAccount(test()->account, fn () => ProviderCredential::factory()->create(['provider' => 'tavus', 'api_key' => 'tv_winner_key_0001']));
+        }
+    });
+
+    $response = providerCall('put', '/tavus', ['api_key' => 'tv_loser_key_0002']);
+
+    $response->assertOk();
+    expect($raced)->toBeTrue()
+        ->and($response->json('last_four'))->toBe('0002')
+        ->and(DB::table('provider_credentials')->count())->toBe(1)
+        ->and(storedKey($this->account, 'tavus'))->toBe('tv_loser_key_0002');
+});
