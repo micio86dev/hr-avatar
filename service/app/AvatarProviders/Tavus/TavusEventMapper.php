@@ -85,7 +85,8 @@ final class TavusEventMapper
         }
 
         try {
-            return Carbon::parse($value);
+            // An offset in the string wins; one without it is UTC, not the application's timezone.
+            return Carbon::parse($value, 'UTC');
         } catch (InvalidFormatException) {
             return null;
         }

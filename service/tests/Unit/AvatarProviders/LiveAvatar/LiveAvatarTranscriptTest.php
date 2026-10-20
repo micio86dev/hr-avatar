@@ -144,3 +144,43 @@ it('raises a provider error, not an empty transcript, when LiveAvatar fails', fu
     '502' => [fn () => Http::response(['message' => 'body of the provider'], 502), FailureClass::Upstream],
     'a timeout' => [fn () => throw new ConnectionException('timeout'), FailureClass::Upstream],
 ]);
+
+// Review rv14 R3-002: a time with no offset is read as UTC, whatever the application's timezone is.
+it('reads an ISO time that carries no offset as UTC, under any application timezone', function (string $timezone) {
+    config(['app.timezone' => $timezone]);
+    date_default_timezone_set($timezone);
+    laTranscriptFake([laRow('user', 'x', '2025-10-19T12:00:00')]);
+
+    $at = $this->provider->fetchTranscript('sess_1', $this->auth)[0]->occurredAt;
+
+    date_default_timezone_set('UTC');
+    expect($at->getTimestamp())->toBe(1760875200);
+})->with(['UTC', 'America/New_York', 'Asia/Tokyo']);
+
+it('keeps the offset an ISO time carries', function () {
+    laTranscriptFake([laRow('user', 'x', '2025-10-19T14:00:00+02:00')]);
+
+    expect($this->provider->fetchTranscript('sess_1', $this->auth)[0]->occurredAt->getTimestamp())->toBe(1760875200);
+});
+
+// Review rv14 R3-001: how the next page is asked for is undocumented, so only the first is read; that is said in the log.
+it('says in the log, without any of the transcript, that a further page was not read', function () {
+    $logs = captureLogs();
+    Http::fake(['api.liveavatar.com/v1/sessions/sess_1/transcript' => Http::response([
+        'data' => ['session_active' => false, 'next_timestamp' => 1760875300000, 'transcript_data' => [laRow('user', 'PRIVATE-WORDS')]],
+    ])]);
+
+    $lines = $this->provider->fetchTranscript('sess_1', $this->auth);
+
+    $everything = implode("\n", $logs->getArrayCopy());
+    expect($lines)->toHaveCount(1)->and($everything)->toContain('LiveAvatar transcript has a further page that was not read')->and($everything)->not->toContain('PRIVATE-WORDS');
+});
+
+it('logs nothing when the transcript has no further page', function () {
+    $logs = captureLogs();
+    laTranscriptFake([laRow('user', 'x')]);
+
+    $this->provider->fetchTranscript('sess_1', $this->auth);
+
+    expect($logs->getArrayCopy())->toBe([]);
+});

@@ -7,6 +7,7 @@ use App\AvatarProviders\ResourceKind;
 use App\Credentials\ProviderAuth;
 use App\Llm\LlmBinding;
 use App\Models\AvatarConfig;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,6 +39,36 @@ final class LiveAvatarLlmRegistrar
     public function ensureConfiguration(AvatarConfig $config, LlmBinding $binding, ProviderAuth $auth): string
     {
         $fingerprint = substr(hash('sha256', $binding->apiKey()), 0, 16);
+        [$response, $existing] = $this->write($config, $binding, $auth, $fingerprint);
+
+        if ($this->api->isUnknownSecret($response)) {
+            // The secret was deleted in LiveAvatar's dashboard: drop the ledger entry, create it again and write once more, never loop.
+            $this->ledger->forget($config->account_id, $auth, ResourceKind::LlmSecret, $fingerprint);
+            [$response, $existing] = $this->write($config, $binding, $auth, $fingerprint);
+        }
+
+        $this->api->orFail($response);
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $created = $this->api->stringAt($response, 'data.id') ?? throw ProviderException::noResponse();
+        $this->store($config, $created);
+
+        return $created;
+    }
+
+    /**
+     * Writes the configuration against the secret holding the binding's key: an update of the one the config
+     * already has, else a create. Returns the answer, and the stored id when the answer is an update's.
+     *
+     * @return array{0: Response, 1: string|null}
+     *
+     * @throws ProviderException
+     */
+    private function write(AvatarConfig $config, LlmBinding $binding, ProviderAuth $auth, string $fingerprint): array
+    {
         $secretId = $this->ledger->secret(
             $config->account_id, $auth, ResourceKind::LlmSecret, $fingerprint, 'OPENAI_API_KEY', "hra-llm-{$fingerprint}", $binding->apiKey(),
         );
@@ -56,20 +87,14 @@ final class LiveAvatarLlmRegistrar
             $response = $this->api->call($auth, 'PATCH', '/llm-configurations/'.rawurlencode($existing), $body);
 
             if ($response->status() !== 404) {
-                $this->api->orFail($response);
-
-                return $existing;
+                return [$response, $existing];
             }
 
             // Deleted in LiveAvatar's dashboard, or it belongs to another key's space: forget it and create once, never loop.
             $this->store($config, null);
         }
 
-        $created = $this->api->stringAt($this->api->orFail($this->api->call($auth, 'POST', '/llm-configurations', $body)), 'data.id')
-            ?? throw ProviderException::noResponse();
-        $this->store($config, $created);
-
-        return $created;
+        return [$this->api->call($auth, 'POST', '/llm-configurations', $body), null];
     }
 
     /**

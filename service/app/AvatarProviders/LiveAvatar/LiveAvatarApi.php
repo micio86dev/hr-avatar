@@ -55,6 +55,19 @@ final class LiveAvatarApi
         return $response->successful() ? $response : throw ProviderException::fromStatus($response->status());
     }
 
+    /**
+     * The shape LiveAvatar was seen to answer for a secret id it does not know (a secret deleted in its dashboard): HTTP
+     * 400, code 4000, and a message of the form "Secret with id '...' not found in your space". The message is the only
+     * thing that tells it from another 4000, so a wording change on their side degrades to a plain failure (an error,
+     * never a wrong object).
+     */
+    public function isUnknownSecret(Response $response): bool
+    {
+        return $response->status() === 400
+            && $response->json('code') === 4000
+            && str_contains((string) $response->json('message'), 'Secret');
+    }
+
     /** A non-empty string at a dotted path of the answer, else null. */
     public function stringAt(Response $response, string $path): ?string
     {

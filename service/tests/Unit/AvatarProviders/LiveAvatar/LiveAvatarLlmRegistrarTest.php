@@ -319,3 +319,54 @@ it('lets neither key into an exception or a log, even when LiveAvatar echoes the
     expect($seen ?? null)->not->toBeNull()
         ->and($everything)->not->toContain('gem-key-AAAA-1111')->not->toContain('la-key-one-123456');
 });
+
+// Review rv13 R3-001: the voice registrar recovers from a secret deleted in LiveAvatar; so does this one.
+describe('a secret deleted in LiveAvatar', function () {
+    it('is replaced once when creating the configuration, and the write is retried once', function () {
+        $fingerprint = substr(hash('sha256', 'gem-key-AAAA-1111'), 0, 16);
+        (new LiveAvatarLedger(new LiveAvatarApi))->record($this->account->id, $this->auth, ResourceKind::LlmSecret, $fingerprint, 'gone-secret');
+        Http::fake([
+            'api.liveavatar.com/v1/secrets' => Http::response(['data' => ['id' => 'fresh-secret']]),
+            'api.liveavatar.com/v1/llm-configurations' => Http::sequence()->push(['code' => 4000, 'data' => null, 'message' => "Secret with id 'gone-secret' not found in your space"], 400)->push(['data' => ['id' => 'cfg_new']]),
+        ]);
+
+        $id = $this->registrar->ensureConfiguration(laLlmConfig($this->account), $this->binding, $this->auth);
+
+        $secrets = collect(laLlmSent('POST', '/llm-configurations'))->map(fn (Request $request) => $request['secret_id'])->all();
+        expect($id)->toBe('cfg_new')->and($secrets)->toBe(['gone-secret', 'fresh-secret'])->and(laLlmSent('POST', '/secrets'))->toHaveCount(1)->and(laLlmRows($this->account))->toBe(1);
+    });
+
+    it('is replaced once when updating the stored configuration, and the update is retried once', function () {
+        $fingerprint = substr(hash('sha256', 'gem-key-AAAA-1111'), 0, 16);
+        (new LiveAvatarLedger(new LiveAvatarApi))->record($this->account->id, $this->auth, ResourceKind::LlmSecret, $fingerprint, 'gone-secret');
+        Http::fake([
+            'api.liveavatar.com/v1/secrets' => Http::response(['data' => ['id' => 'fresh-secret']]),
+            'api.liveavatar.com/v1/llm-configurations/cfg_old' => Http::sequence()->push(['code' => 4000, 'data' => null, 'message' => "Secret with id 'gone-secret' not found in your space"], 400)->push(['data' => ['id' => 'cfg_old']]),
+        ]);
+
+        $id = $this->registrar->ensureConfiguration(laLlmConfig($this->account, ['llm_configuration_id' => 'cfg_old']), $this->binding, $this->auth);
+
+        $secrets = collect(laLlmSent('PATCH', '/llm-configurations/cfg_old'))->map(fn (Request $request) => $request['secret_id'])->all();
+        expect($id)->toBe('cfg_old')->and($secrets)->toBe(['gone-secret', 'fresh-secret']);
+    });
+
+    it('gives up after that one retry rather than looping on a secret that keeps vanishing', function () {
+        Http::fake([
+            'api.liveavatar.com/v1/secrets' => Http::response(['data' => ['id' => 'fresh-secret']]),
+            'api.liveavatar.com/v1/llm-configurations' => Http::response(['code' => 4000, 'data' => null, 'message' => 'Secret with id x not found in your space'], 400),
+        ]);
+
+        expect(fn () => $this->registrar->ensureConfiguration(laLlmConfig($this->account), $this->binding, $this->auth))->toThrow(ProviderException::class)
+            ->and(laLlmSent('POST', '/llm-configurations'))->toHaveCount(2);
+    });
+
+    it('does not mistake another 400 for a missing secret', function () {
+        Http::fake([
+            'api.liveavatar.com/v1/secrets' => Http::response(['data' => ['id' => 'sec-1']]),
+            'api.liveavatar.com/v1/llm-configurations' => Http::response(['code' => 4001, 'data' => null, 'message' => 'Invalid model'], 400),
+        ]);
+
+        expect(fn () => $this->registrar->ensureConfiguration(laLlmConfig($this->account), $this->binding, $this->auth))->toThrow(ProviderException::class)
+            ->and(laLlmSent('POST', '/llm-configurations'))->toHaveCount(1)->and(laLlmSent('POST', '/secrets'))->toHaveCount(1);
+    });
+});

@@ -93,7 +93,7 @@ final class LiveAvatarVoiceRegistrar
         $secretId = $this->secret($accountId, $auth, $engine, $type, $vendor, $secretKey);
         $response = $this->bindRequest($auth, $engine, $vendorVoiceId, $secretId);
 
-        if ($this->isUnknownSecret($response)) {
+        if ($this->api->isUnknownSecret($response)) {
             $this->ledger->forget($accountId, $auth, ResourceKind::VendorSecret, $secretKey);
             $response = $this->bindRequest($auth, $engine, $vendorVoiceId, $this->secret($accountId, $auth, $engine, $type, $vendor, $secretKey));
         }
@@ -122,18 +122,5 @@ final class LiveAvatarVoiceRegistrar
             'secret_id' => $secretId,
             'name' => mb_substr("hra-{$engine}-{$vendorVoiceId}", 0, self::NAME_MAX),
         ]);
-    }
-
-    /**
-     * The shape LiveAvatar was seen to answer for a secret id it does not know: HTTP 400, code 4000,
-     * and a message of the form "Secret with id '...' not found in your space". The message is the only
-     * thing that tells it from another 4000, so a wording change on their side degrades to a plain
-     * bind failure (an error, never a wrong voice).
-     */
-    private function isUnknownSecret(Response $response): bool
-    {
-        return $response->status() === 400
-            && $response->json('code') === 4000
-            && str_contains((string) $response->json('message'), 'Secret');
     }
 }

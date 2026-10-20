@@ -195,7 +195,8 @@ final class LiveAvatarProvider implements AvatarProvider
     /**
      * `GET /sessions/{id}/transcript` answers `data.transcript_data[]` rows of `{role, transcript,
      * absolute_timestamp, relative_timestamp}` and `data.session_active`. Only the first page is
-     * read: how `next_timestamp` paginates is undocumented (open item in the research notes).
+     * read: how `next_timestamp` paginates is undocumented (open item in the research notes), so a non-null one is
+     * logged instead of guessed at; the reconciler still merges the lines the browser forwarded.
      */
     public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array
     {
@@ -203,6 +204,10 @@ final class LiveAvatarProvider implements AvatarProvider
 
         if ($response->json('data.session_active') === true) {
             throw new TranscriptNotReady('The LiveAvatar session is still active.');
+        }
+
+        if ($response->json('data.next_timestamp') !== null) {
+            Log::warning('LiveAvatar transcript has a further page that was not read');
         }
 
         $rows = $response->json('data.transcript_data');
@@ -332,7 +337,8 @@ final class LiveAvatarProvider implements AvatarProvider
         }
 
         try {
-            return CarbonImmutable::parse($value);
+            // An offset in the string wins; one without it is UTC, not the application's timezone.
+            return CarbonImmutable::parse($value, 'UTC');
         } catch (InvalidArgumentException) {
             return null;
         }
