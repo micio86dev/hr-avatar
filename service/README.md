@@ -8,10 +8,10 @@ for working on the service.
 
 ```sh
 cp .env.example .env
+composer install                                       # needs no secret: package discovery runs as testing
+php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'      # into HRA_JWT_SECRET: every artisan command below needs it
 php artisan key:generate
-php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'      # into HRA_JWT_SECRET
 docker compose up -d postgres redis                    # PostgreSQL on 55432, Redis on 56379
-composer install
 php artisan migrate
 php artisan db:seed --class=LlmModelSeeder
 php artisan hra:bootstrap-account "My account"         # the first secret key, shown once

@@ -53,6 +53,7 @@
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@putenv APP_ENV=testing",
             "@php artisan package:discover --ansi"
         ],
         "post-root-package-install": [

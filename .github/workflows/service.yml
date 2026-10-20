@@ -50,8 +50,8 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      # Dummy values for CI only. The application refuses to boot without a signing secret
-      # of at least 32 bytes, and composer's package discovery boots it.
+      # Dummy values for CI only. The application refuses to boot outside testing without a signing
+      # secret of at least 32 bytes (composer's package discovery runs as testing and needs none).
       APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
       HRA_JWT_SECRET: ci-only-dummy-signing-secret-not-for-use
       DB_HOST: 127.0.0.1
