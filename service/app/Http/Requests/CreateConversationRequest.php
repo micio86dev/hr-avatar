@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
+use JsonException;
 use stdClass;
 
 // `metadata` is read from the raw JSON body: Laravel's parsed input turns `{}` into `[]`, and an empty
@@ -116,10 +117,15 @@ class CreateConversationRequest extends FormRequest
             return 'The metadata must be a JSON object.';
         }
 
-        // Compact and unescaped, which is the smallest honest reading of "serialized".
-        return strlen(json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) > self::MAX_METADATA_BYTES
-            ? 'The metadata may not be larger than 8 KB when encoded.'
-            : null;
+        try {
+            // Compact and unescaped, which is the smallest honest reading of "serialized".
+            $size = strlen(json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        } catch (JsonException) {
+            // A number past the double range (1e400) decodes to INF, which has no JSON form.
+            return 'The metadata holds a value that cannot be stored as JSON, such as a number out of range.';
+        }
+
+        return $size > self::MAX_METADATA_BYTES ? 'The metadata may not be larger than 8 KB when encoded.' : null;
     }
 
     /**

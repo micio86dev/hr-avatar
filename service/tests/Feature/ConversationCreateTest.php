@@ -287,6 +287,17 @@ describe('the host\'s opaque fields', function () {
         convCreate(convBody(['metadata' => (object) ['k' => str_repeat('é', intdiv(8192 - $overhead, 2) + 1)]]))->assertStatus(422);
     });
 
+    // Review rv21 R3-001: a number past the double range reads as INF, which cannot be written back as JSON; that is the
+    // caller's mistake (a 422), not ours (a 500).
+    it('refuses a metadata holding a number that cannot be stored, with a 422 and not a 500', function (string $number) {
+        $body = str_replace('"__NUMBER__"', $number, json_encode(convBody(['metadata' => ['amount' => '__NUMBER__']]), JSON_THROW_ON_ERROR));
+
+        $response = $this->call('POST', '/v1/conversations', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$this->raw, 'CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], content: $body);
+
+        $response->assertStatus(422);
+        expect($response->json('errors'))->toHaveKey('metadata')->and(convCount())->toBe(0);
+    })->with(['positive overflow' => ['1e400'], 'negative overflow' => ['-1e400']]);
+
     it('does not accept metadata sent as form fields', function () {
         $this->post('/v1/conversations', convBody(['metadata' => ['a' => 1]]), ['Authorization' => 'Bearer '.$this->raw, 'Accept' => 'application/json'])
             ->assertStatus(422);
