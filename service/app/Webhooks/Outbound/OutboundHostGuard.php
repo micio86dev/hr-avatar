@@ -59,7 +59,9 @@ final class OutboundHostGuard
 
     /**
      * The addresses a connection to the URL may use: the literal itself, or what the host name resolves
-     * to (none when it does not resolve, and none when destinations are not enforced).
+     * to. An empty list means two different things, so a caller that connects must check `enforced()`: empty
+     * with destinations not enforced is "no constraint"; empty while enforced is a host that did not resolve,
+     * which must not be contacted by name (the client would resolve it again, unjudged).
      *
      * @return list<string>
      *

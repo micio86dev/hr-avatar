@@ -939,8 +939,8 @@ Source: the native review findings of the slices 3-30 (`h450eb50` ... `83bdda7`,
 
 Commit boundary: one commit per item (or tight group) on `feature/extract-avatar-service`; no push.
 
-- [ ] SF-1 `OutboundHostGuard`: embedded IPv4 (IPv4-mapped `::ffff:0:0/96` in both spellings, NAT64 `64:ff9b::/96`, 6to4 `2002::/16`) is extracted and re-judged by every IPv4 block; a host-shaped value that is not an address but holds `:` (zone identifier) is blocked; docblock and redundant check cleanups (R1-001, R3-002, R2-004, R2-005, R2-006, R3-006).
-- [ ] SF-2 `DeliverWebhook`: an enforced guard with no vetted address fails the attempt closed (`destination_not_allowed`); the connection is pinned to the vetted address; the client never resolves again (R4-003, R3-003).
+- [x] SF-1 `OutboundHostGuard`: embedded IPv4 (IPv4-mapped `::ffff:0:0/96` in both spellings, NAT64 `64:ff9b::/96`, 6to4 `2002::/16`) is extracted and re-judged by every IPv4 block; a host-shaped value that is not an address but holds `:` (zone identifier) is blocked; docblock and redundant check cleanups (R1-001, R3-002, R2-004, R2-005, R2-006, R3-006).
+- [x] SF-2 `DeliverWebhook`: an enforced guard with no vetted address fails the attempt closed (`destination_not_allowed`); the connection is pinned to the vetted address; the client never resolves again (R4-003, R3-003).
 - [ ] SF-3 Relay of lost deliveries: `hra:relay` command, scheduled every minute, re-dispatches `pending` deliveries that are stale (lost push or lost retry dispatch), claimed with a conditional lease update so concurrent relays do not both queue one (R4-001, R4-002).
 - [ ] SF-4 Provider receipts: a redelivered or re-polled receipt that is stored and unprocessed is queued again; the relay re-queues stale unprocessed receipts under a lease; processing stays idempotent (R4-001 of slice 29).
 - [ ] SF-5 `ConnectConversation`: any `Throwable` after the claim (callback target, spec, start, keeping the references) fails the conversation; no conversation stays `connecting` (R3-connect-unguarded-tail-after-claim).

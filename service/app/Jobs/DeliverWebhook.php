@@ -118,6 +118,13 @@ final class DeliverWebhook implements ShouldQueue
             return [null, 'destination_not_allowed'];
         }
 
+        // Fail closed. An enforced guard that found no address for a host name (it did not resolve, or the answer
+        // was empty) leaves nothing to pin, and the client would then resolve the name again at connect time: an
+        // address nobody judged. The attempt is refused; the next one resolves afresh.
+        if ($addresses === [] && $guard->enforced()) {
+            return [null, 'destination_not_allowed'];
+        }
+
         // The timestamp of THIS attempt: a retry is signed again, with the same body and event id.
         $timestamp = now()->getTimestamp();
 
@@ -142,7 +149,8 @@ final class DeliverWebhook implements ShouldQueue
 
     /**
      * The cURL option that makes the connection go to the addresses that were checked, whatever DNS says now.
-     * An address in the URL needs none, and neither does a host that did not resolve.
+     * An address in the URL needs none, and neither does a destination that is not enforced (no addresses are
+     * vetted there). An enforced host with no vetted address never gets here: `send()` refuses it first.
      *
      * @param  list<string>  $addresses
      * @return array<string, array<int, list<string>>>

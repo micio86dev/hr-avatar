@@ -366,7 +366,7 @@ describe('the destination at delivery time', function () {
         expect($options['curl'][CURLOPT_RESOLVE])->toBe(['hooks.example.com:443:93.184.216.34']);
     });
 
-    it('pins nothing for a url that is an address already, for a host that does not resolve, or where destinations are not enforced', function (string $url, Closure $guard) {
+    it('pins nothing for a url that is an address already, or where destinations are not enforced', function (string $url, Closure $guard) {
         $delivery = pendingDelivery(['url' => $url]);
         app()->instance(OutboundHostGuard::class, $guard());
         $options = null;
@@ -382,18 +382,57 @@ describe('the destination at delivery time', function () {
     })->with([
         'an IPv4 literal' => ['https://93.184.216.34/hra', fn () => new OutboundHostGuard(true, fn () => throw new LogicException)],
         'an IPv6 literal' => ['https://[2606:2800:220:1::1]/hra', fn () => new OutboundHostGuard(true, fn () => throw new LogicException)],
-        'a host that does not resolve' => ['https://hooks.example.com/hra', fn () => new OutboundHostGuard(true, fn () => [])],
         'destinations not enforced' => ['http://localhost:9000/hra', fn () => new OutboundHostGuard(false)],
     ]);
 
-    it('attempts a host that does not resolve and records the connection failure', function () {
+    // Fail closed: with no vetted address the HTTP client would resolve the name itself at connect time, a second
+    // resolution the guard never judged (DNS rebinding). Reversed from "attempt it and record the connection failure".
+    it('sends nothing to a host that did not resolve when destinations are enforced: the client must never resolve it again', function () {
         $delivery = pendingDelivery();
         app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, fn () => []));
-        Http::fake(fn () => throw new ConnectionException('cURL error 6: Could not resolve host'));
+        Http::fake();
 
         runDelivery($delivery);
 
-        expect(stored($delivery)->last_error)->toBe('connection_failed');
+        Http::assertNothingSent();
+        $row = stored($delivery);
+        expect($row->status)->toBe(DeliveryStatus::Pending)->and($row->attempts)->toBe(1)->and($row->last_error)->toBe('destination_not_allowed');
+        Queue::assertPushed(DeliverWebhook::class, fn (DeliverWebhook $job) => $job->delay === 10);
+    });
+
+    it('fails closed for a name that resolves to nothing at check time and to a private address at connect time', function () {
+        $delivery = pendingDelivery();
+        $lookups = 0;
+        app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, function () use (&$lookups): array {
+            $lookups++;
+
+            return [];
+        }));
+        $sent = false;
+        Http::fake(function () use (&$sent) {
+            $sent = true;
+
+            return Http::response('', 204);
+        });
+
+        runDelivery($delivery);
+
+        expect($sent)->toBeFalse()->and($lookups)->toBe(1);
+    });
+
+    it('pins a name to the one address that was vetted, and the request carries no other resolution', function () {
+        $delivery = pendingDelivery();
+        app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, fn () => ['93.184.216.34']));
+        $options = null;
+        Http::fake(function (Request $request, array $given) use (&$options) {
+            $options = $given;
+
+            return Http::response('', 204);
+        });
+
+        runDelivery($delivery);
+
+        expect($options['curl'])->toHaveKey(CURLOPT_RESOLVE)->and($options['curl'][CURLOPT_RESOLVE])->toHaveCount(1);
     });
 });
 
