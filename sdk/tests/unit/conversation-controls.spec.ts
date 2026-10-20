@@ -88,6 +88,44 @@ describe('microphone', () => {
     expect(errors).toEqual([failure])
     expect(service.called('end')).toHaveLength(0)
   })
+
+  it('treats a transport that throws synchronously like one that rejects', async () => {
+    fakeService()
+    let refuse = true
+    const failure = new HrAvatarError({ code: 'transport_error', message: 'no mic' })
+    const stub: Transport = {
+      start: async (_options, events) => void setTimeout(events.ready, 0),
+      stop: async () => undefined,
+      setMicMuted: (): Promise<void> => {
+        if (refuse) throw failure
+        return Promise.resolve()
+      },
+      say: async () => undefined,
+      interrupt: async () => undefined,
+    }
+    const conversation = await HrAvatar.connect({
+      baseUrl: BASE_URL,
+      publishableKey: PUBLISHABLE_KEY,
+      clientSecret: CLIENT_SECRET,
+      mount: document.createElement('div'),
+      transports: { mock: () => stub },
+    })
+    const errors: HrAvatarError[] = []
+    conversation.on('error', (e) => errors.push(e))
+
+    // toggleMic answers at once and reports the failure as an error event, it never throws.
+    expect(conversation.toggleMic()).toBe(true)
+    await settle()
+    expect(errors).toEqual([failure])
+
+    // setMicMuted rejects with the failure.
+    await expect(conversation.setMicMuted(true)).rejects.toBe(failure)
+
+    // Nothing stays in flight: the host's view is back on the device state (unmuted), so the
+    // next toggle flips from the truth.
+    refuse = false
+    expect(conversation.toggleMic()).toBe(true)
+  })
 })
 
 describe('a transport that fails with a plain error', () => {

@@ -150,8 +150,14 @@ export class Conversation {
   #applyMic(muted: boolean): Promise<void> {
     const call = ++this.#micCalls
     this.#micPending++
-    return this.#transport
-      .setMicMuted(muted)
+    // A transport that throws instead of rejecting is the same refusal, and must settle the call.
+    let issued: Promise<void>
+    try {
+      issued = this.#transport.setMicMuted(muted)
+    } catch (error) {
+      issued = Promise.reject(error)
+    }
+    return issued
       .then(() => {
         if (call > this.#micConfirmed) {
           this.#micConfirmed = call
