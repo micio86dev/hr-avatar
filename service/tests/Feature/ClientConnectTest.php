@@ -431,6 +431,21 @@ describe('anything that goes wrong once the conversation is claimed', function (
             ->toBe([['teardown', "scripted_{$conversation->id}", "context_{$conversation->id}", ScriptedProvider::$calls[0][3]]]);
     });
 
+    it('ends the session even when failing the conversation throws', function () {
+        $conversation = connectable([], scriptedConfig());
+        DB::listen(function (QueryExecuted $query) {
+            // The references cannot be kept, and the write that would fail the conversation breaks as well.
+            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"') || (str_starts_with($query->sql, 'update "conversations"') && in_array('failed', $query->bindings, true))) {
+                throw new RuntimeException('database gone');
+            }
+        });
+
+        connectCall($conversation)->assertStatus(500);
+
+        expect(array_values(array_filter(ScriptedProvider::$calls, fn (array $call) => $call[0] === 'teardown')))
+            ->toBe([['teardown', "scripted_{$conversation->id}", "context_{$conversation->id}", ScriptedProvider::$calls[0][3]]]);
+    });
+
     it('still fails the conversation when that session cannot be ended either, and logs only the kind of failure', function () {
         $config = scriptedConfig();
         ScriptedProvider::$teardowns = [fn () => throw new RuntimeException('provider said: token=abc123')];
@@ -451,7 +466,7 @@ describe('anything that goes wrong once the conversation is claimed', function (
     it('leaves a conversation of an unknown provider created, so it can be connected once the provider exists', function () {
         $conversation = connectable(['provider' => 'nonexistent']);
 
-        connectCall($conversation)->assertStatus(500);
+        connectCall($conversation)->assertStatus(500)->assertJsonPath('code', 'internal_error');
 
         expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Created);
     });

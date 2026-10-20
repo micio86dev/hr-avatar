@@ -84,9 +84,10 @@ final class ConnectConversation
                 // The conversation ended while its session was being started; its release is already queued.
                 throw $over;
             } catch (Throwable $failure) {
-                // The session exists and its references could not be kept, so nothing could release it later.
-                $this->fail($conversation, $failure);
+                // The session exists and its references could not be kept, so nothing could release it later. It is
+                // ended first: failing the conversation writes to the store that just broke and may throw as well.
                 $this->abandon($adapter, $session, $auth, $conversation);
+                $this->fail($conversation, $failure);
 
                 throw $failure;
             }
