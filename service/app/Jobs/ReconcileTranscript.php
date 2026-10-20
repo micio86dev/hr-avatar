@@ -95,13 +95,19 @@ final class ReconcileTranscript implements ShouldQueue
         // Only the kind of failure is logged: a provider's message is not ours to repeat.
         Log::warning('Transcript reconciliation gave up', ['conversation_id' => $this->conversationId, 'exception' => $exception::class]);
 
-        CurrentAccount::runAs($this->accountId, function (): void {
-            $conversation = Conversation::query()->find($this->conversationId);
+        // The failure hook is the last word the queue gives this job: a write that fails here is logged by kind,
+        // not thrown. The job is already recorded in `failed_jobs`, so `queue:retry` runs it again.
+        try {
+            CurrentAccount::runAs($this->accountId, function (): void {
+                $conversation = Conversation::query()->find($this->conversationId);
 
-            if ($conversation !== null) {
-                app(TranscriptReconciler::class)->reconcile($conversation, [], TranscriptStatus::Partial);
-            }
-        });
+                if ($conversation !== null) {
+                    app(TranscriptReconciler::class)->reconcile($conversation, [], TranscriptStatus::Partial);
+                }
+            });
+        } catch (Throwable $unfinished) {
+            Log::error('Transcript could not be finished as partial', ['conversation_id' => $this->conversationId, 'exception' => $unfinished::class]);
+        }
     }
 
     /**
