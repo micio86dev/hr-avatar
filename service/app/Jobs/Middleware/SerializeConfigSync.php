@@ -18,8 +18,8 @@ use Illuminate\Support\Facades\Cache;
  */
 final class SerializeConfigSync
 {
-    /** Longer than any run (a handful of provider calls with their own timeouts); the bound on a dead worker. */
-    private const LOCK_SECONDS = 300;
+    /** Longer than any run (`SyncAvatarConfig::$timeout` is what the worker enforces); the bound on a dead worker. */
+    public const LOCK_SECONDS = 300;
 
     /** How long a run that had to wait lets the other finish. */
     private const WAIT_SECONDS = 10;

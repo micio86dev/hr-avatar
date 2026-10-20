@@ -8,6 +8,7 @@ use App\Conversations\ConversationProviderAuth;
 use App\Models\Conversation;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -20,8 +21,9 @@ use Throwable;
  * the `released_at` stamp, whatever the provider says; the job does not depend on any provider webhook
  * having arrived, and a stamped conversation is not released twice.
  *
- * The transcript job is queued on the first attempt, to run no earlier than 60 seconds after the end
- * (the browser may still be sending its last events until then), so reconciliation never waits on teardown.
+ * The transcript job is queued once, by the first attempt that gets to it (a mark in the cache says it was),
+ * to run no earlier than 60 seconds after the end (the browser may still be sending its last events until
+ * then), so reconciliation never waits on teardown.
  *
  * It carries the account id and the conversation id and nothing else: the provider references and the
  * credential are read where it runs.
@@ -32,6 +34,9 @@ final class ReleaseProviderSession implements ShouldQueue
 
     /** How long after the end the browser may still send events, and so how soon the transcript may be reconciled. */
     private const EVENTS_GRACE_SECONDS = 60;
+
+    /** How long the mark that the transcript job was queued is kept: longer than any retry of this job. */
+    private const QUEUED_MARK_SECONDS = 86400;
 
     public int $tries = 5;
 
@@ -56,9 +61,7 @@ final class ReleaseProviderSession implements ShouldQueue
                 return;
             }
 
-            if ($this->attempts() === 1) {
-                $this->queueReconciliation($conversation);
-            }
+            $this->queueReconciliation($conversation);
 
             $auth = $auths->for($conversation);
 
@@ -80,11 +83,28 @@ final class ReleaseProviderSession implements ShouldQueue
         Log::error('Provider session release failed', ['conversation_id' => $this->conversationId, 'exception' => $exception::class]);
     }
 
+    /**
+     * Queues the transcript job once, on whichever attempt first gets here: a first attempt that died on the
+     * lookup above must not leave the transcript pending for good. The mark is taken before the push and given
+     * back when the push fails, so the next attempt tries again.
+     */
     private function queueReconciliation(Conversation $conversation): void
     {
+        $mark = "hra:reconcile-queued:{$conversation->id}";
+
+        if (! Cache::add($mark, true, self::QUEUED_MARK_SECONDS)) {
+            return;
+        }
+
         $due = ($conversation->ended_at ?? now())->getTimestamp() + self::EVENTS_GRACE_SECONDS;
 
-        ReconcileTranscript::dispatch($this->accountId, $conversation->id)->delay(max(0, $due - now()->getTimestamp()));
+        try {
+            ReconcileTranscript::dispatch($this->accountId, $conversation->id)->delay(max(0, $due - now()->getTimestamp()));
+        } catch (Throwable $pushFailed) {
+            Cache::forget($mark);
+
+            throw $pushFailed;
+        }
     }
 
     private function retryOrGiveUp(): void

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Accounts\CurrentAccount;
+use App\AvatarProviders\FailureClass;
 use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderRegistry;
 use App\AvatarProviders\SyncBlocked;
@@ -19,8 +20,9 @@ use Throwable;
  * creates what is missing and updates what exists. It carries ids only (a provider key never sits
  * in the queue) and resolves the credential where it runs.
  *
- * Three attempts, 30 and 120 seconds apart. A sync that is blocked (a credential is missing) cannot
- * succeed by repeating, so it fails at once. The final failure is recorded on the config with a
+ * Three attempts, 30 and 120 seconds apart. A sync that is blocked (a credential is missing) and a
+ * request the provider refused (a 4xx other than 429) cannot succeed by repeating, so they fail at once;
+ * a throttle and an upstream failure are retried. The final failure is recorded on the config with a
  * message from a closed set: a provider failure's generic sentence, a blocked sync's fixed sentence,
  * or "Synchronization failed." Nothing a provider or an exception wrote is ever stored.
  *
@@ -40,7 +42,16 @@ final class SyncAvatarConfig implements ShouldQueue
 
     public int $tries = 3;
 
-    public function __construct(public readonly string $accountId, public readonly string $avatarConfigId, public readonly int $revision = 0) {}
+    /** Seconds a run may take before the worker stops it: under the queue's `retry_after` (no second copy starts) and the config lock (exclusivity holds for the whole run). */
+    public int $timeout = 60;
+
+    /** On the property, not only on the constructor: a payload queued before the revision existed is unserialized without running it. */
+    public int $revision = 0;
+
+    public function __construct(public readonly string $accountId, public readonly string $avatarConfigId, int $revision = 0)
+    {
+        $this->revision = $revision;
+    }
 
     /**
      * @return list<int>
@@ -80,6 +91,13 @@ final class SyncAvatarConfig implements ShouldQueue
                 $this->settle($providers->get($config->provider)->sync($config, $auth)->status);
             } catch (SyncBlocked $blocked) {
                 $this->fail($blocked);
+            } catch (ProviderException $refused) {
+                // A request the provider refused (401, 403, 404, 422) gets the same answer again; a throttle or an upstream failure may not.
+                if ($refused->failureClass() !== FailureClass::ClientError) {
+                    throw $refused;
+                }
+
+                $this->fail($refused);
             }
         });
     }

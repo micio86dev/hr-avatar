@@ -1,5 +1,6 @@
 <?php
 
+use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\SyncStatus;
 use App\Conversations\AvatarConfigSync;
 use App\Jobs\SyncAvatarConfig;
@@ -138,6 +139,26 @@ describe('a failed run', function () {
         expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe('The provider credential is missing.');
         Http::assertNothingSent();
     });
+
+    // Review rv17 R3-002: a refusal (401, 403, 404, 422) is the same answer two minutes later; only a throttle or an upstream failure is worth another attempt.
+    it('does not retry a request the provider refused: the failure is recorded at once and nothing is thrown', function (int $status) {
+        syncJobStoreKey('tavus', 'tv-key-123456');
+        Http::fake(['*' => Http::response([], $status)]);
+        $config = syncJobConfig();
+
+        runSync($config);
+
+        expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe("Provider request failed (status {$status})");
+        Http::assertSentCount(1);
+    })->with([401, 403, 404, 422]);
+
+    it('still lets a throttle and a provider failure through, so the queue retries them', function (int $status) {
+        syncJobStoreKey('tavus', 'tv-key-123456');
+        Http::fake(['*' => Http::response([], $status)]);
+        $config = syncJobConfig();
+
+        expect(fn () => runSync($config))->toThrow(ProviderException::class);
+    })->with([429, 500, 503]);
 
     it('says what is missing when a bound model has no key', function () {
         syncJobStoreKey('tavus', 'tv-key-123456');

@@ -15,6 +15,7 @@ use Illuminate\Contracts\Queue\Job as QueueJob;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use Tests\Support\AvatarProviders\ScriptedProvider;
 
 beforeEach(function () {
@@ -184,13 +185,49 @@ describe('the transcript', function () {
         Queue::assertPushed(ReconcileTranscript::class, fn (ReconcileTranscript $job) => $job->accountId === $this->account->id && $job->conversationId === $conversation->id);
     })->with([true, false]);
 
-    it('is not queued again by a retry', function () {
+    it('is queued once however many attempts run: a retry does not queue it again', function () {
         $conversation = releasable();
-        ScriptedProvider::$teardowns = [false];
+        ScriptedProvider::$teardowns = [false, false, false];
+
+        foreach ([1, 2, 3] as $attempt) {
+            releaseOnAttempt($conversation, $attempt);
+        }
+
+        Queue::assertPushed(ReconcileTranscript::class, 1);
+    });
+
+    // Review rv23 R3-001: a first attempt that died before it queued the job (a database error on the lookup) must not leave the transcript pending for good.
+    it('is queued by the retry when the first attempt died before it could queue it', function () {
+        $conversation = releasable();
 
         releaseOnAttempt($conversation, 2);
 
-        Queue::assertNothingPushed();
+        Queue::assertPushed(ReconcileTranscript::class, 1);
+    });
+
+    it('is queued again by the next attempt when the push itself failed', function () {
+        $conversation = releasable();
+        $queue = new class(app()) extends QueueFake
+        {
+            public bool $down = true;
+
+            public function push($job, $data = '', $queue = null)
+            {
+                return $this->down ? throw new RuntimeException('queue is down') : parent::push($job, $data, $queue);
+            }
+
+            public function later($delay, $job, $data = '', $queue = null)
+            {
+                return $this->down ? throw new RuntimeException('queue is down') : parent::later($delay, $job, $data, $queue);
+            }
+        };
+        Queue::swap($queue);
+
+        expect(fn () => releaseOnAttempt($conversation, 1))->toThrow(RuntimeException::class);
+        $queue->down = false;
+        releaseOnAttempt($conversation, 2);
+
+        $queue->assertPushed(ReconcileTranscript::class, 1);
     });
 
     it('waits until 60 seconds after the end: the browser\'s events have their window first', function (int $endedSecondsAgo, int $delay) {

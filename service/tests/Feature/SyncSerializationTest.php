@@ -152,3 +152,20 @@ describe('two runs of one config', function () {
         Queue::assertNothingPushed();
     });
 });
+
+describe('a job queued before the revision existed', function () {
+    // Review rv20 R3-001: PHP does not run the constructor when a payload is unserialized, so the default has to sit on the property.
+    it('restores with revision 0, not with an uninitialized property', function () {
+        $job = (new ReflectionClass(SyncAvatarConfig::class))->newInstanceWithoutConstructor();
+
+        expect($job->revision)->toBe(0);
+    });
+});
+
+describe('the lock', function () {
+    // Review rv23 R3-002: the lock must outlive any run, and the job says how long a run may take.
+    it('outlives the longest run the job allows', function () {
+        expect((new SyncAvatarConfig('acc', 'cfg'))->timeout)->toBeLessThan(SerializeConfigSync::LOCK_SECONDS)
+            ->and((new SyncAvatarConfig('acc', 'cfg'))->timeout)->toBeLessThan((int) config('queue.connections.redis.retry_after'));
+    });
+});
