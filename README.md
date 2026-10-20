@@ -137,3 +137,12 @@ provider account confirms them:
 - **LiveAvatar end.** LiveAvatar has no callbacks. The service polls, so a session that ended on the provider's side
   can take up to a minute to be noticed; the maximum-duration sweeper bounds it either way.
 - **Tavus statuses.** Only `active` and `ended` are documented. Any other status is read as "not ended" and logged.
+
+## Known limitations
+
+- **Creating a webhook endpoint is not idempotent.** A client that retries after a timeout creates a second endpoint
+  with its own signing secret (a secret is shown once, so it cannot be replayed). An account holds at most 20
+  endpoints; delete the duplicate.
+- **The destination check at create and update time resolves the host name in the request**, with the system
+  resolver's timeout. It is early feedback; the enforcement is the check made again at delivery time, on the
+  addresses the connection is then pinned to. Set a short resolver timeout in the container if DNS is slow.

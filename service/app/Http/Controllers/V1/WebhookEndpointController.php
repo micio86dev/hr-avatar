@@ -46,7 +46,8 @@ class WebhookEndpointController
      *
      * The response carries the signing `secret` once (`hra_whsec_` and 64 hex characters); it cannot be
      * read afterwards. The URL must be https, at most 2048 characters, without credentials, and must not
-     * point at a private or reserved address (plain http is accepted only in development environments).
+     * point at a private or reserved address (plain http, and a private address, are accepted only where destinations are
+     * not enforced: the `local` and `testing` environments).
      * An account holds at most 20 endpoints; the 21st is a 422.
      */
     public function store(CreateWebhookEndpointRequest $request): JsonResponse
@@ -54,8 +55,7 @@ class WebhookEndpointController
         $secret = WebhookEndpoint::newSecret();
 
         $endpoint = DB::transaction(function () use ($request, $secret): WebhookEndpoint {
-            // The account row is locked, so two creates cannot both take the last slot.
-            Account::query()->whereKey(app(CurrentAccount::class)->require())->lockForUpdate()->first();
+            $this->lockAccountRow();
 
             if (WebhookEndpoint::query()->count() >= self::MAX_PER_ACCOUNT) {
                 throw new ApiProblem(ErrorCode::ValidationFailed, 'An account can hold at most '.self::MAX_PER_ACCOUNT.' webhook endpoints.');
@@ -104,5 +104,14 @@ class WebhookEndpointController
         $webhookEndpoint->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Serializes the creates of one account: the lock is held until the transaction ends, so a second create waits
+     * here and counts afterwards, and two creates cannot both take the last slot. Only the lock matters; the row is not read.
+     */
+    private function lockAccountRow(): void
+    {
+        Account::query()->whereKey(app(CurrentAccount::class)->require())->lockForUpdate()->first();
     }
 }

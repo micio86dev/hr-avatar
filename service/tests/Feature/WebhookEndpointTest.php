@@ -1,9 +1,16 @@
 <?php
 
+use App\Jobs\DeliverWebhook;
 use App\Models\Account;
+use App\Models\AvatarConfig;
+use App\Models\Conversation;
 use App\Models\WebhookEndpoint;
 use App\Webhooks\Outbound\OutboundHostGuard;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 
 const WEBHOOK_ENDPOINT_MEMBERS = ['id', 'url', 'events', 'enabled', 'description', 'created_at', 'updated_at'];
@@ -284,6 +291,46 @@ describe('GET, PATCH and DELETE /v1/webhook-endpoints/{id}', function () {
 
         expect(WebhookEndpoint::withoutGlobalScopes()->find($endpoint->id))->toBeNull();
         whCall('get', "/v1/webhook-endpoints/{$endpoint->id}")->assertNotFound();
+    });
+
+    // The table only requires a non-empty array, so a row can name an event this version does not know (a rolled-back
+    // deploy, a retired event). One such row must not turn the account's reads into 500s.
+    it('leaves out an event name it does not know instead of failing the response', function () {
+        $endpoint = whEndpoint(['url' => 'https://a.example.com/h']);
+        DB::table('webhook_endpoints')->where('id', $endpoint->id)->update(['events' => json_encode(['conversation.live', 'retired.event', 'transcript.ready'])]);
+        $onlyUnknown = whEndpoint(['url' => 'https://b.example.com/h']);
+        DB::table('webhook_endpoints')->where('id', $onlyUnknown->id)->update(['events' => json_encode(['retired.event'])]);
+
+        $shown = whCall('get', "/v1/webhook-endpoints/{$endpoint->id}")->assertOk();
+        $listed = whCall('get', '/v1/webhook-endpoints')->assertOk();
+        $updated = whCall('patch', "/v1/webhook-endpoints/{$endpoint->id}", ['description' => 'still works'])->assertOk();
+
+        expect($shown->json('events'))->toBe(['conversation.live', 'transcript.ready'])
+            ->and($updated->json('events'))->toBe(['conversation.live', 'transcript.ready'])
+            ->and(collect($listed->json('data'))->firstWhere('id', $onlyUnknown->id)['events'])->toBe([]);
+    });
+
+    // The contract says deliveries still waiting for a retry stop with the endpoint. The foreign key cascades, so the
+    // row is gone: the job that was to retry it finds nothing, and so does the relay.
+    it('stops the deliveries still waiting for a retry', function () {
+        Queue::fake();
+        Http::fake();
+        $endpoint = whEndpoint(['url' => 'https://a.example.com/h']);
+        $conversation = inAccount($this->account, fn () => Conversation::factory()->create(['avatar_config_id' => AvatarConfig::factory()->create()->id]));
+        $deliveryId = strtolower((string) Str::ulid());
+        DB::table('webhook_deliveries')->insert([
+            'id' => $deliveryId, 'account_id' => $this->account->id, 'webhook_endpoint_id' => $endpoint->id, 'conversation_id' => $conversation->id,
+            'event_id' => 'evt_x', 'event_type' => 'conversation.ended', 'payload' => '{}', 'status' => 'pending', 'attempts' => 2,
+            'next_attempt_at' => now()->subDay(), 'created_at' => now()->subDay(), 'updated_at' => now()->subDay(),
+        ]);
+
+        whCall('delete', "/v1/webhook-endpoints/{$endpoint->id}")->assertNoContent();
+        app()->call([new DeliverWebhook($this->account->id, $deliveryId), 'handle']);
+        Artisan::call('hra:relay');
+
+        expect(DB::table('webhook_deliveries')->where('id', $deliveryId)->exists())->toBeFalse();
+        Http::assertNothingSent();
+        Queue::assertNothingPushed();
     });
 
     it('answers 404 to another account, for a read, a patch and a delete, and changes nothing', function () {

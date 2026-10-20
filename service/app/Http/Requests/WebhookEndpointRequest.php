@@ -32,9 +32,9 @@ abstract class WebhookEndpointRequest extends FormRequest
             /** Where the events are sent: an https URL of at most 2048 characters, without credentials and not on a private address. */
             'url' => [$this->presence(), 'string', 'max:2048', app(DestinationUrl::class)],
             /**
-             * The events to receive. All three when left out.
+             * The events to receive. All of them when left out.
              *
-             * @var list<'conversation.live'|'conversation.ended'|'transcript.ready'>
+             * @var list<EventType>
              */
             'events' => ['sometimes', 'array', 'min:1'],
             'events.*' => ['string', 'distinct', Rule::enum(EventType::class)],

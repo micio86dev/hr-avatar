@@ -1868,7 +1868,7 @@
             },
             "post": {
                 "operationId": "webhook-endpoints.store",
-                "description": "The response carries the signing `secret` once (`hra_whsec_` and 64 hex characters); it cannot be\nread afterwards. The URL must be https, at most 2048 characters, without credentials, and must not\npoint at a private or reserved address (plain http is accepted only in development environments).\nAn account holds at most 20 endpoints; the 21st is a 422.",
+                "description": "The response carries the signing `secret` once (`hra_whsec_` and 64 hex characters); it cannot be\nread afterwards. The URL must be https, at most 2048 characters, without credentials, and must not\npoint at a private or reserved address (plain http, and a private address, are accepted only where destinations are\nnot enforced: the `local` and `testing` environments).\nAn account holds at most 20 endpoints; the 21st is a 422.",
                 "summary": "Create a webhook endpoint",
                 "tags": [
                     "Webhook endpoints"
@@ -2815,7 +2815,7 @@
                     },
                     "events": {
                         "type": "array",
-                        "description": "The events to receive. All three when left out.",
+                        "description": "The events to receive. All of them when left out.",
                         "items": {
                             "$ref": "#/components/schemas/EventType"
                         }
@@ -3487,7 +3487,7 @@
                     },
                     "events": {
                         "type": "array",
-                        "description": "The events to receive. All three when left out.",
+                        "description": "The events to receive. All of them when left out.",
                         "items": {
                             "$ref": "#/components/schemas/EventType"
                         }
