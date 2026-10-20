@@ -28,7 +28,9 @@ use RedisException;
  * What the api process starts the worker process must see, so the little state it has (that a
  * session was ended, the opening text for the transcript) lives in the shared cache. A cache store that
  * fails (Redis, or the database store) is logged by the kind of failure, never its message, and answered as the
- * contract says; any other exception is a bug and is raised.
+ * contract says; any other exception is a bug and is raised. The Redis client is phpredis (predis is not
+ * installed), which reports every failure of the server or the connection as `RedisException`; the
+ * framework wraps none of them. A second client would raise others and needs its own entry here.
  */
 final class MockProvider implements AvatarProvider
 {

@@ -11,6 +11,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Predis\Client;
 
 beforeEach(function () {
     Carbon::setTestNow(Carbon::parse('2026-10-19 12:00:00', 'UTC'));
@@ -149,6 +150,32 @@ describe('with a cache that is down', function () {
         $everything = implode("\n", $this->logs->getArrayCopy());
         expect($everything)->toContain('Mock provider state could not be stored')->toContain(class_basename($failure()))->not->toContain('SECRET-HOST');
     })->with($stores);
+
+    // Review of sf11 (warning): the catch must hold every failure the configured stores raise. The service runs the
+    // phpredis client (predis is not installed), and the framework wraps nothing, so an unreachable Redis reaches the
+    // adapter as phpredis's own RedisException. Observed against a closed port rather than assumed.
+    it('answers a Redis that cannot be reached, through the real store and the real client', function () {
+        config([
+            'cache.default' => 'redis',
+            'database.redis.cache.host' => '127.0.0.1',
+            'database.redis.cache.port' => 1,
+            'database.redis.cache.max_retries' => 0,
+        ]);
+        Cache::purge('redis');
+        app('redis')->purge('cache');
+
+        expect(fn () => startMock())->toThrow(ProviderException::class)
+            ->and($this->mock->teardown('mock_conv_abc', null, $this->auth))->toBeFalse();
+
+        expect(implode("\n", $this->logs->getArrayCopy()))->toContain('Mock provider state could not be stored')->toContain('RedisException');
+    });
+
+    // The catch names the failures of the phpredis client and of the database store. A second Redis client would raise
+    // others, so installing one (or switching the client) must make this test fail and the catch be revisited.
+    it('is written for the phpredis client, the only one installed', function () {
+        expect(config('database.redis.client'))->toBe('phpredis')
+            ->and(class_exists(Client::class))->toBeFalse();
+    });
 });
 
 it('does not hide a programming error as a cache that is down', function () {
