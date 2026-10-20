@@ -55,6 +55,10 @@ Code catalogue (status -> code): 400 `api_key_in_query` (a key passed in the que
 `llm_credential_missing`; 429 `rate_limited`, `provider_concurrency_limited`; 500
 `internal_error`; 502 `provider_error`; 503 `service_unavailable`.
 
+The catalogue is closed. An HTTP error whose status has no code of its own is answered with the closest
+code: 408 as 503 `service_unavailable`, 502 and 504 as 502 `provider_error`, any other 4xx (415
+included) as 422 `validation_failed`, any other 5xx as 500 `internal_error`.
+
 #### Scenario: Validation error shape
 
 - GIVEN an authenticated SK request creating a resource with an invalid body

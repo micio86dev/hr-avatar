@@ -14,8 +14,10 @@ use Throwable;
 /**
  * Turns every exception into a Problem+JSON response. Registered for all requests, so an
  * unmatched path or an unsupported method never produces an HTML page. The catalogue is
- * closed: a client error with no entry of its own answers 422 `validation_failed`, anything
- * else 500 `internal_error`, and an exception message is never exposed.
+ * closed: 408 answers 503 `service_unavailable` and 502 and 504 answer 502 `provider_error`
+ * (the closest codes that say what a caller should do); any other client error with no entry
+ * of its own answers 422 `validation_failed` (415 included: the body could not be read),
+ * anything else 500 `internal_error`, and an exception message is never exposed.
  */
 final class ProblemRenderer
 {
@@ -55,7 +57,9 @@ final class ProblemRenderer
             405 => ErrorCode::MethodNotAllowed,
             413 => ErrorCode::PayloadTooLarge,
             429 => ErrorCode::RateLimited,
-            503 => ErrorCode::ServiceUnavailable,
+            // No code of their own: a timeout is a try-again, and a gateway failure is the upstream's (the provider's).
+            408, 503 => ErrorCode::ServiceUnavailable,
+            502, 504 => ErrorCode::ProviderError,
             default => $status < 500 ? ErrorCode::ValidationFailed : ErrorCode::InternalError,
         };
     }

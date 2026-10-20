@@ -9,6 +9,7 @@ use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 
 const PROBLEM_MEMBERS = ['type', 'title', 'status', 'detail', 'code', 'request_id'];
@@ -81,6 +82,21 @@ it('maps exceptions to catalogue codes', function (Closure $thrower, int $status
     'service unavailable' => [fn () => throw new ServiceUnavailableHttpException(30), 503, 'service_unavailable'],
 ]);
 
+// The catalogue is closed (service-foundation spec): a status with no code of its own is answered with the closest code
+// that tells a caller the right thing to do. A timeout is a try-again (503), an upstream failure is the provider's (502).
+it('answers a status with no code of its own with the closest catalogue code', function (int $thrown, int $status, string $code) {
+    Route::get('/v1/_probe', fn () => throw new HttpException($thrown));
+
+    expectProblem($this->getJson('/v1/_probe'), $status, $code);
+})->with([
+    '408 request timeout is retryable' => [408, 503, 'service_unavailable'],
+    '502 bad gateway is the upstream failing' => [502, 502, 'provider_error'],
+    '504 gateway timeout is the upstream failing' => [504, 502, 'provider_error'],
+    '415 stays a request that failed validation' => [415, 422, 'validation_failed'],
+    '501 stays internal' => [501, 500, 'internal_error'],
+    '429 stays rate limited' => [429, 429, 'rate_limited'],
+]);
+
 it('answers a throttled request with 429 and Retry-After', function () {
     Route::get('/v1/_probe', fn () => ['ok' => true])->middleware('throttle:1,1');
 
@@ -144,7 +160,6 @@ it('answers a client error without a catalogue entry as validation_failed, with 
     expect($response->getContent())->not->toContain('short and stout');
 })->with([
     'bad request' => [400],
-    'request timeout' => [408],
     'unsupported media type' => [415],
     'teapot' => [418],
 ]);
@@ -158,7 +173,7 @@ it('answers a server error without a catalogue entry as an opaque internal_error
     expect($response->getContent())->not->toContain('upstream detail');
 })->with([
     'internal' => [500],
-    'bad gateway' => [502],
+    'not implemented' => [501],
 ]);
 
 it('renders a provider failure as 502 provider_error without the provider\'s words', function (int $status) {

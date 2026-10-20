@@ -881,6 +881,9 @@ utterances: [{sequence, role, text, occurred_at, source}]}`, ordered by `occurre
   | `ApiProblem` | its own status and code |
   | `ProviderException` | 429 `provider_concurrency_limited` for `FailureClass::Throttle`, otherwise 502 `provider_error` |
   | `ServiceUnavailableHttpException` | 503 `service_unavailable` |
+  | HTTP exception with status 408 | 503 `service_unavailable` (the closest code that says try again; the catalogue is closed) |
+  | HTTP exception with status 502 or 504 | 502 `provider_error` (the upstream failed) |
+  | any other 4xx HTTP exception with no code of its own (415 included) | 422 `validation_failed` |
   | anything else | 500 `internal_error` (message never exposed, also with `APP_DEBUG=true`) |
 
 - `AssignRequestId` keeps an inbound `X-Request-Id` matching `^[A-Za-z0-9._-]{1,64}$` or mints a
