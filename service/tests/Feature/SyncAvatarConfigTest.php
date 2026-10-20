@@ -110,6 +110,18 @@ describe('a successful run', function () {
     });
 });
 
+describe('a synchronous queue', function () {
+    it('runs the sync inside the dispatch and leaves the config as the job settled it', function () {
+        syncJobStoreKey('tavus', 'tv-key-123456');
+        Http::fake(['*' => Http::response([], 200)]);
+        $config = syncJobConfig();
+
+        AvatarConfigSync::dispatchWhenPending($config);
+
+        expect($config->refresh()->sync_status)->toBe(SyncStatus::Synced)->and($config->sync_error)->toBeNull();
+    });
+});
+
 describe('a failed run', function () {
     it('records the failure with a message that holds neither the key nor the provider body', function () {
         syncJobStoreKey('tavus', 'tv-key-123456');
