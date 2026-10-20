@@ -1862,3 +1862,41 @@ Strict TDD. Reconciliation: ruling 95. Baseline: 2913 service tests, 383 SDK tes
 ### Open items for the owner
 
 None new. The items of the previous units are unchanged.
+
+## Warning fix SF-41 (approved review of the SF-40 unit)
+
+Strict TDD. Reconciliation: ruling 96. Baseline: 2916 service tests; now 2917.
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| `AvatarConfigSync` write failure hides the push failure | push fails and the `avatar_configs` update throws: the log was empty, the push failure lost (1 failure) | the write in its own `try`; on a throw, log the push failure, log the failed write, re-raise the write's exception | `e11046b` |
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test commands | `DB_PORT=55442 php artisan test tests/Feature/SyncAvatarConfigTest.php tests/Feature/AvatarConfigEndpointTest.php tests/Feature/SyncRevisionTest.php` 148 passed |
+| Runtime harness | real `SyncQueue` subclass that fails to build the payload; `DB::beforeExecuting` throwing on the `avatar_configs` update; real log capture |
+| Rollback boundary | `service/app/Conversations/AvatarConfigSync.php` and `service/tests/Feature/SyncAvatarConfigTest.php`; no migration, no `openapi.json` change, no SDK change |
+
+### Gates (foreground, `DB_PORT=55442`, one suite at a time)
+
+| Command | Result |
+|---|---|
+| `php artisan test --parallel --processes=4` | exit 0, 2917 passed |
+| `php -d memory_limit=4G artisan test --coverage --min=90` | exit 0, 2917 passed, total 100.0 % |
+| `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` | exit 0, 2917 passed, total 100.0 % |
+| `vendor/bin/pint --test` | exit 0 |
+| `vendor/bin/phpstan analyse --memory-limit=1G` | exit 0, 0 errors |
+| `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json` | exit 0, no change |
+| `cd ../tools/spectral && bun run lint` | exit 0, nothing at warn or above |
+
+### SDK commits that change shipped code
+
+None in this unit.
+
+### Open items for the owner
+
+None new. The items of the previous units are unchanged.

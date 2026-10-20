@@ -1004,3 +1004,9 @@ Source: the findings of the approved native reviews sf7..sf11 of the review find
 Source: the warnings of the approved native review of the SF-34..SF-39 unit. Reconciliation: ruling 95. Strict TDD, each claim verified first. The SDK item first and in its own commit; no push, no deploy.
 
 - [x] SF-40 Three warnings: SDK `#applyMic` settles a call whose transport throws instead of rejecting (`bdf785e`, ships SDK code); the Mock catch is complete for the phpredis client and pinned against the real store (`210b1f6`); `AvatarConfigSync` records a push that fails before a synchronous job runs as `failed`/`NOT_QUEUED` while a failure of the job still reaches the caller (`9552a09`); gates, apply-progress, Engram. (ruling 95)
+
+## Warning fix of the approved review of the SF-40 unit (SF-41)
+
+Source: the warning of the approved native review of the SF-40 unit. Reconciliation: ruling 96. Strict TDD, verified first; service only, no SDK change; no push, no deploy.
+
+- [x] SF-41 `AvatarConfigSync`: when recording the failed push throws (the queue and the database down together), the push failure is still logged (its kind only) before the failed write reaches the caller, and the failed write is logged too (ruling 96, `e11046b`); gates, apply-progress, Engram.
