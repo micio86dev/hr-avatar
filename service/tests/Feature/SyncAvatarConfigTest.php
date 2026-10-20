@@ -160,6 +160,20 @@ describe('a failed run', function () {
         expect(fn () => runSync($config))->toThrow(ProviderException::class);
     })->with([429, 500, 503]);
 
+    // Review sf9 R3-avatar-config-sync-catch-scope: a queue that runs the job inside the push (QUEUE_CONNECTION=sync) must not have the
+    // job's own failure read as a push that failed: the job recorded its reason, and the caller sees the failure it raised.
+    it('does not label a failure of the job run by a synchronous queue as a sync that could not be queued', function () {
+        syncJobStoreKey('tavus', 'tv-key-123456');
+        Http::fake(['*' => Http::response([], 500)]);
+        $logs = captureLogs();
+        $config = syncJobConfig();
+
+        expect(fn () => AvatarConfigSync::dispatchWhenPending($config))->toThrow(ProviderException::class);
+
+        expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe('Provider request failed (status 500)')
+            ->and(implode("\n", $logs->getArrayCopy()))->not->toContain('could not be queued');
+    });
+
     it('says what is missing when a bound model has no key', function () {
         syncJobStoreKey('tavus', 'tv-key-123456');
         LlmModel::factory()->create(['id' => 'gem-1', 'provider' => 'gemini']);
