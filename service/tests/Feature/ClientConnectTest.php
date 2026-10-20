@@ -1,5 +1,6 @@
 <?php
 
+use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\ProviderException;
 use App\Conversations\ConnectConversation;
 use App\Conversations\ConversationLifecycle;
@@ -18,6 +19,7 @@ use App\Models\LlmModel;
 use App\Models\ProviderCredential;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -387,6 +389,71 @@ describe('a start that fails', function () {
 
         expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Ended)
             ->and(storedConversation($conversation)->ended_reason)->toBe(EndedReason::Client);
+    });
+});
+
+describe('anything that goes wrong once the conversation is claimed', function () {
+    // The claim (`created -> connecting`) is a point of no return for a retry: a second connect answers 409
+    // already_connected. Whatever fails after it must therefore end the conversation, never leave it connecting.
+    it('fails the conversation when the callback target cannot be prepared, and starts nothing', function () {
+        $config = scriptedConfig();
+        ScriptedProvider::$ingestion = Ingestion::Callback;
+        $conversation = connectable([], $config);
+        DB::listen(function (QueryExecuted $query) {
+            if (str_contains($query->sql, 'callback_token_hash')) {
+                throw new RuntimeException('database gone: password=hunter2');
+            }
+        });
+
+        $response = connectCall($conversation)->assertStatus(500);
+
+        expect($response->getContent())->not->toContain('hunter2')
+            ->and(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
+            ->and(storedConversation($conversation)->ended_reason)->toBe(EndedReason::ProviderError)
+            ->and(startCalls())->toBe(0);
+        expect(connectDeliveries($conversation))->toBe(['conversation.ended', 'transcript.ready']);
+    });
+
+    it('fails the conversation and ends the session when the provider\'s references cannot be kept', function () {
+        $config = scriptedConfig();
+        $conversation = connectable([], $config);
+        DB::listen(function (QueryExecuted $query) {
+            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"')) {
+                throw new RuntimeException('database gone');
+            }
+        });
+
+        connectCall($conversation)->assertStatus(500);
+
+        expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
+            ->and(storedConversation($conversation)->ended_reason)->toBe(EndedReason::ProviderError)
+            ->and(array_values(array_filter(ScriptedProvider::$calls, fn (array $call) => $call[0] === 'teardown')))
+            ->toBe([['teardown', "scripted_{$conversation->id}", "context_{$conversation->id}", ScriptedProvider::$calls[0][3]]]);
+    });
+
+    it('still fails the conversation when that session cannot be ended either, and logs only the kind of failure', function () {
+        $config = scriptedConfig();
+        ScriptedProvider::$teardowns = [fn () => throw new RuntimeException('provider said: token=abc123')];
+        $conversation = connectable([], $config);
+        DB::listen(function (QueryExecuted $query) {
+            if (str_starts_with($query->sql, 'update "conversations" set "provider_session_ref"')) {
+                throw new RuntimeException('database gone');
+            }
+        });
+        $logs = captureLogs();
+
+        connectCall($conversation)->assertStatus(500);
+
+        expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Failed)
+            ->and(implode("\n", $logs->getArrayCopy()))->toContain('conversation_id')->not->toContain('abc123');
+    });
+
+    it('leaves a conversation of an unknown provider created, so it can be connected once the provider exists', function () {
+        $conversation = connectable(['provider' => 'nonexistent']);
+
+        connectCall($conversation)->assertStatus(500);
+
+        expect(storedConversation($conversation)->status)->toBe(ConversationStatus::Created);
     });
 });
 

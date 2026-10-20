@@ -3,6 +3,7 @@
 namespace App\Conversations;
 
 use App\Accounts\CurrentAccount;
+use App\AvatarProviders\AvatarProvider;
 use App\AvatarProviders\ConversationSpec;
 use App\AvatarProviders\FailureClass;
 use App\AvatarProviders\Ingestion;
@@ -27,8 +28,9 @@ use Throwable;
  * conversation is claimed with a compare-and-set to `connecting`, which exactly one caller can win;
  * the callback token is minted for a provider that calls back; the adapter starts the session, outside
  * any transaction; the provider's references are kept and the browser's side of the session is returned.
- * A start that fails fails the conversation (`provider_capacity` when the provider is at capacity,
- * `provider_error` otherwise) and the failure is re-raised for the response.
+ * Anything that fails after the claim (the callback target, the start, keeping the references) fails the
+ * conversation (`provider_capacity` when the provider is at capacity, `provider_error` otherwise) and the failure is
+ * re-raised for the response; a session that was started and could not be recorded is ended at once.
  *
  * Nothing here knows a provider by name: the registry hands out the adapter, which says whether it calls
  * back and whether it needs a credential.
@@ -66,9 +68,9 @@ final class ConnectConversation
 
             $this->claim($conversation);
 
-            $callbackUrl = $callbacks ? $this->callbackTarget($conversation) : null;
-
+            // From here a retry is refused (`already_connected`), so whatever fails must end the conversation.
             try {
+                $callbackUrl = $callbacks ? $this->callbackTarget($conversation) : null;
                 $session = $adapter->start($conversation->id, $this->spec($conversation), $config, $auth, $callbackUrl);
             } catch (Throwable $failure) {
                 $this->fail($conversation, $failure);
@@ -76,7 +78,18 @@ final class ConnectConversation
                 throw $failure;
             }
 
-            return $this->keep($conversation, $session);
+            try {
+                return $this->keep($conversation, $session);
+            } catch (ApiProblem $over) {
+                // The conversation ended while its session was being started; its release is already queued.
+                throw $over;
+            } catch (Throwable $failure) {
+                // The session exists and its references could not be kept, so nothing could release it later.
+                $this->fail($conversation, $failure);
+                $this->abandon($adapter, $session, $auth, $conversation);
+
+                throw $failure;
+            }
         });
     }
 
@@ -159,6 +172,19 @@ final class ConnectConversation
             $this->lifecycle->transition($conversation, ConversationStatus::Failed, $capacity ? EndedReason::ProviderCapacity : EndedReason::ProviderError);
         } catch (IllegalTransition) {
             // Ended in the meantime: the failure is still the caller's to report.
+        }
+    }
+
+    /**
+     * Ends a session whose references could not be stored, at once: it has no record to be released from later.
+     * A failure to end it is logged by kind and does not replace the failure being reported.
+     */
+    private function abandon(AvatarProvider $adapter, ProviderSession $session, ProviderAuth $auth, Conversation $conversation): void
+    {
+        try {
+            $adapter->teardown($session->sessionRef, $session->contextRef, $auth);
+        } catch (Throwable $failure) {
+            Log::error('A provider session could not be ended after a failed connect', ['conversation_id' => $conversation->id, 'exception' => $failure::class]);
         }
     }
 
