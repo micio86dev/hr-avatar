@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Accounts\CurrentAccount;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
+use App\Webhooks\Outbound\DeliveryError;
 use App\Webhooks\Outbound\DeliveryStatus;
 use App\Webhooks\Outbound\DestinationNotAllowed;
 use App\Webhooks\Outbound\OutboundHostGuard;
@@ -69,7 +70,7 @@ final class DeliverWebhook implements ShouldQueue
         CurrentAccount::runAs($this->accountId, fn () => WebhookDelivery::query()
             ->whereKey($this->deliveryId)
             ->where('status', DeliveryStatus::Pending->value)
-            ->update(['status' => DeliveryStatus::Failed->value, 'last_error' => 'internal_error', 'next_attempt_at' => null, 'completed_at' => now()]));
+            ->update(['status' => DeliveryStatus::Failed->value, 'last_error' => DeliveryError::InternalError->value, 'next_attempt_at' => null, 'completed_at' => now()]));
     }
 
     private function attempt(WebhookDelivery $delivery, WebhookSigner $signer, OutboundHostGuard $guard): void
@@ -77,7 +78,7 @@ final class DeliverWebhook implements ShouldQueue
         $endpoint = WebhookEndpoint::query()->find($delivery->webhook_endpoint_id);
 
         if ($endpoint === null || ! $endpoint->enabled) {
-            $this->write($delivery, ['status' => DeliveryStatus::Failed->value, 'last_error' => 'endpoint_disabled', 'next_attempt_at' => null, 'completed_at' => now()]);
+            $this->write($delivery, ['status' => DeliveryStatus::Failed->value, 'last_error' => DeliveryError::EndpointDisabled->value, 'next_attempt_at' => null, 'completed_at' => now()]);
 
             return;
         }
@@ -115,7 +116,7 @@ final class DeliverWebhook implements ShouldQueue
         try {
             $addresses = $guard->vettedAddresses($endpoint->url);
         } catch (DestinationNotAllowed) {
-            return [null, 'destination_not_allowed'];
+            return [null, DeliveryError::DestinationNotAllowed->value];
         }
 
         // Fail closed. An enforced guard that found no address for a host name (it did not resolve, or the answer
@@ -123,7 +124,7 @@ final class DeliverWebhook implements ShouldQueue
         // address nobody judged. The attempt is refused; the next one resolves afresh. It is not a policy block (no
         // address was judged and refused), so it has its own code: an owner reading it looks at the receiver's DNS.
         if ($addresses === [] && $guard->enforced()) {
-            return [null, 'destination_unresolved'];
+            return [null, DeliveryError::DestinationUnresolved->value];
         }
 
         // The timestamp of THIS attempt: a retry is signed again, with the same body and event id.
@@ -142,10 +143,10 @@ final class DeliverWebhook implements ShouldQueue
                 ->withBody($delivery->payload, 'application/json')
                 ->post($endpoint->url);
         } catch (ConnectionException $failure) {
-            return [null, str_contains($failure->getMessage(), 'cURL error 28') || str_contains(strtolower($failure->getMessage()), 'timed out') ? 'timeout' : 'connection_failed'];
+            return [null, str_contains($failure->getMessage(), 'cURL error 28') || str_contains(strtolower($failure->getMessage()), 'timed out') ? DeliveryError::Timeout->value : DeliveryError::ConnectionFailed->value];
         }
 
-        return $response->successful() ? [$response->status(), null] : [$response->status(), 'http_'.$response->status()];
+        return $response->successful() ? [$response->status(), null] : [$response->status(), DeliveryError::http($response->status())];
     }
 
     /**
