@@ -7,6 +7,7 @@ use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\TranscriptLine;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -112,22 +113,47 @@ it('takes no callback and needs no ingestion', function () {
 });
 
 // Review rv10 R3-001: the contract says a failed start is a ProviderException and a teardown never throws; the Mock keeps
-// its state in the cache, so a cache that is down must not leak a raw exception through either.
+// its state in the cache, so a cache that is down must not leak a raw exception through either. Review sf11 R3-001: only
+// the failures of a cache store are turned into that answer, each is logged by its kind (never its message), and
+// a programming error is still raised.
 describe('with a cache that is down', function () {
     beforeEach(function () {
-        Cache::shouldReceive('put')->andThrow(new RuntimeException('redis is down: SECRET-HOST'));
+        $this->logs = captureLogs();
     });
 
-    it('fails a start as a ProviderException that carries nothing of the cause', function () {
+    // The Redis store raises RedisException; the database store raises QueryException.
+    $stores = [
+        'redis' => [fn () => new RedisException('redis is down: SECRET-HOST')],
+        'database' => [fn () => new QueryException('pgsql', 'insert into cache', [], new Exception('connection to SECRET-HOST refused'))],
+    ];
+
+    it('fails a start as a ProviderException that carries nothing of the cause, and logs the kind of failure', function (Closure $failure) {
+        Cache::shouldReceive('put')->andThrow($failure());
+
         try {
             startMock();
             $this->fail('Expected a ProviderException');
         } catch (ProviderException $e) {
             expect($e->getMessage())->toBe('Provider request failed (no response)')->not->toContain('SECRET-HOST');
         }
-    });
 
-    it('answers a teardown that did not succeed, instead of throwing', function () {
+        $everything = implode("\n", $this->logs->getArrayCopy());
+        expect($everything)->toContain('Mock provider state could not be stored')->toContain(class_basename($failure()))->not->toContain('SECRET-HOST');
+    })->with($stores);
+
+    it('answers a teardown that did not succeed, instead of throwing, and logs the kind of failure', function (Closure $failure) {
+        Cache::shouldReceive('put')->andThrow($failure());
+
         expect($this->mock->teardown('mock_conv_abc', null, $this->auth))->toBeFalse();
-    });
+
+        $everything = implode("\n", $this->logs->getArrayCopy());
+        expect($everything)->toContain('Mock provider state could not be stored')->toContain(class_basename($failure()))->not->toContain('SECRET-HOST');
+    })->with($stores);
+});
+
+it('does not hide a programming error as a cache that is down', function () {
+    Cache::shouldReceive('put')->andThrow(new TypeError('a bug'));
+
+    expect(fn () => startMock())->toThrow(TypeError::class)
+        ->and(fn () => $this->mock->teardown('mock_conv_abc', null, $this->auth))->toThrow(TypeError::class);
 });

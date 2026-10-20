@@ -16,15 +16,19 @@ use App\AvatarProviders\TranscriptLine;
 use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
-use Throwable;
+use Illuminate\Support\Facades\Log;
+use RedisException;
 
 /**
  * A deterministic adapter with no network I/O, selected only by an avatar config whose provider is
  * `mock`. It exists so the whole conversation flow can run without a provider account.
  *
  * What the api process starts the worker process must see, so the little state it has (that a
- * session was ended, the opening text for the transcript) lives in the shared cache.
+ * session was ended, the opening text for the transcript) lives in the shared cache. A cache store that
+ * fails (Redis, or the database store) is logged by the kind of failure, never its message, and answered as the
+ * contract says; any other exception is a bug and is raised.
  */
 final class MockProvider implements AvatarProvider
 {
@@ -71,8 +75,10 @@ final class MockProvider implements AvatarProvider
 
         try {
             Cache::put("hra:mock:opening:{$ref}", $spec->openingText ?? '', self::STATE_TTL_SECONDS);
-        } catch (Throwable) {
+        } catch (RedisException|QueryException $failure) {
             // The state lives in the cache; a cache that is down is a provider that could not start, nothing more is said.
+            $this->logStateFailure($failure);
+
             throw ProviderException::noResponse();
         }
 
@@ -89,8 +95,10 @@ final class MockProvider implements AvatarProvider
     {
         try {
             Cache::put("hra:mock:ended:{$sessionRef}", true, self::STATE_TTL_SECONDS);
-        } catch (Throwable) {
+        } catch (RedisException|QueryException $failure) {
             // The contract: a teardown reports that it did not succeed, it does not throw.
+            $this->logStateFailure($failure);
+
             return false;
         }
 
@@ -119,5 +127,10 @@ final class MockProvider implements AvatarProvider
     public function parseCallback(array $payload): array
     {
         return [];
+    }
+
+    private function logStateFailure(RedisException|QueryException $failure): void
+    {
+        Log::warning('Mock provider state could not be stored', ['failure' => $failure::class]);
     }
 }
