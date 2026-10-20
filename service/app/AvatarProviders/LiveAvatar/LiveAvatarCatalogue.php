@@ -3,6 +3,7 @@
 namespace App\AvatarProviders\LiveAvatar;
 
 use App\AvatarProviders\CatalogueEntry;
+use App\AvatarProviders\ListBounds;
 use App\AvatarProviders\ProviderException;
 use App\Credentials\ProviderAuth;
 use Illuminate\Support\Facades\Log;
@@ -23,7 +24,7 @@ final class LiveAvatarCatalogue
     /** LiveAvatar's maximum; its default of twenty would cut the list. */
     private const PAGE_SIZE = 100;
 
-    /** Bounds the loop so a provider that never ends the list cannot hold a worker. */
+    /** Bounds the loop so a provider that never ends the list cannot hold a worker (and `ListBounds` bounds its time). */
     private const MAX_PAGES = 20;
 
     public function __construct(private readonly LiveAvatarApi $api) {}
@@ -48,7 +49,8 @@ final class LiveAvatarCatalogue
      */
     private function avatars(ProviderAuth $auth): array
     {
-        $rows = [...$this->paged($auth, '/avatars/public'), ...$this->paged($auth, '/avatars', optional: true)];
+        $bounds = new ListBounds('liveavatar:avatars');
+        $rows = [...$this->paged($auth, $bounds, '/avatars/public'), ...$this->paged($auth, $bounds, '/avatars', optional: true)];
 
         $entries = [];
 
@@ -70,8 +72,9 @@ final class LiveAvatarCatalogue
     {
         // The private voices of the platform key are the third-party voices every account on it has bound
         // (LiveAvatar holds them in one space), so listing them would show one account's voices to another.
-        $public = $this->paged($auth, '/voices', ['voice_type' => 'public']);
-        $private = $auth->owner === ProviderAuth::PLATFORM ? [] : $this->paged($auth, '/voices', ['voice_type' => 'private'], optional: true);
+        $bounds = new ListBounds('liveavatar:voices');
+        $public = $this->paged($auth, $bounds, '/voices', ['voice_type' => 'public']);
+        $private = $auth->owner === ProviderAuth::PLATFORM ? [] : $this->paged($auth, $bounds, '/voices', ['voice_type' => 'private'], optional: true);
 
         $rows = [...$public, ...$private];
 
@@ -102,12 +105,14 @@ final class LiveAvatarCatalogue
      * @param  array<string, string>  $query
      * @return list<array<string, mixed>>
      */
-    private function paged(ProviderAuth $auth, string $path, array $query = [], bool $optional = false): array
+    private function paged(ProviderAuth $auth, ListBounds $bounds, string $path, array $query = [], bool $optional = false): array
     {
         $rows = [];
 
         try {
-            for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $complete = false;
+
+            for ($page = 1; $page <= self::MAX_PAGES && ! $bounds->expired(); $page++) {
                 $response = $this->api->orFail($this->api->call($auth, 'GET', $path.'?'.http_build_query($query + ['page' => $page, 'page_size' => self::PAGE_SIZE]), timeout: 15));
 
                 $data = $response->json('data');
@@ -115,8 +120,14 @@ final class LiveAvatarCatalogue
                 $rows = [...$rows, ...$batch];
 
                 if ($batch === [] || ! is_string($data['next'] ?? null) || $data['next'] === '') {
+                    $complete = true;
+
                     break;
                 }
+            }
+
+            if (! $complete) {
+                $bounds->cut();
             }
         } catch (ProviderException $failure) {
             if (! $optional) {

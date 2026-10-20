@@ -3,6 +3,7 @@
 namespace App\Voices;
 
 use App\AvatarProviders\CatalogueEntry;
+use App\AvatarProviders\ListBounds;
 use App\Credentials\ProviderAuth;
 use Illuminate\Support\Facades\Http;
 
@@ -44,8 +45,10 @@ final class ElevenLabsVoices extends HttpVoiceVendor
     {
         $entries = [];
         $token = null;
+        $bounds = new ListBounds('elevenlabs:voices');
+        $complete = false;
 
-        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+        for ($page = 0; $page < self::MAX_PAGES && ! $bounds->expired(); $page++) {
             $query = ['page_size' => self::PAGE_SIZE] + ($token === null ? [] : ['next_page_token' => $token]);
             $body = $this->json($this->send(fn () => Http::withHeaders(['xi-api-key' => $auth->apiKey()])->timeout($this->timeout())->get(self::BASE_URL.'/v2/voices', $query)));
 
@@ -62,10 +65,16 @@ final class ElevenLabsVoices extends HttpVoiceVendor
             $next = $body['next_page_token'] ?? null;
 
             if (($body['has_more'] ?? false) !== true || ! is_string($next) || $next === '') {
+                $complete = true;
+
                 break;
             }
 
             $token = $next;
+        }
+
+        if (! $complete) {
+            $bounds->cut();
         }
 
         return $entries;
@@ -100,10 +109,5 @@ final class ElevenLabsVoices extends HttpVoiceVendor
 
         // A voice with no public sample can still be heard through the preview endpoint.
         return $entry === null ? null : new CatalogueEntry($entry->id, $entry->name, $language, previewAudioUrl: $previewUrl, previewAudioViaApi: $previewUrl === null);
-    }
-
-    private static function language(mixed $value): ?string
-    {
-        return is_string($value) && trim($value) !== '' ? strtolower(trim($value)) : null;
     }
 }

@@ -21,6 +21,12 @@ abstract class HttpVoiceVendor implements VoiceVendor
         return (int) config('hr-avatar.voice_preview.timeout_seconds');
     }
 
+    /** The language a vendor states for a voice, lowercased; null when it states none. */
+    protected static function language(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? strtolower(trim($value)) : null;
+    }
+
     /**
      * @param  Closure(): Response  $request
      *

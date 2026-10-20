@@ -59,8 +59,8 @@ final class VoicePreview
         if (! is_string($audio) || $audio === '') {
             $audio = $vendor->sample($voiceId, $language, $phrase, $auth);
 
-            // A vendor that answers nothing, or far more than a few seconds of speech, is not trusted with the cache.
-            if ($audio === '' || strlen($audio) > (int) config('hr-avatar.voice_preview.max_bytes')) {
+            // A vendor that answers nothing, a message instead of audio, or far more than a few seconds of speech, is not trusted with the cache.
+            if ($audio === '' || strlen($audio) > (int) config('hr-avatar.voice_preview.max_bytes') || ! Audio::isAudio($audio)) {
                 throw ProviderException::noResponse();
             }
 

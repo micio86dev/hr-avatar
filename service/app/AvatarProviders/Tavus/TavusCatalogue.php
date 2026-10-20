@@ -3,6 +3,7 @@
 namespace App\AvatarProviders\Tavus;
 
 use App\AvatarProviders\CatalogueEntry;
+use App\AvatarProviders\ListBounds;
 use App\AvatarProviders\ProviderException;
 use App\Credentials\ProviderAuth;
 use Illuminate\Http\Client\ConnectionException;
@@ -82,8 +83,10 @@ final class TavusCatalogue
     private function paged(ProviderAuth $auth, string $path, array $query): array
     {
         $rows = [];
+        $bounds = new ListBounds('tavus:'.ltrim($path, '/'));
+        $complete = false;
 
-        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+        for ($page = 1; $page <= self::MAX_PAGES && ! $bounds->expired(); $page++) {
             $body = $this->request($auth, $path, $query + ['limit' => self::PAGE_SIZE, 'page' => $page]);
 
             $batch = is_array($body['data'] ?? null) ? array_values(array_filter($body['data'], 'is_array')) : [];
@@ -91,8 +94,14 @@ final class TavusCatalogue
             $total = $body['total_count'] ?? null;
 
             if ($batch === [] || count($batch) < self::PAGE_SIZE || (is_int($total) && count($rows) >= $total)) {
+                $complete = true;
+
                 break;
             }
+        }
+
+        if (! $complete) {
+            $bounds->cut();
         }
 
         return $rows;

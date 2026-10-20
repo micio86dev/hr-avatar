@@ -3,6 +3,7 @@
 namespace App\Voices;
 
 use App\AvatarProviders\CatalogueEntry;
+use App\AvatarProviders\ListBounds;
 use App\Credentials\ProviderAuth;
 use Illuminate\Support\Facades\Http;
 
@@ -43,8 +44,10 @@ final class CartesiaVoices extends HttpVoiceVendor
     {
         $entries = [];
         $startingAfter = null;
+        $bounds = new ListBounds('cartesia:voices');
+        $complete = false;
 
-        for ($page = 0; $page < self::MAX_PAGES; $page++) {
+        for ($page = 0; $page < self::MAX_PAGES && ! $bounds->expired(); $page++) {
             $query = ['limit' => self::PAGE_SIZE] + ($startingAfter === null ? [] : ['starting_after' => $startingAfter]);
             $body = $this->json($this->send(fn () => Http::withHeaders($this->headers($auth))->timeout($this->timeout())->get(self::BASE_URL.'/voices', $query)));
 
@@ -64,10 +67,16 @@ final class CartesiaVoices extends HttpVoiceVendor
             $next = $isList ? null : ($body['next_page'] ?? null);
 
             if ($isList || ($body['has_more'] ?? false) !== true || ! is_string($next) || $next === '') {
+                $complete = true;
+
                 break;
             }
 
             $startingAfter = $next;
+        }
+
+        if (! $complete) {
+            $bounds->cut();
         }
 
         return $entries;
@@ -90,10 +99,5 @@ final class CartesiaVoices extends HttpVoiceVendor
     public static function headers(ProviderAuth $auth): array
     {
         return ['X-API-Key' => $auth->apiKey(), 'Cartesia-Version' => (string) config('hr-avatar.voice_preview.cartesia_version')];
-    }
-
-    private static function language(mixed $value): ?string
-    {
-        return is_string($value) && trim($value) !== '' ? strtolower(trim($value)) : null;
     }
 }

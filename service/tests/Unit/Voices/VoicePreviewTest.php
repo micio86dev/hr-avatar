@@ -71,7 +71,23 @@ describe('the audio', function () {
         'mp3' => [PREVIEW_MP3, 'audio/mpeg'],
         'wav' => ["RIFF\x24\x00\x00\x00WAVEfmt FAKE", 'audio/wav'],
         'ogg' => ["OggS\x00FAKE", 'audio/ogg'],
-        'anything else' => ['plain bytes', 'audio/mpeg'],
+        'anything else with a binary header' => ["\xFF\xFB\x90\x00FAKE", 'audio/mpeg'],
+    ]);
+
+    // Review rv19 R3-002: a success status with a text body (a JSON or HTML error envelope, a plain-text message) is not
+    // audio, and would otherwise be cached for days and served to every later preview of that voice.
+    it('is refused when it is text, whatever the vendor, and never cached', function (string $body) {
+        Http::fake(['api.cartesia.ai/tts/bytes' => Http::sequence()->push($body)->push(PREVIEW_MP3)]);
+
+        expect(fn () => $this->preview->preview(previewVendor('cartesia'), 'v1', 'it', $this->auth))->toThrow(ProviderException::class, '(no response)');
+        expect($this->preview->preview(previewVendor('cartesia'), 'v1', 'it', $this->auth)['audio'])->toBe(PREVIEW_MP3);
+        Http::assertSentCount(2);
+    })->with([
+        'a JSON error' => ['{"error":"quota exceeded"}'],
+        'an HTML page' => ["<html>\n<body>Bad gateway</body></html>"],
+        'a plain message' => ["Too many requests\r\n"],
+        'a message with accented letters' => ['{"errore":"Quota già esaurita, riprova più tardi"}'],
+        'a message that starts with a letter outside ASCII' => ['È stato superato il limite di richieste'],
     ]);
 
     it('is refused when empty or larger than the cap whatever the vendor, and never cached', function (string $audio) {
@@ -95,7 +111,7 @@ describe('the audio', function () {
 
     it('is accepted at exactly the cap', function () {
         config()->set('hr-avatar.voice_preview.max_bytes', 16);
-        Http::fake(['api.cartesia.ai/tts/bytes' => fn () => Http::response(str_repeat('x', 16))]);
+        Http::fake(['api.cartesia.ai/tts/bytes' => fn () => Http::response("ID3\x03".str_repeat('x', 12))]);
 
         expect($this->preview->preview(previewVendor('cartesia'), 'v1', 'it', $this->auth)['audio'])->toHaveLength(16);
     });
