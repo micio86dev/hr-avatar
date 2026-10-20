@@ -135,8 +135,8 @@ try {
 | Code | When |
 |---|---|
 | `invalid_client_secret` | The client secret is not a well-formed token. Nothing was sent. |
-| `network_error` | A request did not reach the service. `recoverable`. |
-| `unexpected_response` | The service answered with something that is not JSON. |
+| `network_error` | A request did not reach the service, or did not answer within 15 seconds. `recoverable`. |
+| `unexpected_response` | The service answered with something that is not a JSON object. |
 | `unsupported_transport` | The service named a transport this SDK does not have. |
 | `provider_library_missing` | The conversation needs a provider library that is not installed or not reachable. See the next section. |
 | `provider_unavailable` | Joining the provider failed. `recoverable`. |

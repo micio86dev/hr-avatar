@@ -124,7 +124,9 @@ For a real provider, `GET /v1/catalogue` lists what each provider's config accep
 `GET /v1/catalogue/{provider}/{resource}` lists what the account can pick (avatars, voices, personas). A provider
 that needs objects created on its side marks the config `sync_status: "pending"`; it syncs in the background, or
 on demand with `POST /v1/avatar-configs/{id}/sync`, and a conversation cannot be created until it is `synced`
-(`409 config_not_synced`). The mock provider needs no sync.
+(`409 config_not_synced`). The mock provider needs no sync. If the background job cannot be queued (the queue is
+down), the config is saved as `failed` with the `sync_error` "Synchronization could not be queued." and the request
+still succeeds: call `POST /v1/avatar-configs/{id}/sync` again once the queue is back.
 
 ## 5. Create a conversation
 
@@ -344,6 +346,10 @@ header. Quote it when you ask about a request; send your own `X-Request-Id` (let
 | 422 | `validation_failed`, `provider_credential_missing`, `llm_credential_missing` |
 | 429 | `rate_limited`, `provider_concurrency_limited` |
 | 502 / 503 | `provider_error` / `service_unavailable` |
+
+The list is closed. A failure that arrives with a status of no code of its own is answered with the closest one: a
+request timeout (408) as `503 service_unavailable`, a bad gateway or gateway timeout (502, 504) as `502 provider_error`,
+any other client error (415 included) as `422 validation_failed`, any other server error as `500 internal_error`.
 
 A secret key has a budget of 600 requests a minute, a publishable key 300; a voice preview is also limited to 10 a
 minute. Over a budget the answer is `429 rate_limited` with `Retry-After` (seconds) and `X-RateLimit-*` headers.
