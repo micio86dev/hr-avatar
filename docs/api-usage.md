@@ -347,7 +347,13 @@ header. Quote it when you ask about a request; send your own `X-Request-Id` (let
 
 A secret key has a budget of 600 requests a minute, a publishable key 300; a voice preview is also limited to 10 a
 minute. Over a budget the answer is `429 rate_limited` with `Retry-After` (seconds) and `X-RateLimit-*` headers.
-Repeated bad credentials from one address are slowed down too.
+Repeated bad credentials from one address are slowed down too: 30 failed authentications a minute (a `401`, or a live
+secret key sent with an `Origin` header) from one address, after which that address is answered `429 rate_limited`
+before its key is even looked at. The budget belongs to the address the service sees. Callers behind one shared egress
+address (a NAT, a corporate proxy) share that budget, so one misconfigured integration can lock the others out for up
+to a minute; and behind a load balancer the budget is shared by everyone unless `HRA_TRUSTED_PROXIES` names the
+balancer, so that the real caller address is used (see [the Railway notes](railway.md)). Fix the credentials rather
+than retrying: every failed attempt spends the budget.
 
 Lists that grow (keys, avatar configs, webhook endpoints, deliveries) take `limit` (1 to 100, 25 by default) and an
 opaque `cursor`, and answer `{ "data": […], "next_cursor": "…" }`; pass `next_cursor` back as `cursor` until it

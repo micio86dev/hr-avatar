@@ -7,6 +7,7 @@ use App\Http\ErrorCode;
 use App\Keys\Scope;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -18,7 +19,12 @@ class RequireScope
     {
         $granted = $request->attributes->get('key_scopes');
 
-        if (! is_array($granted) || ! Scope::grants(array_values(array_filter($granted, is_string(...))), Scope::from($scope))) {
+        // A scope name that does not exist is a defect of the route definition: refuse every caller and say so.
+        if (Scope::tryFrom($scope) === null) {
+            Log::error('Route requires an unknown scope', ['scope' => $scope]);
+        }
+
+        if (! is_array($granted) || ! Scope::grantsNamed(array_values(array_filter($granted, is_string(...))), $scope)) {
             throw new ApiProblem(ErrorCode::InsufficientScope);
         }
 

@@ -122,14 +122,30 @@ it('applies the failed-auth limit to the address, not to the key', function () {
     $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])->getJson('/v1/_probe', bearer($raw))->assertOk();
 });
 
-it('does not count an Origin refusal as a failed authentication', function () {
+// Reversed (ruling 62): a live key sent from a browser is a leaked key, and refusing it must not be free. Each
+// refusal costs a key lookup, so it spends the caller address's failed-authentication budget like a 401 does.
+it('counts an Origin refusal against the address\'s failed-authentication budget', function () {
     [, $raw] = issueKey($this->account);
 
-    foreach (range(1, 31) as $attempt) {
+    foreach (range(1, 30) as $attempt) {
         $this->getJson('/v1/_probe', [...bearer($raw), 'Origin' => 'https://app.example.com'])->assertStatus(403);
     }
 
-    $this->getJson('/v1/_probe', bearer($raw))->assertOk();
+    $response = $this->getJson('/v1/_probe', [...bearer($raw), 'Origin' => 'https://app.example.com']);
+
+    $response->assertStatus(429);
+    expect($response->json('code'))->toBe('rate_limited')
+        ->and((int) $response->headers->get('Retry-After'))->toBeGreaterThan(0);
+});
+
+it('leaves a caller on another address, and the same key without an Origin from a fresh address, unaffected by those refusals', function () {
+    [, $raw] = issueKey($this->account);
+
+    foreach (range(1, 30) as $attempt) {
+        $this->getJson('/v1/_probe', [...bearer($raw), 'Origin' => 'https://app.example.com'])->assertStatus(403);
+    }
+
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])->getJson('/v1/_probe', bearer($raw))->assertOk();
 });
 
 it('resolves implicit route bindings inside the authenticated account only', function () {

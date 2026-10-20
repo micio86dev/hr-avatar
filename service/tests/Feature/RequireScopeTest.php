@@ -44,3 +44,14 @@ it('is reached only after authentication', function () {
     $response->assertStatus(401);
     expect($response->json('code'))->toBe('unauthenticated');
 });
+
+it('denies a route that names a scope which does not exist, even to the wildcard, rather than failing with a 500', function (array $scopes) {
+    // A typo in a route definition must be a deliberate refusal that is logged, not an unhandled ValueError.
+    $logs = captureLogs();
+
+    $response = callWithScopes($scopes, 'conversation:write');
+
+    $response->assertStatus(403);
+    expect($response->json('code'))->toBe('insufficient_scope')
+        ->and(implode("\n", $logs->getArrayCopy()))->toContain('Route requires an unknown scope')->toContain('conversation:write');
+})->with(['wildcard' => [['*']], 'a key that holds the real scope' => [['conversations:write']]]);

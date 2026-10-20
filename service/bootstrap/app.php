@@ -34,8 +34,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.provider' => AuthenticateProviderCallback::class,
             'scope' => RequireScope::class,
         ]);
-        // Authentication must run before the per-key rate limit (which reads the key) and before
-        // route bindings (which resolve account-scoped models). Both come later in Laravel's priority list.
+        // Middleware priority. Laravel sorts a route's middleware by this list, and `prependToPriorityList(before: X,
+        // prepend: Y)` puts Y immediately before X *at the time of the call*, so the final order depends on the order
+        // of these three calls. They produce, front to back:
+        //     RejectKeyInQuery -> AuthenticateSecretKey -> AuthenticateClient -> ... -> ThrottleRequests -> SubstituteBindings
+        // - authentication runs before the per-key rate limit (which reads the key id it records) and before route
+        //   bindings (which resolve account-scoped models, so they need the account it binds);
+        // - a key in the query string is answered 400 before any credential is judged (a 401), so RejectKeyInQuery
+        //   must stay in front of AuthenticateSecretKey. Reordering the calls changes this: RejectKeyInQueryTest
+        //   and AuthenticateSecretKeyTest fail if it does.
         $middleware->prependToPriorityList(before: ThrottleRequests::class, prepend: AuthenticateSecretKey::class);
         $middleware->prependToPriorityList(before: ThrottleRequests::class, prepend: AuthenticateClient::class);
         // A key in the query string is named before credentials are judged.

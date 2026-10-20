@@ -64,11 +64,11 @@ with the databases.
 | `HRA_JWT_SECRET` | required | all | At least 32 random bytes (`php -r 'echo bin2hex(random_bytes(32));'`). Signs the per-conversation client secret. A shorter value stops the process at boot. |
 | `HRA_PUBLIC_BASE_URL` | required | all | The address the `api` is reached at from the internet, for example `https://hra.example.com`, with no path. A provider that reports by callback is given an address under it, so it must be reachable by the provider. Unset or not an http(s) address, `GET /v1/health/ready` fails (503, `public_base_url`) and connecting a conversation of such a provider answers 503 before changing anything. |
 | `HRA_TRUSTED_PROXIES` | optional | api | `*` on Railway, where the service is reachable only through Railway's proxy. Without it the proxy's address stands for every caller, so one caller's failed authentications use up everyone's budget. Elsewhere list the proxies' addresses, comma separated. |
-| `HRA_RATE_LIMIT_SECRET` | optional | api | Requests per minute per secret key. Default 600. |
-| `HRA_RATE_LIMIT_PUBLISHABLE` | optional | api | Requests per minute per publishable key. Default 300. |
-| `HRA_RATE_LIMIT_PREVIEW` | optional | api | Voice previews per minute per key, each of which is a paid synthesis. Default 10. |
-| `HRA_RELEASE_DELAY_SECONDS` | optional | all | How long after a conversation ends its provider session is released. Default 20. |
-| `HRA_MAX_DURATION_CEILING` | optional | api | The longest `max_duration_seconds` a conversation may ask for. Default 3600. |
+| `HRA_RATE_LIMIT_SECRET` | optional | api | Requests per minute per secret key. Default 600; a whole number of at least 1 (an empty, zero or non-numeric value makes the application refuse to start). |
+| `HRA_RATE_LIMIT_PUBLISHABLE` | optional | api | Requests per minute per publishable key. Default 300; at least 1, enforced at boot. |
+| `HRA_RATE_LIMIT_PREVIEW` | optional | api | Voice previews per minute per key, each of which is a paid synthesis. Default 10; at least 1, enforced at boot. |
+| `HRA_RELEASE_DELAY_SECONDS` | optional | all | How long after a conversation ends its provider session is released. Default 20; at least 5 seconds, enforced at boot, so a release never fires before the browser has closed the call. |
+| `HRA_MAX_DURATION_CEILING` | optional | api | The longest `max_duration_seconds` a conversation may ask for. Default 3600; at least 30, the shortest conversation, enforced at boot. |
 | `TAVUS_API_KEY` | optional | api, worker | A platform-wide Tavus key, used for an account that stored none of its own. An account may always store its own key, so leave it unset to make every account bring one. |
 | `HEYGEN_API_KEY` | optional | api, worker | The same for HeyGen LiveAvatar. |
 | `CARTESIA_API_KEY` | optional | api | The same for Cartesia voices (catalogue and preview). |

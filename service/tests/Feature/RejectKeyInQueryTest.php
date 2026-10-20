@@ -1,6 +1,11 @@
 <?php
 
+use App\Http\Middleware\AuthenticateClient;
+use App\Http\Middleware\AuthenticateSecretKey;
 use App\Http\Middleware\RejectKeyInQuery;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
 
 beforeEach(function () {
@@ -39,4 +44,19 @@ it('runs before authentication, so a key in the query is named before credential
 
     expect($this->getJson('/v1/_chain?api_key=x')->json('code'))->toBe('api_key_in_query')
         ->and($this->getJson('/v1/_chain')->json('code'))->toBe('unauthenticated');
+});
+
+// bootstrap/app.php documents this order; the 400-before-401 behaviour depends on it, so the comment must stay true.
+it('orders the middleware priority as documented: query check, secret key, client key, throttle, bindings', function () {
+    $priority = array_flip(app(Kernel::class)->getMiddlewarePriority());
+    $order = [
+        RejectKeyInQuery::class, AuthenticateSecretKey::class, AuthenticateClient::class,
+        ThrottleRequests::class, SubstituteBindings::class,
+    ];
+
+    $positions = array_map(fn (string $class) => $priority[$class], $order);
+    $sorted = $positions;
+    sort($sorted);
+
+    expect($positions)->toBe($sorted)->and(array_unique($positions))->toHaveCount(5);
 });

@@ -64,6 +64,17 @@ describe('revoke', function () {
     });
 });
 
+describe('rotate with a stored scope this version does not know', function () {
+    // A scope removed in a later version stays on old rows: rotating must refuse, not fail with a 500.
+    it('refuses to rotate it with 403 insufficient_scope', function () {
+        [$old] = target(['scopes' => ['conversations:read', 'retired:scope']]);
+
+        $response = manage('postJson', "/{$old->id}/rotate")->assertStatus(403);
+
+        expect($response->json('code'))->toBe('insufficient_scope');
+    });
+});
+
 describe('rotate', function () {
     it('creates a successor of the same shape and keeps the old key for the overlap', function () {
         [$old, $oldRaw] = target(['scopes' => ['conversations:read', 'conversations:write']]);

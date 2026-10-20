@@ -24,4 +24,18 @@ enum Scope: string
     {
         return in_array(self::Wildcard->value, $granted, true) || in_array($required->value, $granted, true);
     }
+
+    /**
+     * Like `grants()`, for a scope given by name (a route definition, a stored key). A name this version does not
+     * know is never granted, not even to the wildcard: it can only be a typo or a retired scope, and a refusal
+     * is the safe answer to both.
+     *
+     * @param  list<string>  $granted
+     */
+    public static function grantsNamed(array $granted, string $required): bool
+    {
+        $scope = self::tryFrom($required);
+
+        return $scope !== null && self::grants($granted, $scope);
+    }
 }

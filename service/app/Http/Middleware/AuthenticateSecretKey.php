@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Authenticates a server-to-server request by its secret key and binds the key's account for the
  * rest of the request. Every 401 counts against the caller's failed-auth budget; a live key
  * presented from a browser origin is refused outright, because a secret key in a browser is
- * already leaked.
+ * already leaked, and that refusal counts against the same budget.
  */
 class AuthenticateSecretKey
 {
@@ -36,6 +36,9 @@ class AuthenticateSecretKey
         }
 
         if ($key->mode === KeyMode::Live && $request->headers->has('Origin')) {
+            // Not free: each refusal cost a key lookup, and a leaked key sent from browsers must not get a free budget.
+            $this->failures->recordFailure($request);
+
             throw new ApiProblem(ErrorCode::SecretKeyOriginForbidden);
         }
 

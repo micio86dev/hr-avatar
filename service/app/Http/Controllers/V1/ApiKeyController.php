@@ -133,7 +133,7 @@ class ApiKeyController
         $granted = is_array($granted) ? array_values(array_filter($granted, is_string(...))) : [];
 
         foreach ($scopes as $scope) {
-            if (! Scope::grants($granted, Scope::from($scope))) {
+            if (! Scope::grantsNamed($granted, $scope)) {
                 throw new ApiProblem(ErrorCode::InsufficientScope, "The calling key does not hold the scope \"{$scope}\".");
             }
         }

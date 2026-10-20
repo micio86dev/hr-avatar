@@ -109,16 +109,23 @@ return [
 
     /*
     | How long after a conversation ends its provider session is released, in seconds. The browser may still
-    | be closing the call, and a provider may still be writing the transcript.
+    | be closing the call, and a provider may still be writing the transcript. At least 5; the application
+    | refuses to boot below that (AppServiceProvider::INTEGER_SETTINGS), as it does for every integer below.
     */
     'release_delay_seconds' => (int) env('HRA_RELEASE_DELAY_SECONDS', 20),
 
-    /* The longest a conversation may be asked to last, in seconds; a create asking for more is refused. */
+    /* The longest a conversation may be asked to last, in seconds; a create asking for more is refused. At least 30. */
     'max_duration_ceiling' => (int) env('HRA_MAX_DURATION_CEILING', 3600),
 
     /*
     | Requests per minute. Every key has a budget of its own; failed authentications are counted per address.
     | `preview` is a second, smaller budget per key for voice previews, which each cost a paid synthesis.
+    | Each is at least 1: an empty or non-numeric variable casts to 0, which would answer every request with a
+    | 429, so the application refuses to boot instead (AppServiceProvider::INTEGER_SETTINGS).
+    |
+    | `failed_auth` is the budget of failed authentications per caller address (a 401, or a live secret key sent with
+    | an Origin header). It is keyed on the address the framework resolves, so behind a proxy that hides the callers
+    | it is shared by all of them: set HRA_TRUSTED_PROXIES (docs/railway.md) so the real address is used.
     */
     'rate_limits' => [
         'secret' => (int) env('HRA_RATE_LIMIT_SECRET', 600),
