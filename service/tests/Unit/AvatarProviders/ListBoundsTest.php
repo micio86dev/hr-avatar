@@ -126,3 +126,41 @@ it('gives the two lists of one resource a single deadline', function () {
 
     expect($page)->toBe(2)->and(implode("\n", $logs->getArrayCopy()))->toContain('liveavatar:avatars');
 });
+
+// Review sf10 R3-liveavatar-paged-no-bounds-on-exception: the account's own list is optional, so its failure does not fail
+// the catalogue, but a list read only as far as the failure is a partial list, and the warning is the only signal.
+it('says an optional list was cut when it fails part way, and still returns what was read', function (int $failsAt) {
+    $logs = captureLogs();
+    Http::fake(function (Request $request) use ($failsAt) {
+        $url = $request->url();
+        if (str_contains($url, '/avatars/public')) {
+            return Http::response(['data' => ['results' => [['id' => 'pub', 'name' => 'Public']], 'next' => null]]);
+        }
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        return (int) $query['page'] === $failsAt
+            ? Http::response([], 500)
+            : Http::response(['data' => ['results' => [['id' => 'own', 'name' => 'Own']], 'next' => 'https://next']]);
+    });
+
+    $entries = (new LiveAvatarCatalogue(new LiveAvatarApi))->list('avatar', new ProviderAuth('key-123456789', 'acc_1'));
+
+    $everything = implode("\n", $logs->getArrayCopy());
+    expect(array_map(fn ($entry) => $entry->id, $entries))->toBe($failsAt === 1 ? ['pub'] : ['pub', 'own'])
+        ->and($everything)->toContain('LiveAvatar optional catalogue list failed')
+        ->and($everything)->toContain('A provider list was cut short')->toContain('liveavatar:avatars');
+})->with(['on the first page' => [1], 'on the second page' => [2]]);
+
+it('reads a list that ends on the last page it is allowed whole and without a word in the log', function (Closure $read, Closure $answer) {
+    $logs = captureLogs();
+    $page = 0;
+    Http::fake(function (Request $request) use ($answer, &$page) {
+        $page++;
+
+        return $answer($page < 20, $page);
+    });
+
+    $read($this->auth);
+
+    expect($page)->toBe(20)->and($logs->getArrayCopy())->toBe([]);
+})->with(pagedLists());

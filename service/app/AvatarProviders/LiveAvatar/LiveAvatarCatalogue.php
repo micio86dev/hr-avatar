@@ -135,6 +135,8 @@ final class LiveAvatarCatalogue
             }
 
             Log::warning('LiveAvatar optional catalogue list failed', $failure->context());
+            // What was read before the failure is a partial list, and the cut warning is the signal the bounds promise.
+            $bounds->cut();
         }
 
         return $rows;
