@@ -165,3 +165,14 @@ it('does not reveal the token when the minted value is dumped', function () {
 
     expect($dump)->not->toContain($minted->token)->and($dump)->toContain('[redacted]');
 });
+
+it('stamps iat from the same instant its expiry is computed from, not from the wall clock', function () {
+    $createdAt = Carbon::parse('2026-01-05 08:30:00', 'UTC');
+
+    $minted = (new ClientSecret)->mint(CS_CONVERSATION, CS_ACCOUNT, $createdAt, 600);
+
+    $claims = json_decode((string) base64_decode(strtr(explode('.', $minted->token)[1], '-_', '+/')), true, flags: JSON_THROW_ON_ERROR);
+    expect($claims['iat'])->toBe($createdAt->getTimestamp())
+        ->and($claims['exp'])->toBe($createdAt->getTimestamp() + ClientSecret::CONNECT_WINDOW_SECONDS + 600)
+        ->and($minted->expiresAt->getTimestamp())->toBe($claims['exp']);
+});

@@ -231,7 +231,8 @@ idempotent.
 
 Auth: SK with scope `api_keys:manage`. `POST /v1/api-keys/{id}/rotate` with optional
 `overlap_seconds` (integer 0-604800, default 3600) MUST create a new key of the same type, mode,
-scopes and allowed_origins with `rotated_from_id` set to the old key, return 201 with the new full
+scopes, allowed_origins and `expires_at` (none when the old key had none; rotation never extends an expiry) with
+`rotated_from_id` set to the old key, return 201 with the new full
 `key`, and set the old key's `expires_at` to now + `overlap_seconds` (or revoke it immediately when
 0). During the overlap both keys authenticate. Rotating a revoked or already-expired key MUST fail
 with 409 `invalid_state`.
@@ -258,7 +259,7 @@ with 409 `invalid_state`.
 
 - GIVEN a rotation
 - WHEN the new key is read
-- THEN `rotated_from_id` equals the old key id and type, mode, scopes and origins are copied
+- THEN `rotated_from_id` equals the old key id and type, mode, scopes, origins and expiry are copied
 
 #### Scenario: Rotate a revoked key
 

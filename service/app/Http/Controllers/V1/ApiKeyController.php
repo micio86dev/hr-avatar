@@ -81,8 +81,9 @@ class ApiKeyController
     /**
      * Rotate an API key
      *
-     * Issues a successor with the same type, mode, scopes and origins, returned once as `key`. The
-     * successor does not inherit an expiry: it has none until one is set by creating a key instead.
+     * Issues a successor with the same type, mode, scopes, origins and expiry, returned once as `key`.
+     * A key that never expires has a successor that never expires; one that expires has a successor that
+     * expires at the same moment, so rotation cannot be used to outlive an expiry.
      * The old key keeps working for `overlap_seconds` (default 3600, 0 revokes it immediately) and never
      * outlives an expiry it already had. A revoked or expired key cannot be rotated.
      */
@@ -93,14 +94,18 @@ class ApiKeyController
         $this->ensureWithinCaller($request, $apiKey->mode, $apiKey->scopes);
 
         [$successor, $raw] = DB::transaction(function () use ($request, $apiKey, $issuer) {
-            // Locked so that two concurrent rotations cannot both succeed.
+            // Locked, and judged on the row as the lock finds it (not on the copy the route bound): a rotation that
+            // waited behind another sees what that one left. With an overlap of 0 the first revokes the key, so the
+            // second is refused; with an overlap both may succeed, each issuing a successor, and the old key is
+            // never extended past the earlier expiry.
             $old = ApiKey::query()->lockForUpdate()->findOrFail($apiKey->id);
 
             if ($old->revoked_at !== null || $old->expires_at?->isPast()) {
                 throw new ApiProblem(ErrorCode::InvalidState, 'A revoked or expired key cannot be rotated.');
             }
 
-            $issued = $issuer->issue($old->account_id, $old->type, $old->mode, $old->scopes, $old->allowed_origins, rotatedFromId: $old->id);
+            // The successor lives no longer than the key it replaces: rotating is not a way out of an expiry.
+            $issued = $issuer->issue($old->account_id, $old->type, $old->mode, $old->scopes, $old->allowed_origins, $old->expires_at, $old->id);
 
             $overlap = $request->overlapSeconds();
             if ($overlap === 0) {

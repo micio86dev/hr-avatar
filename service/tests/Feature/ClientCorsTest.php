@@ -125,3 +125,22 @@ it('is the only CORS source: Laravel\'s HandleCors is not in the global stack', 
 
     expect($stack)->toContain(ClientCors::class)->not->toContain(HandleCors::class);
 });
+
+// Replacing HandleCors removed CORS from every route outside /v1/client. That is the intent: only the browser SDK calls the
+// API from a page; every other route is server-to-server and a secret key must never be usable from a browser origin.
+it('gives a route outside /v1/client neither a preflight answer nor allow headers, from any origin', function (string $method, string $path) {
+    $response = $this->call($method, $path, [], [], [], $this->transformHeadersToServerVars([
+        'Origin' => 'https://app.example.com',
+        'Access-Control-Request-Method' => 'GET',
+        'Access-Control-Request-Headers' => 'authorization',
+    ]));
+
+    expect($response->headers->has('Access-Control-Allow-Origin'))->toBeFalse()
+        ->and($response->headers->has('Access-Control-Allow-Methods'))->toBeFalse()
+        ->and($response->headers->has('Access-Control-Allow-Headers'))->toBeFalse();
+})->with([
+    'a preflight of a secret-key route' => ['OPTIONS', '/v1/conversations'],
+    'a read of a secret-key route' => ['GET', '/v1/conversations'],
+    'a webhook endpoint listing' => ['GET', '/v1/webhook-endpoints'],
+    'the inbound provider webhook' => ['POST', '/v1/webhooks/providers/tavus/token'],
+]);

@@ -20,7 +20,8 @@ use Throwable;
  * conversation and one account, which a browser presents together with a publishable key.
  *
  * Only HS256 is accepted (`alg: none` and every other algorithm fail the signature check).
- * `iss` and `aud` are compared here, and `exp` is read but not enforced at parse time, so the
+ * `iat` and `exp` come from the one instant the caller passes as `createdAt` (never the wall clock), so the two
+ * claims always agree. `iss` and `aud` are compared here, and `exp` is read but not enforced at parse time, so the
  * caller can answer `client_secret_expired` rather than `client_secret_invalid`.
  */
 final class ClientSecret
@@ -39,14 +40,15 @@ final class ClientSecret
     {
         $config = $this->configuration();
         $jti = (string) Str::ulid();
-        $expiresAt = CarbonImmutable::instance($createdAt)->addSeconds(self::CONNECT_WINDOW_SECONDS + $maxDurationSeconds);
+        $issuedAt = CarbonImmutable::instance($createdAt);
+        $expiresAt = $issuedAt->addSeconds(self::CONNECT_WINDOW_SECONDS + $maxDurationSeconds);
 
         $token = $config->builder()
             ->issuedBy(self::ISSUER)
             ->permittedFor(self::AUDIENCE)
             ->relatedTo(self::nonEmpty($conversationId))
             ->identifiedBy($jti)
-            ->issuedAt(new DateTimeImmutable)
+            ->issuedAt($issuedAt)
             ->expiresAt($expiresAt)
             ->withClaim('acc', $accountId)
             ->getToken($config->signer(), $config->signingKey());

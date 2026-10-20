@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  * Turns a presented key into its row. The order is the security property:
  *
  *  1. the format and type are checked as strings, so a malformed key never reaches the database;
- *  2. the rows sharing the stored prefix are compared with hash_equals;
+ *  2. the one row with the stored prefix and the key's hash is read (the hash is unique) and compared with hash_equals;
  *  3. only a key that matched is told apart as expired or revoked.
  *
  * An unknown or wrong key is always `unauthenticated`, so the resolver cannot be used to learn
@@ -53,11 +53,14 @@ final class KeyResolver
     {
         $hash = KeyGenerator::hash($rawKey);
 
-        $sharingPrefix = ApiKey::withoutGlobalScope(AccountScope::class)
+        // The hash is unique and indexed, so at most one row is read however many keys share the prefix; the
+        // prefix keeps the lookup on the narrow index, and hash_equals stays the judge of the match.
+        $candidate = ApiKey::withoutGlobalScope(AccountScope::class)
             ->where('key_prefix', KeyGenerator::prefixOf($rawKey))
-            ->get();
+            ->where('key_hash', $hash)
+            ->first();
 
-        return $sharingPrefix->first(fn (ApiKey $row) => hash_equals($row->key_hash, $hash));
+        return $candidate !== null && hash_equals($candidate->key_hash, $hash) ? $candidate : null;
     }
 
     private function touch(ApiKey $key): void

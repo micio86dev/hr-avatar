@@ -7,8 +7,10 @@ use App\Keys\KeyMode;
 use App\Keys\KeyResolver;
 use App\Keys\KeyType;
 use App\Models\Account;
+use App\Models\ApiKey;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 function resolveError(string $raw, KeyType $type = KeyType::Secret): ?ErrorCode
 {
@@ -126,4 +128,20 @@ it('stamps last_used_at on first use and at most once per 60 seconds afterwards'
     expect($first)->toBe('2026-10-19 12:00:00')
         ->and($second)->toBe('2026-10-19 12:00:00')
         ->and($third)->toBe('2026-10-19 12:01:01');
+});
+
+it('reads the one row whose hash matches, however many keys share its prefix', function () {
+    [$key, $raw] = issueKey($this->account);
+    // Prefix collisions are rare, not impossible: other rows with the same prefix must not be loaded for a lookup.
+    foreach (range(1, 3) as $n) {
+        inAccount($this->account, fn () => ApiKey::factory()->create(['key_prefix' => KeyGenerator::prefixOf($raw)]));
+    }
+    $loaded = 0;
+    Event::listen('eloquent.retrieved: '.ApiKey::class, function () use (&$loaded) {
+        $loaded++;
+    });
+
+    $resolved = app(KeyResolver::class)->resolve($raw, KeyType::Secret);
+
+    expect($resolved->id)->toBe($key->id)->and($loaded)->toBe(1);
 });

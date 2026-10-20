@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\ApiProblem;
+use App\Http\Controllers\V1\ApiKeyController;
+use App\Http\Requests\RotateApiKeyRequest;
+use App\Keys\KeyIssuer;
 use App\Keys\KeyMode;
 use App\Keys\KeyType;
 use App\Models\Account;
@@ -140,6 +144,46 @@ describe('rotate', function () {
         manage('postJson', "/{$old->id}/rotate")->assertCreated();
 
         expect(fresh($old)->expires_at?->toIso8601ZuluString())->toBe('2026-10-19T12:10:00Z');
+    });
+
+    // Ruling 63: rotation must not be a way to escape an expiry. The successor lives no longer than the key it replaces.
+    it('gives the successor the expiry the old key had', function () {
+        [$old] = target(['expires_at' => now()->addDays(30)]);
+
+        $response = manage('postJson', "/{$old->id}/rotate")->assertCreated();
+
+        expect($response->json('expires_at'))->toBe('2026-11-18T12:00:00Z')
+            ->and(fresh($old)->expires_at?->toIso8601ZuluString())->toBe('2026-10-19T13:00:00Z');
+    });
+
+    it('gives the successor the same expiry when the old key expires within the overlap', function () {
+        [$old] = target(['expires_at' => now()->addMinutes(10)]);
+
+        $response = manage('postJson', "/{$old->id}/rotate")->assertCreated();
+
+        expect($response->json('expires_at'))->toBe('2026-10-19T12:10:00Z');
+    });
+
+    it('keeps a successor without an expiry when the old key had none', function () {
+        [$old] = target();
+
+        expect(manage('postJson', "/{$old->id}/rotate")->assertCreated()->json('expires_at'))->toBeNull();
+    });
+
+    // The route resolves the key before the lock is taken, so a second rotation can arrive holding a copy that was
+    // current when it was read. It must be judged on the row as the lock finds it.
+    it('judges a second rotation on the row as it is after the first, not on the copy it was handed', function () {
+        [$old] = target();
+        $stale = fresh($old);
+        manage('postJson', "/{$old->id}/rotate", ['overlap_seconds' => 0])->assertCreated();
+        $request = new RotateApiKeyRequest;
+        $request->attributes->set('key_mode', 'live');
+        $request->attributes->set('key_scopes', ['*']);
+
+        $rotate = fn () => inAccount($this->account, fn () => app(ApiKeyController::class)->rotate($request, $stale, app(KeyIssuer::class)));
+
+        expect($rotate)->toThrow(ApiProblem::class);
+        expect(ApiKey::withoutGlobalScopes()->where('rotated_from_id', $old->id)->count())->toBe(1);
     });
 
     it('copies a publishable key\'s origins to the successor', function () {

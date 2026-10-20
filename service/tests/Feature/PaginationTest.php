@@ -108,14 +108,26 @@ it('refuses a malformed cursor instead of silently serving the first page', func
 ]);
 
 it('orders newest first and breaks ties by id descending', function () {
+    // Ids are written out: ULIDs minted inside one millisecond are not guaranteed to rise, and this test is about
+    // the tie-break, not about the id generator.
     $tied = now()->addHour()->startOfSecond();
-    $ids = inAccount($this->account, fn () => collect(range(1, 3))
-        ->map(fn () => ApiKey::factory()->create(['created_at' => $tied])->id)
-        ->all());
+    $ids = ['01j0000000000000000000000a', '01j0000000000000000000000c', '01j0000000000000000000000b'];
+    inAccount($this->account, fn () => collect($ids)->each(fn (string $id) => ApiKey::factory()->create(['id' => $id, 'created_at' => $tied])));
 
     $listed = collect(page('?limit=100')->json('data'))->pluck('id');
 
-    expect($listed->take(3)->all())->toBe(array_reverse($ids));
+    expect($listed->take(3)->all())->toBe(['01j0000000000000000000000c', '01j0000000000000000000000b', '01j0000000000000000000000a']);
+});
+
+it('continues across a tie without repeating or skipping a row', function () {
+    $tied = now()->addHour()->startOfSecond();
+    inAccount($this->account, fn () => collect(['a', 'b', 'c', 'd'])->each(fn (string $letter) => ApiKey::factory()->create(['id' => "01j0000000000000000000000{$letter}", 'created_at' => $tied])));
+
+    $first = page('?limit=2')->json();
+    $second = page('?limit=2&cursor='.urlencode($first['next_cursor']))->json();
+
+    expect(array_column($first['data'], 'id'))->toBe(['01j0000000000000000000000d', '01j0000000000000000000000c'])
+        ->and(array_column($second['data'], 'id'))->toBe(['01j0000000000000000000000b', '01j0000000000000000000000a']);
 });
 
 it('never lists another account\'s rows', function () {

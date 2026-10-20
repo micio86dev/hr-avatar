@@ -221,7 +221,7 @@
         "/api-keys/{apiKey}/rotate": {
             "post": {
                 "operationId": "api-keys.rotate",
-                "description": "Issues a successor with the same type, mode, scopes and origins, returned once as `key`. The\nsuccessor does not inherit an expiry: it has none until one is set by creating a key instead.\nThe old key keeps working for `overlap_seconds` (default 3600, 0 revokes it immediately) and never\noutlives an expiry it already had. A revoked or expired key cannot be rotated.",
+                "description": "Issues a successor with the same type, mode, scopes, origins and expiry, returned once as `key`.\nA key that never expires has a successor that never expires; one that expires has a successor that\nexpires at the same moment, so rotation cannot be used to outlive an expiry.\nThe old key keeps working for `overlap_seconds` (default 3600, 0 revokes it immediately) and never\noutlives an expiry it already had. A revoked or expired key cannot be rotated.",
                 "summary": "Rotate an API key",
                 "tags": [
                     "API keys"
