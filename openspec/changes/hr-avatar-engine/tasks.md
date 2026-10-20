@@ -987,3 +987,14 @@ Source: the findings of the approved full-coverage native reviews of the histori
 - [x] SF-31 Conversations, requests, sweeper (rv21, rv24): metadata `INF`, `max_duration_seconds` floor, abandoned `created` conversations blocking config deletion, `reload()` scope failure, sweep determinism. (ruling 89, `f56c3e1`)
 - [x] SF-32 Guards, docs and test hygiene (rv10, rv18, rv27, rv28 and the suggestions): shared-directory races in the docs boundary tests, SDK source read outside `service/`, scan-test assertions, test names that overstate. (ruling 90, `5341087`, `dad6369`)
 - [x] SF-33 Gates and records: full suite, coverage 90 and 95, pint, phpstan, Scramble export and drift, Spectral, SDK gates if touched, apply-progress, Engram. (apply-progress, ruling 91 lists the suggestions left)
+
+## Warning fixes of the approved reviews sf7..sf11 (SF-34..SF-39)
+
+Source: the findings of the approved native reviews sf7..sf11 of the review findings fix unit, triaged against HEAD `8c69816`. Reconciliation: rulings 92+. Strict TDD, each claim verified first (reproduced and fixed, or pinned with a test and a ruling). SDK items first and in their own commit; no push, no deploy.
+
+- [x] SF-34 SDK `api.ts` (sf7 R3-api-timeout-body-read): the 15 s timer also covers the body read, and a body the timeout cut short is the same recoverable `network_error` as a request that never answered, not an `unexpected_response`; a body that is not JSON still reads as no body (ruling 92, `5772a65`, ships SDK code).
+- [x] SF-35 SDK `conversation.ts` (sf8 R3-toggle-mic-overlap): the muted state a refusal restores is the state of the latest transport call that succeeded, whatever the number and order of overlapping toggles (ruling 92, `5772a65`, ships SDK code).
+- [x] SF-36 `AvatarConfigSync` (sf9 R3-avatar-config-sync-catch-scope): on a synchronous queue the job runs inside the push, so a failure there is the job's and reaches the caller with the reason the job recorded; the "could not be queued" path is only for a push that fails (ruling 93, `e119906`, `a8bf10f`).
+- [x] SF-37 Lists (sf10 R3-liveavatar-paged-no-bounds-on-exception, R3-tavus-deadline-cut-unreported): an optional LiveAvatar list that fails part way is reported as cut; Tavus has no unreported partial outcome, pinned with the end-of-list case at the page limit (ruling 93, `cc4ee0a`).
+- [x] SF-38 `Audio` and `MockProvider` (sf10 R3-audio-isaudio-utf8-truncation, sf11 R3-001): the audio check is not reproducible (pinned); the Mock catches only the failures of a cache store and logs their kind (ruling 93, `f84abb5`, `d81f704`).
+- [x] SF-39 Test hygiene and gates (sf11 R3-002 and the suggestions): the docs probe directory is cleaned whatever fails, the timezone is restored in `finally`, the drift guard names a missing credential flag, the non-JSON guard body case is back (ruling 94, `e81adb3`); gates, apply-progress, Engram.

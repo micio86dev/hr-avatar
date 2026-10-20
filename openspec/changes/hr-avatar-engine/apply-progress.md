@@ -1754,3 +1754,67 @@ Pins that were green at first sight, kept as regression guards and named in the 
 2. A catalogue or voice list cut at 20 pages or 30 s is returned partial, cached for five minutes and logged (ruling 88); no response member says so. Say if the API should carry a `truncated` flag (an `openapi.json` change).
 3. LiveAvatar transcript paging (`next_timestamp`) and the assumption that an unused session token lapses (ruling 86) both need a live check.
 4. Re-vendoring the SDK into the BEAI frontend is the orchestrator's decision.
+
+## Warning fixes SF-34..SF-39 (approved reviews sf7..sf11 of the SF-24..SF-33 unit)
+
+Strict TDD. Reconciliation: rulings 92-94. Baseline at `8c69816`: 2896 service tests, 377 SDK tests; now 2913 and 383.
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| SF-34 SDK body read | status 200 and 503 with a stalled body answered `unexpected_response` (2 failures) | `network_error` when the read fails on an aborted signal | `5772a65` |
+| SF-35 SDK mute | two refused overlapping toggles left the next toggle reporting `false` (1 failure); accepted/refused and out-of-order pins green at first sight | `#applyMic` with the confirmed device state | `5772a65` |
+| SF-36 sync catch | a failing job on the sync queue was swallowed, nothing thrown (1 failure) | no wrapping on `SyncQueue`; the inline success test pins the other line | `e119906`, `a8bf10f` |
+| SF-37 LiveAvatar | no "cut short" line after an optional list failed on page 1 and page 2 (2 failures); the Tavus/all-lists "ends on the last page" pins green at first sight | `$bounds->cut()` in the optional catch | `cc4ee0a` |
+| SF-38 Mock | no log line (2), a `TypeError` swallowed (1) | `RedisException\|QueryException` and a log of the class | `d81f704` |
+| SF-38 Audio | premise does not hold; `AudioTest` fails on a `substr` mutation (3 failures) | none needed; comment and test | `f84abb5` |
+| SF-39 hygiene | mutation making the copy throw: the run fails and nothing is left behind | helper plus `try` | `e81adb3` |
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test commands | sdk `bunx vitest run tests/unit/api-hardening.spec.ts` 16 passed; service (`DB_PORT=55442`) `tests/Feature/SyncAvatarConfigTest.php` 27, `tests/Unit/AvatarProviders` 736, `tests/Unit/Voices/AudioTest.php` 5, `tests/Arch/DocsBoundaryTest.php` 39 passed |
+| Runtime harness | the sync queue path of the config sync through `AvatarConfigSync::dispatchWhenPending` with an `Http::fake` provider (failure and success); a stalled `ReadableStream` body aborted by the request timeout; Playwright smoke on Chromium and WebKit. No live provider call by rule |
+| Rollback boundary | per commit; no migration, no `openapi.json` change |
+
+### Gates (foreground, `DB_PORT=55442`, one suite at a time)
+
+| Command | Result |
+|---|---|
+| `php artisan test --parallel --processes=4` | exit 0, 2912 passed (before the last pin; 2913 in the coverage runs) |
+| `php -d memory_limit=4G artisan test --coverage --min=90` | exit 0, 2913 passed, total 100.0 % |
+| `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` | exit 0, 2913 passed, total 100.0 % |
+| `vendor/bin/pint --test` | exit 0 |
+| `vendor/bin/phpstan analyse --memory-limit=1G` | exit 0, 0 errors |
+| `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json` | exit 0, no change |
+| `cd ../tools/spectral && bun run lint` | exit 0, nothing at warn or above |
+| sdk `bunx tsc --noEmit` | exit 0 |
+| sdk `bun run test:coverage` | exit 0, 383 passed, 100 % lines, 98.64 % branches |
+| sdk `bun run build`, `bun run size` | exit 0; `index.js` 5731 B and `hr-avatar.global.js` 6102 B gzipped (was 5665 and 6028) |
+| sdk `bunx playwright test` | exit 0, 2 passed (Chromium, WebKit) |
+
+### Disposition of the findings
+
+| Finding | Disposition |
+|---|---|
+| sf7 R3-api-timeout-body-read | fixed (ruling 92, `5772a65`) |
+| sf8 R3-toggle-mic-overlap | fixed (ruling 92, `5772a65`) |
+| sf9 R3-avatar-config-sync-catch-scope | fixed (ruling 93, `e119906`, `a8bf10f`) |
+| sf10 R3-audio-isaudio-utf8-truncation | not reproducible, pinned (ruling 93, `f84abb5`) |
+| sf10 R3-liveavatar-paged-no-bounds-on-exception | fixed (ruling 93, `cc4ee0a`) |
+| sf10 R3-tavus-deadline-cut-unreported-when-last-page-reached | no defect, pinned (ruling 93, `cc4ee0a`) |
+| sf11 R3-001 | fixed (ruling 93, `d81f704`) |
+| sf11 R3-002 | fixed (ruling 94, `e81adb3`) |
+| sf9 R3-timezone-test-restore, sf11 R3-003, R3-004 | applied (ruling 94, `e81adb3`) |
+| sf10 R3-cartesia-elevenlabs-language-helper-moved, R3-listbounds-test-deadline-sharing | not applied, reasons in ruling 94 |
+
+### SDK commits that change shipped code
+
+`5772a65` (`api.ts`, `conversation.ts`). The BEAI frontend vendors the SDK as `frontend/vendor/hr-avatar-sdk-0.0.0.tgz`; re-vendoring is the orchestrator's step and was not done here.
+
+### Open items for the owner
+
+1. On a synchronous queue (local development only) a provider failure during a config create or update now answers a 500 (the job's exception), as it did before the queue-down handling; with a real queue the request still succeeds and the config shows `failed`.
+2. The items of the SF-24..SF-33 unit that stay open (TLS mode on Railway, partial lists not flagged in the response, LiveAvatar paging and token lapse, re-vendoring) are unchanged.
