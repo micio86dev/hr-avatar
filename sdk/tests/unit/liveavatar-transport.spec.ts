@@ -351,14 +351,16 @@ describe('disconnects', () => {
     expect(handlers.closed).not.toHaveBeenCalled()
   })
 
-  it('a close cancels the pending-speech window', async () => {
+  // The close tells the consumer the avatar went silent (once, at the close); the cancelled window adds nothing later.
+  it('a close ends the pending-speech window with one silent report', async () => {
     const { fire, handlers } = await startedLiveAvatar()
     fire('avatar.transcription', { text: 'Goodbye.' })
 
     fire('session.disconnected', 'SERVER_INITIATED')
+    expect(handlers.speaking.mock.calls).toEqual([[true], [false]])
     vi.advanceTimersByTime(SPEECH_PENDING_MS * 2)
 
-    expect(handlers.speaking.mock.calls).toEqual([[true]])
+    expect(handlers.speaking.mock.calls).toEqual([[true], [false]])
   })
 
   it('reports nothing that arrives after the session is gone', async () => {

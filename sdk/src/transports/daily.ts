@@ -59,7 +59,7 @@ export function createDailyTransport(library: DailyLibrary): Transport {
   const seen = new Map<string, number>()
 
   const ready = (): void => {
-    if (readySent) return
+    if (readySent || ending) return
     readySent = true
     events?.ready()
   }
@@ -140,7 +140,7 @@ export function createDailyTransport(library: DailyLibrary): Transport {
       // The provider ended the call (its ceiling, a dropped connection). Our own leave is not news.
       if (ending) return
       ending = true
-      voice.cancel()
+      voice.silence()
       events?.closed()
     })
     daily.on('app-message', (event) => {
@@ -171,6 +171,8 @@ export function createDailyTransport(library: DailyLibrary): Transport {
         })
         wire(call)
         await call.join({ url: options.join.conversation_url, startVideoOff: true })
+        // Stopped, or closed by the provider, while the join was in flight: that is not a conversation that started.
+        if (ending) throw new Error('The call ended while joining')
         ready()
       } catch {
         // A stable code, never the library's text: it names the vendor and its hosts.

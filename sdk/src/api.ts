@@ -48,6 +48,9 @@ interface Problem {
 
 const isRecoverable = (status: number): boolean => status === 429 || status >= 500
 
+/** A request that has not answered (headers and body) in this long is given up: a hung service must not hang the page. */
+const REQUEST_TIMEOUT_MS = 15_000
+
 const asString = (value: unknown): string | undefined =>
   typeof value === 'string' && value !== '' ? value : undefined
 
@@ -65,6 +68,16 @@ export function createApi(config: ApiConfig) {
   }
 
   async function request<T>(path: string, body?: unknown, keepalive?: boolean): Promise<T> {
+    const abort = new AbortController()
+    const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      return await send<T>(path, abort.signal, body, keepalive)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function send<T>(path: string, signal: AbortSignal, body?: unknown, keepalive?: boolean): Promise<T> {
     let response: Response
     try {
       response = await fetch(`${base}${path}`, {
@@ -74,6 +87,7 @@ export function createApi(config: ApiConfig) {
         // A redirect would replay the auth headers elsewhere; ambient cookies are never wanted.
         redirect: 'error',
         credentials: 'omit',
+        signal,
         ...(keepalive ? { keepalive: true } : {}),
       })
     } catch {
@@ -89,10 +103,11 @@ export function createApi(config: ApiConfig) {
     const parsed: unknown = await response.json().catch(() => undefined)
 
     if (response.ok) {
-      if (parsed === undefined) {
+      // Every client route answers with a JSON object; anything else would be returned as `T` and crash the caller later.
+      if (typeof parsed !== 'object' || parsed === null) {
         throw new HrAvatarError({
           code: 'unexpected_response',
-          message: 'The service answered with a body that is not JSON',
+          message: 'The service answered with a body that is not a JSON object',
           status: response.status,
           ...(request_id ? { request_id } : {}),
         })

@@ -48,5 +48,11 @@ export function createSpeechTracker(report: (speaking: boolean) => void) {
     playing: (): boolean => audioPlaying,
     /** Drops the window without reporting: the transport is going away. */
     cancel,
+    /** The provider ended the call: whatever was reported as speaking is told to have stopped, once. */
+    silence(): void {
+      audioPlaying = false
+      cancel()
+      sync()
+    },
   }
 }

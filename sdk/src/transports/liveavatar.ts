@@ -104,7 +104,7 @@ export function createLiveAvatarTransport(library: LiveAvatarLibrary): Transport
     listen(SDK_EVENT.disconnected, () => {
       ending = true
       session = null
-      voice.cancel()
+      voice.silence()
       events?.closed()
     })
 
@@ -154,6 +154,8 @@ export function createLiveAvatarTransport(library: LiveAvatarLibrary): Transport
         })
         wire(session, mount)
         await session.start()
+        // Stopped, or disconnected by the provider, while the session was starting: that is not a conversation that started.
+        if (ending) throw new Error('The session ended while starting')
         ready()
       } catch {
         ending = true

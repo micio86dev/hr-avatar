@@ -17,6 +17,8 @@ describe('public entry', () => {
   })
 })
 
+// `expectTypeOf` has no effect at run time: these assertions are enforced by `bunx tsc --noEmit` (the tests are in
+// tsconfig `include`, and CI runs it), which fails to compile when a type does not hold.
 describe('public types', () => {
   it('types the connect options', () => {
     expectTypeOf<ConnectOptions['mount']>().toEqualTypeOf<HTMLElement>()

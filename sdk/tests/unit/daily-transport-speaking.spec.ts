@@ -104,13 +104,15 @@ describe('an utterance that arrives before its audio', () => {
     expect(ctx.handlers.speaking).not.toHaveBeenCalled()
   })
 
-  it('a close by the provider cancels the pending window', () => {
+  // The close tells the consumer the avatar went silent (once, at the close); the cancelled window adds nothing later.
+  it('a close by the provider ends the pending window with one silent report', () => {
     ctx.utter('replica', 'Goodbye.', { inference_id: 'a' })
     ctx.fire('left-meeting')
+    expect(speaking()).toEqual([true, false])
 
     vi.advanceTimersByTime(AVATAR_UTTERANCE_PENDING_MS * 2)
 
-    expect(speaking()).toEqual([true])
+    expect(speaking()).toEqual([true, false])
   })
 
   it('stop() cancels the pending window', async () => {

@@ -133,9 +133,14 @@ export class Conversation {
   /** Flips the microphone and returns the new muted state at once; a transport failure is emitted as `error`. */
   toggleMic(): boolean {
     this.#assertActive()
-    this.#muted = !this.#muted
-    this.#transport.setMicMuted(this.#muted).catch((cause: unknown) => this.#emit('error', asError(cause)))
-    return this.#muted
+    const requested = !this.#muted
+    this.#muted = requested
+    this.#transport.setMicMuted(requested).catch((cause: unknown) => {
+      // The transport refused: the microphone is as it was, so the next toggle must flip from that.
+      if (this.#muted === requested) this.#muted = !requested
+      this.#emit('error', asError(cause))
+    })
+    return requested
   }
 
   /** The avatar speaks `text` verbatim. */
@@ -220,7 +225,13 @@ export class Conversation {
     try {
       handler(payload)
     } catch (error) {
-      reportError(error)
+      // reportError surfaces it like an uncaught error; a page without it still hears of it, on its own turn.
+      if (typeof reportError === 'function') reportError(error)
+      else {
+        setTimeout(() => {
+          throw error
+        }, 0)
+      }
     }
   }
 

@@ -49,10 +49,15 @@ export async function connect(options: ConnectOptions): Promise<Conversation> {
 
   // From here the service has moved the conversation to connecting and may hold a provider
   // session, so every failure releases it. `Conversation.open` does that for a failed start.
-  const transport = await loadTransport(join.transport, options).catch(async (error: unknown) => {
+  let transport: Awaited<ReturnType<typeof loadTransport>>
+  let mount: HTMLVideoElement
+  try {
+    transport = await loadTransport(join.transport, options)
+    mount = resolveMount(options.mount)
+  } catch (error) {
     await api.end(id).catch(() => undefined)
     throw error
-  })
+  }
 
   return Conversation.open({
     id,
@@ -62,7 +67,7 @@ export async function connect(options: ConnectOptions): Promise<Conversation> {
     ...(options.completionPhrases ? { completionPhrases: options.completionPhrases } : {}),
     start: {
       join,
-      mount: resolveMount(options.mount),
+      mount,
       ...(options.audioDeviceId ? { audioDeviceId: options.audioDeviceId } : {}),
     },
   })
