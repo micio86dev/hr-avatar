@@ -7,6 +7,7 @@ use App\Models\Account;
 use App\Models\ProviderWebhookReceipt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\OneShotStream;
 
 const WEBHOOK_BODY_LIMIT = 256 * 1024;
 
@@ -56,17 +57,16 @@ it('refuses an oversize body before judging the token', function () {
 });
 
 describe('a body with no Content-Length (chunked)', function () {
-    function streamOf(int $bytes)
-    {
+    $streamOf = function (int $bytes) {
         $stream = fopen('php://memory', 'w+');
         fwrite($stream, str_repeat('a', $bytes));
         rewind($stream);
 
         return $stream;
-    }
+    };
 
-    it('is refused with 413 after reading no more than one byte past the limit', function () {
-        $stream = streamOf(LimitWebhookBody::MAX_BYTES * 4);
+    it('is refused with 413 after reading no more than one byte past the limit', function () use ($streamOf) {
+        $stream = $streamOf(LimitWebhookBody::MAX_BYTES * 4);
         $request = Request::create('/v1/webhooks/providers/tavus/x', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], $stream);
 
         try {
@@ -77,8 +77,8 @@ describe('a body with no Content-Length (chunked)', function () {
         }
     });
 
-    it('lets a body of exactly the limit through, readable by what follows', function () {
-        $request = Request::create('/v1/webhooks/providers/tavus/x', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], streamOf(LimitWebhookBody::MAX_BYTES));
+    it('lets a body of exactly the limit through, readable by what follows', function () use ($streamOf) {
+        $request = Request::create('/v1/webhooks/providers/tavus/x', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], $streamOf(LimitWebhookBody::MAX_BYTES));
 
         $response = (new LimitWebhookBody)->handle($request, fn (Request $request) => response((string) strlen($request->getContent())));
 
@@ -86,32 +86,21 @@ describe('a body with no Content-Length (chunked)', function () {
     });
 });
 
-describe('through the real HTTP kernel, where the body is read from the SAPI input', function () {
-    /** A request the way the SAPI builds it: no content is handed over, it is read from `php://input` on demand. */
-    function kernelRequest(string $token, array $server): Request
-    {
-        return Request::create("/v1/webhooks/providers/tavus/{$token}", 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', ...$server], null);
-    }
+describe('through the real HTTP kernel with a body that can be read only once', function () {
+    // Not sent as JSON: the framework decodes a JSON body itself before any middleware runs, so the body would be
+    // read (and, here, gone) before `LimitWebhookBody`. Providers are not obliged to say `application/json`.
+    it('hands the body it read on to the controller, which stores it whole', function (bool $declareLength, int $chunk) {
+        $sent = inboundCallback(['properties' => ['shutdown_reason' => 'participant_left', 'marker' => str_repeat('read-once ', 200)]]);
+        $body = json_encode($sent, JSON_THROW_ON_ERROR);
+        $server = ['CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json', ...($declareLength ? ['CONTENT_LENGTH' => (string) strlen($body)] : [])];
 
-    it('leaves the body readable for the form request when a Content-Length is declared', function () {
-        $response = app()->handle(kernelRequest($this->token, ['CONTENT_LENGTH' => '0']));
+        $response = app()->handle(Request::create("/v1/webhooks/providers/tavus/{$this->token}", 'POST', [], [], [], $server, OneShotStream::open($body, $chunk)));
 
-        // An empty body is not a callback: 422, and never the 500 of a body that cannot be read twice.
-        expect($response->getStatusCode())->toBe(422)->and(json_decode($response->getContent(), true)['code'])->toBe('validation_failed');
-    });
-
-    it('leaves the body readable for the form request when there is no Content-Length', function () {
-        $response = app()->handle(kernelRequest($this->token, []));
-
-        expect($response->getStatusCode())->toBe(422)->and(json_decode($response->getContent(), true)['code'])->toBe('validation_failed');
-    });
-
-    it('hands a streamed body within the limit on to the controller whole', function () {
-        $stream = fopen('php://memory', 'w+');
-        fwrite($stream, json_encode(inboundCallback(), JSON_THROW_ON_ERROR));
-        rewind($stream);
-        $request = Request::create("/v1/webhooks/providers/tavus/{$this->token}", 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], $stream);
-
-        expect(app()->handle($request)->getStatusCode())->toBe(200);
-    });
+        expect($response->getStatusCode())->toBe(200)
+            ->and(ProviderWebhookReceipt::withoutGlobalScopes()->firstOrFail()->payload)->toEqual($sent);
+    })->with([
+        'a declared Content-Length, read in one piece' => [true, 1 << 20],
+        'no Content-Length, read in one piece' => [false, 1 << 20],
+        'no Content-Length, read in 7-byte chunks (chunked)' => [false, 7],
+    ]);
 });
