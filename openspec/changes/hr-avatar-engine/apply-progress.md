@@ -1604,3 +1604,38 @@ Strict TDD. Reconciliation: rulings 68-73. Baseline at `544bf52`: 2781 tests; no
 ### Open items for the owner
 
 1. Ruling 68 contradicts the review's reading of Symfony; if the deployment ever pins a Symfony older than the installed 8.1.9, the kernel-path tests are the guard that fails first.
+
+## Warning fixes SF-19..SF-23 (approved review of SF-13..SF-18)
+
+Strict TDD. Reconciliation: rulings 74-77. Baseline at `73eb643`: 2789 tests; now 2803.
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| SF-19 callback body hand-back | the three one-shot-body kernel tests answered 422 (the controller read an empty body); also RED again with the hand-back removed from the finished middleware | `initialize()` with the read bytes, headers kept | `a20eaa9` |
+| SF-20 test titles and datasets | rename and split only | the same assertions pass | `5978d33` |
+| SF-21 connect failure tests | with the old `DB::listen` pattern the new assertions fail: the references and the callback hash had been stored | `DB::beforeExecuting` throws before the statement | `a03dd4a`, `97180e2` (comment) |
+| SF-22 `DeliveryError` | the enum did not exist (the test file errored on the missing class); a mutation adding a case failed the doc comparison | enum, job uses it | `772171e` |
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `DB_PORT=55442 vendor/bin/pest tests/Feature/LimitWebhookBodyTest.php` 10 passed; `tests/Feature/ClientConnectTest.php` 38 passed; `tests/Unit/Webhooks/DeliveryErrorTest.php` and `tests/Feature/DeliverWebhookTest.php` 62 passed; `tests/Unit/AvatarProviders/ProviderSessionTest.php` with `DeliverWebhookTest` 74 passed |
+| Runtime harness | the callback body through the real HTTP kernel as a body that can be read only once (declared length, none, 7-byte chunks); no live provider call by rule |
+| Full suite | `php artisan test --parallel --processes=4`: 2803 passed, 8756 assertions, exit 0 |
+| Coverage | `php -d memory_limit=4G artisan test --coverage --min=90`: exit 0, total 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: exit 0 |
+| Static analysis and style | `vendor/bin/pint --test` exit 0; `vendor/bin/phpstan analyse --memory-limit=1G` exit 0 |
+| OpenAPI | `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json`: exit 0 (no change); `cd tools/spectral && bun run lint`: exit 0 |
+| Rollback boundary | per commit; no schema change |
+
+### Disposition of the findings
+
+**Fixed, failing test first:** R2-003 and the hand-back (ruling 74), R3-004 and R2-006 (ruling 76), R2-008 (ruling 77).
+**Test and wording only:** R2-002, R3-005, R2-005 (ruling 75), R2-007 (ruling 76).
+**Gate remarks not acted on:** `pin()` default port for `http://` (moot, ruling 77); the first gate run on the `ConnectConversation` comment commit failed on a scoping remark that its second run withdrew (the model is scoped by `BelongsToAccount`).
+
+### Open items for the owner
+
+1. For a JSON callback body the framework reads the whole body before `LimitWebhookBody` runs (ruling 74); only nginx's `client_max_body_size 1m` bounds its memory. Say if the size check should move ahead of the request capture.
