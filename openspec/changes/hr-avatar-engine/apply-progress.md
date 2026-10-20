@@ -1567,3 +1567,40 @@ REFACTOR: the redundant checks, the named helpers and the docblock corrections o
 2. Webhook endpoint creation is not idempotent (ruling 65, README).
 3. The relay re-queues a receipt for 24 hours at most (ruling 60) and a delivery for as long as it is `pending` (its own six attempts end it); confirm both are the wanted policy.
 4. A conversation takes at most 10,000 events (ruling 67); confirm the number.
+
+## Follow-up fix unit SF-13..SF-18 (review round 3 of the security fix unit)
+
+Strict TDD. Reconciliation: rulings 68-73. Baseline at `544bf52`: 2781 tests; now 2789.
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| SF-13 callback body | not reproducible: the three kernel-path tests (no content with and without `Content-Length`, streamed body) passed at HEAD; a throwaway script under PHP's built-in server (plain and chunked) read the bounded stream, then `getContent()` and `Request::createFrom()` with the full body. Symfony 8.1.9 has no `LogicException` there (ruling 68) | tests kept as the regression guard; comment only in the middleware | `7990d5f` |
+| SF-14 event year in UTC | 3 of 4 dataset rows failed (year 10000 UTC and year 0 UTC accepted; year 1 UTC refused) | `ProviderEvent` converts to UTC first | `03402cc` |
+| SF-15 connect | new test failed (no teardown when `fail()` also throws); the unknown-provider code assertion passed at HEAD (`internal_error`) | `abandon()` before `fail()` | `e85ba72` |
+| SF-16 unresolved host | the unresolved-host test failed (`destination_not_allowed` instead of `destination_unresolved`) | `DeliverWebhook` records `destination_unresolved` | `b96dc91` |
+| SF-17 rebinding test | rename only | the `CURLOPT_RESOLVE` tests already prove the pin | `b96dc91` |
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | `DB_PORT=55442 vendor/bin/pest tests/Feature/LimitWebhookBodyTest.php` 10 passed; `tests/Unit/AvatarProviders/ProviderSessionTest.php` 26 passed; `tests/Feature/ClientConnectTest.php` 38 passed; `tests/Feature/DeliverWebhookTest.php` 48 passed |
+| Runtime harness | the callback body through the real HTTP kernel and over real HTTP with PHP's built-in server (plain and chunked), see ruling 68; no live provider call by rule |
+| Full suite | `php artisan test --parallel --processes=4`: 2789 passed, 8732 assertions, exit 0 |
+| Coverage | `php -d memory_limit=4G artisan test --coverage --min=90`: exit 0, total 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: exit 0, total 100.0 % |
+| Static analysis and style | `vendor/bin/pint --test` exit 0; `vendor/bin/phpstan analyse --memory-limit=1G` 0 errors |
+| OpenAPI | `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json`: exit 0 (the one-line description change committed in `b96dc91`); `cd tools/spectral && bun run lint`: exit 0 |
+| Rollback boundary | per commit; the only schema-adjacent change is a comment in an existing migration |
+
+### Disposition of the findings
+
+**Fixed, failing test first:** sf5 R3-002 (UTC year), sf3 R3-001 (end the session before failing), sf1 R3-001 (`destination_unresolved`).
+**Not reproducible, now pinned:** sf5 R3-001 (ruling 68).
+**Test and wording only:** sf3 R3-002 (problem code asserted), sf1 R3-002 (test renamed, pin already proved).
+**Accepted, with a ruling:** sf2 R3-001, R3-002, R3-003 (ruling 73).
+
+### Open items for the owner
+
+1. Ruling 68 contradicts the review's reading of Symfony; if the deployment ever pins a Symfony older than the installed 8.1.9, the kernel-path tests are the guard that fails first.

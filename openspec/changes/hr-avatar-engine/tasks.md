@@ -951,3 +951,14 @@ Commit boundary: one commit per item (or tight group) on `feature/extract-avatar
 - [x] SF-10 Session release: a conversation that ends while connecting with the reference not yet stored releases the session once the reference is kept (pinned by a test); `release_delay_seconds` clamped to a lower bound (R3-001, R3-002 `h86eff30`).
 - [x] SF-11 Ingestion: duplicate check before the closed-grace guard; the 2 KB `data` limit measured on the stored encoding; `LimitWebhookBody` caps a body without `Content-Length` while reading it; adapter parse failure is 422 `validation_failed`; the transcript read is capped; concurrent duplicate callback test (R3-grace-replay, R3-size-boundary, R3-unbounded-transcript, R3-001..R3-003 `83bdda7`).
 - [x] SF-12 Gates and records: full suite, coverage 90 and 95, pint, phpstan, Scramble export and drift, Spectral, README and docs notes, apply-progress.
+
+## Follow-up fix unit (post-review round 3 of the security fix unit)
+
+Source: the approved native review of the security fix unit (sf1, sf2, sf3, sf5 round 3 findings), triaged against HEAD `544bf52`. Reconciliation: rulings 68+. Strict TDD, one commit per item on `feature/extract-avatar-service`; no push.
+
+- [x] SF-13 `LimitWebhookBody` (sf5 R3-001): the reported `LogicException` on a later `getContent()` was tried through the real HTTP kernel (a request with no handed-over content, with and without `Content-Length`, and a streamed body) and over real HTTP with PHP's built-in server (plain and chunked); with the installed Symfony 8.1.9 it does not occur, so the middleware is unchanged apart from a comment and the kernel-path tests stay as the regression guard (ruling 68, `7990d5f`).
+- [x] SF-14 `ProviderEvent` (sf5 R3-002): the year range is judged in UTC, like the browser-event validator (ruling 69, `03402cc`).
+- [x] SF-15 `ConnectConversation` (sf3 R3-001): a started session whose references could not be kept is ended before the conversation is failed, so a failing store cannot leave a live provider session (ruling 70, `e85ba72`); the unknown-provider test also asserts the problem code (sf3 R3-002).
+- [x] SF-16 `DeliverWebhook` (sf1 R3-001): an enforced host that gave no address is recorded as `destination_unresolved`, distinct from the policy block `destination_not_allowed`; controller description, OpenAPI export, migration comment, design and webhook spec updated (ruling 71, `b96dc91`).
+- [x] SF-17 DNS-rebinding feature test (sf1 R3-002): the test is renamed to say what it proves (no request, one guard consult); the pin option is proved by the existing `CURLOPT_RESOLVE` tests (ruling 72, `b96dc91`).
+- [x] SF-18 Gates and records: full suite, coverage 90 and 95, pint, phpstan, Scramble export and drift, Spectral, apply-progress, Engram.
