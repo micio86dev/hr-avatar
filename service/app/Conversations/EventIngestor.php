@@ -25,6 +25,14 @@ final class EventIngestor
     /** How long after the end the browser may still send events. */
     public const GRACE_SECONDS = 60;
 
+    /**
+     * The most events one conversation holds. The transcript endpoint returns the utterances of a conversation in one
+     * answer, so what a conversation may hold is bounded here, where it is written: a batch that would pass it is
+     * refused whole, as the conversation being closed to events (which the SDK already treats as the end of forwarding).
+     * An hour at one utterance a second is 3,600; this leaves headroom for an honest client.
+     */
+    public const MAX_EVENTS = 10000;
+
     public function __construct(private readonly ConversationLifecycle $lifecycle) {}
 
     /**
@@ -38,14 +46,13 @@ final class EventIngestor
         return CurrentAccount::runAs($conversation->account_id, fn (): array => DB::transaction(function () use ($conversation, $events): array {
             $locked = Conversation::query()->lockForUpdate()->findOrFail($conversation->id);
 
-            $this->guard($locked, $events);
-
             $known = array_flip(ConversationEvent::query()
                 ->where('conversation_id', $locked->id)
                 ->whereIn('idempotency_key', array_column($events, 'idempotency_key'))
                 ->pluck('idempotency_key')->all());
             $sequence = (int) ConversationEvent::query()->where('conversation_id', $locked->id)->max('sequence');
             $rows = [];
+            $fresh = [];
             $duplicates = 0;
             $live = false;
 
@@ -57,6 +64,7 @@ final class EventIngestor
                 }
 
                 $known[$event['idempotency_key']] = true;
+                $fresh[] = $event;
                 $live = $live || ($event['type'] === 'lifecycle' && $event['name'] === 'live');
                 $rows[] = [
                     'account_id' => $locked->account_id,
@@ -67,13 +75,17 @@ final class EventIngestor
                     'role' => $event['role'],
                     'text' => $event['text'],
                     'name' => $event['name'],
-                    'data' => $event['data'] === null ? null : json_encode($event['data'], JSON_THROW_ON_ERROR),
+                    'data' => $event['data'] === null ? null : json_encode($event['data'], ConversationEvent::DATA_JSON_FLAGS),
                     'occurred_at' => $event['occurred_at'],
                     'idempotency_key' => $event['idempotency_key'],
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
             }
+
+            // Only what is new can be refused: a batch whose events are all stored already is a replay, and a replay
+            // is answered as one even after the conversation closed.
+            $this->guard($locked, $fresh, $sequence);
 
             ConversationEvent::query()->insert($rows);
 
@@ -86,17 +98,26 @@ final class EventIngestor
     }
 
     /**
-     * @param  list<array{type: string}>  $events
+     * @param  list<array{type: string}>  $fresh  the events not stored yet
+     * @param  int  $sequence  the highest sequence the new events would reach: the number of events the conversation would hold
      *
      * @throws ApiProblem
      */
-    private function guard(Conversation $conversation, array $events): void
+    private function guard(Conversation $conversation, array $fresh, int $sequence): void
     {
+        if ($fresh === []) {
+            return;
+        }
+
         if ($conversation->status->isTerminal() && $conversation->ended_at?->addSeconds(self::GRACE_SECONDS)->isPast()) {
             throw new ApiProblem(ErrorCode::ConversationClosed);
         }
 
-        if ($conversation->status === ConversationStatus::Created && in_array('utterance', array_column($events, 'type'), true)) {
+        if ($sequence > self::MAX_EVENTS) {
+            throw new ApiProblem(ErrorCode::ConversationClosed, 'The conversation holds as many events as it may and accepts no more.');
+        }
+
+        if ($conversation->status === ConversationStatus::Created && in_array('utterance', array_column($fresh, 'type'), true)) {
             throw new ApiProblem(ErrorCode::InvalidState);
         }
     }

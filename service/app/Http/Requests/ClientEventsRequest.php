@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests;
 
+use App\Models\ConversationEvent;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -41,8 +43,15 @@ class ClientEventsRequest extends FormRequest
             'events.*.idempotency_key' => ['required', 'string', 'min:1', 'max:128'],
             /** What happened: an `utterance` somebody spoke, or a `lifecycle` signal of the call. */
             'events.*.type' => ['required', 'string', Rule::in(['utterance', 'lifecycle'])],
-            /** When it happened, in ISO 8601 with a time zone. */
-            'events.*.occurred_at' => ['sometimes', 'nullable', 'string', 'regex:'.self::TIMESTAMP, 'date'],
+            /** When it happened, in ISO 8601 with a time zone, in the years 1 to 9999 once converted to UTC. */
+            'events.*.occurred_at' => ['sometimes', 'bail', 'nullable', 'string', 'regex:'.self::TIMESTAMP, 'date', function (string $attribute, mixed $value, Closure $fail): void {
+                // The column and the model's date cast hold years 1 to 9999; "in UTC" because that is what is stored.
+                $year = is_string($value) ? Carbon::parse($value)->utc()->year : 1;
+
+                if ($year < 1 || $year > 9999) {
+                    $fail('The :attribute must fall in the years 1 to 9999 in UTC.');
+                }
+            }],
             /** Who spoke, for an utterance only. */
             'events.*.role' => ['required_if:events.*.type,utterance', 'prohibited_if:events.*.type,lifecycle', 'string', Rule::in(['user', 'avatar'])],
             /** What was said, 1 to 8000 characters, for an utterance only. */
@@ -113,7 +122,7 @@ class ClientEventsRequest extends FormRequest
             return 'The data must be a JSON object.';
         }
 
-        return strlen(json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) > self::MAX_DATA_BYTES
+        return strlen(json_encode($data, ConversationEvent::DATA_JSON_FLAGS)) > self::MAX_DATA_BYTES
             ? 'The data may not be larger than 2 KB when encoded.'
             : null;
     }

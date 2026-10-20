@@ -16,6 +16,10 @@ return new class extends Migration
         DB::statement('ALTER TABLE conversation_events ALTER COLUMN occurred_at TYPE timestamp(6) without time zone');
     }
 
+    /**
+     * Narrowing rounds every stored time to the second, so the order of lines within a second is lost for good. Accepted:
+     * a rollback is for a development database, and the table's data is transcripts that a rollback abandons anyway.
+     */
     public function down(): void
     {
         DB::statement('ALTER TABLE conversation_events ALTER COLUMN occurred_at TYPE timestamp(0) without time zone');

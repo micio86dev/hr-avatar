@@ -1,5 +1,7 @@
 <?php
 
+use App\AvatarProviders\Ingestion;
+use App\AvatarProviders\MalformedCallback;
 use App\Conversations\ConversationStatus;
 use App\Jobs\ProcessProviderEvent;
 use App\Models\Account;
@@ -10,6 +12,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\AvatarProviders\ScriptedProvider;
 
 beforeEach(function () {
     Queue::fake();
@@ -146,6 +149,33 @@ describe('a body that is malformed once the token is good', function () {
 
         $response->assertStatus(422);
         expect(inboundReceiptCount())->toBe(0);
+    });
+});
+
+describe('a body the adapter cannot read once the token and the envelope are good', function () {
+    it('is a 422 validation_failed that stores nothing, when the event time is not one a database can hold', function (string $timestamp) {
+        $response = postInbound('tavus', $this->token, inboundCallback(['timestamp' => $timestamp]));
+
+        $response->assertStatus(422)->assertJsonPath('code', 'validation_failed');
+        expect(inboundReceiptCount())->toBe(0);
+        Queue::assertNothingPushed();
+    })->with(['a year of eleven digits' => 'now +99999999999999999999 years', 'a year before year 1' => 'now -99999999999999999999 years']);
+
+    it('is a 422 validation_failed when the adapter says the callback is malformed, without repeating what it said', function () {
+        ScriptedProvider::register();
+        ScriptedProvider::$ingestion = Ingestion::Callback;
+        ScriptedProvider::$parse = fn () => throw new MalformedCallback('secret detail the provider sent');
+        $token = bin2hex(random_bytes(32));
+        $config = inAccount($this->account, fn () => AvatarConfig::factory()->create(['provider' => 'scripted']));
+        inAccount($this->account, fn () => Conversation::factory()->create([
+            'avatar_config_id' => $config->id, 'provider' => 'scripted', 'status' => ConversationStatus::Connecting, 'connecting_at' => now(),
+            'provider_session_ref' => 'c9f2a1c7e4b3d4a1', 'callback_token_hash' => hash('sha256', $token),
+        ]));
+
+        $response = postInbound('scripted', $token, inboundCallback());
+
+        $response->assertStatus(422)->assertJsonPath('code', 'validation_failed');
+        expect($response->getContent())->not->toContain('secret detail')->and(inboundReceiptCount())->toBe(0);
     });
 });
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\V1;
 
+use App\AvatarProviders\MalformedCallback;
 use App\AvatarProviders\ProviderRegistry;
 use App\Conversations\ProviderEventIngestor;
 use App\Http\ApiProblem;
@@ -34,7 +35,7 @@ class ProviderWebhookController
      */
     #[ResponseDoc(404, description: 'The token, the provider or the conversation id does not match (`not_found`); the answer is the same for each.', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     #[ResponseDoc(413, description: 'The body is above 256 KB (`payload_too_large`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
-    #[ResponseDoc(422, description: 'The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp` (`validation_failed`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
+    #[ResponseDoc(422, description: 'The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp`, and the provider\'s adapter must be able to read it (`validation_failed`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     #[ResponseDoc(429, description: 'More than 120 callbacks a minute from one address (`rate_limited`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     public function receive(ProviderCallbackRequest $request, ProviderRegistry $providers, ProviderEventIngestor $ingestor): array
     {
@@ -46,7 +47,14 @@ class ProviderWebhookController
             throw new ApiProblem(ErrorCode::NotFound);
         }
 
-        $ingestor->ingest($conversation, $providers->get($conversation->provider)->parseCallback($payload));
+        try {
+            $events = $providers->get($conversation->provider)->parseCallback($payload);
+        } catch (MalformedCallback) {
+            // Nothing of the adapter's message is returned: it may quote the provider's body.
+            throw new ApiProblem(ErrorCode::ValidationFailed);
+        }
+
+        $ingestor->ingest($conversation, $events);
 
         return ['received' => true];
     }

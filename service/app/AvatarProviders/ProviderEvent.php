@@ -12,6 +12,8 @@ final readonly class ProviderEvent
 {
     /**
      * @param  array<string, mixed>  $payload  what the provider sent, kept for the receipt
+     *
+     * @throws MalformedCallback when the time is out of range
      */
     public function __construct(
         public string $provider,
@@ -21,5 +23,12 @@ final readonly class ProviderEvent
         public string $idempotencyKey,
         public ?string $providerEndReason,
         public array $payload,
-    ) {}
+    ) {
+        // The receipt stores the time as a timestamp; a year outside what one can hold would fail the insert (a 500).
+        $year = (int) $occurredAt->format('Y');
+
+        if ($year < 1 || $year > 9999) {
+            throw new MalformedCallback('The event time is out of range.');
+        }
+    }
 }

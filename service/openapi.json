@@ -999,7 +999,7 @@
         "/client/conversations/{conversation}/events": {
             "post": {
                 "operationId": "client.conversations.events",
-                "description": "Stores a batch of 1 to 100 events (utterances and lifecycle signals) in order, once each: a\nkey sent before is counted in `duplicates` and not stored again, so a batch can be retried safely. One\ninvalid event rejects the whole batch (422). Events are taken while the conversation is open and for a\nminute after it ended; later ones are `conversation_closed`. An utterance before the conversation is\nconnected is `invalid_state`. A `live` signal makes a connecting conversation live.",
+                "description": "Stores a batch of 1 to 100 events (utterances and lifecycle signals) in order, once each: a\nkey sent before is counted in `duplicates` and not stored again, so a batch can be retried safely. One\ninvalid event rejects the whole batch (422). Events are taken while the conversation is open and for a\nminute after it ended; later ones are `conversation_closed`, except a batch whose events are all stored\nalready, which is answered as the replay it is. A conversation holds at most 10,000 events: a batch that\nwould pass that is `conversation_closed` as well. An utterance before the conversation is connected is\n`invalid_state`. A `live` signal makes a connecting conversation live.",
                 "summary": "Send events",
                 "tags": [
                     "Client"
@@ -1055,7 +1055,7 @@
                         "$ref": "#/components/responses/ValidationFailed"
                     },
                     "409": {
-                        "description": "The conversation closed more than a minute ago (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).",
+                        "description": "The conversation closed more than a minute ago, or holds as many events as it may (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
@@ -1290,7 +1290,7 @@
         "/conversations/{conversation}/transcript": {
             "get": {
                 "operationId": "conversations.transcript",
-                "description": "What was said in a conversation that has been connected, earliest first (by the time the browser or\nthe provider gave it, then by arrival; lines with no time come last). `status` is `pending` until the\nprovider's own transcript has been merged in, then `ready`, or `partial` when the provider's side could\nnot be had and only what the browser forwarded is here. A conversation that was never connected has no\ntranscript: 409 `invalid_state`.",
+                "description": "What was said in a conversation that has been connected, earliest first (by the time the browser or\nthe provider gave it, then by arrival; lines with no time come last). `status` is `pending` until the\nprovider's own transcript has been merged in, then `ready`, or `partial` when the provider's side could\nnot be had and only what the browser forwarded is here. A conversation that was never connected has no\ntranscript: 409 `invalid_state`. The answer is not paginated: it is bounded where events are written (a\nconversation takes at most 10,000 events from the browser, and the provider's transcript is bounded by the\nconversation's duration).",
                 "summary": "Read a transcript",
                 "tags": [
                     "Conversations"
@@ -1750,7 +1750,7 @@
                         }
                     },
                     "422": {
-                        "description": "The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp` (`validation_failed`).",
+                        "description": "The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp`, and the provider's adapter must be able to read it (`validation_failed`).",
                         "content": {
                             "application/problem+json": {
                                 "schema": {
@@ -2495,7 +2495,7 @@
                                         "null"
                                     ],
                                     "format": "date-time",
-                                    "description": "When it happened, in ISO 8601 with a time zone.",
+                                    "description": "When it happened, in ISO 8601 with a time zone, in the years 1 to 9999 once converted to UTC.",
                                     "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$"
                                 },
                                 "role": {

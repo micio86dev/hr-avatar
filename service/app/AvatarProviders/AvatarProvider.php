@@ -103,6 +103,8 @@ interface AvatarProvider
     /**
      * @param  array<string, mixed>  $payload
      * @return list<ProviderEvent> empty for an adapter whose ingestion is not Callback
+     *
+     * @throws MalformedCallback when the body is not an event the adapter can read; the caller answers 422
      */
     public function parseCallback(array $payload): array;
 }

@@ -2,6 +2,7 @@
 
 use App\Conversations\ConversationStatus;
 use App\Conversations\EndedReason;
+use App\Conversations\EventIngestor;
 use App\Keys\ClientSecret;
 use App\Keys\KeyType;
 use App\Models\Account;
@@ -235,10 +236,22 @@ describe('validating a batch', function () {
         'a time with no zone' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => '2026-10-19T12:00:00'], 'events.1.occurred_at'],
         'a time in words' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => 'tomorrow'], 'events.1.occurred_at'],
         'a time that is not a date' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => '2026-13-45T25:61:00Z'], 'events.1.occurred_at'],
+        // The column holds years 1 to 9999 in UTC: these would pass the pattern and fail the insert (a 500).
+        'year zero' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => '0000-01-01T00:00:00Z'], 'events.1.occurred_at'],
+        'a year that is 10000 in UTC' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => '9999-12-31T23:00:00-01:00'], 'events.1.occurred_at'],
+        'a year before 1 in UTC' => [['idempotency_key' => 'k', 'type' => 'utterance', 'role' => 'user', 'text' => 'Hi', 'occurred_at' => '0001-01-01T00:00:00+01:00'], 'events.1.occurred_at'],
         'data that is a list' => [['idempotency_key' => 'k', 'type' => 'lifecycle', 'name' => 'error', 'data' => [1, 2]], 'events.1.data'],
         'data that is a scalar' => [['idempotency_key' => 'k', 'type' => 'lifecycle', 'name' => 'error', 'data' => 'oops'], 'events.1.data'],
         'data above 2 KB' => [['idempotency_key' => 'k', 'type' => 'lifecycle', 'name' => 'error', 'data' => ['blob' => str_repeat('a', 2100)]], 'events.1.data'],
     ]);
+
+    it('accepts the first and the last instant the column can hold', function () {
+        $conversation = eventsConversation();
+
+        postEvents($conversation, [[...utteranceEvent('k1'), 'occurred_at' => '0001-01-01T00:00:00Z'], [...utteranceEvent('k2'), 'occurred_at' => '9999-12-31T23:59:59.999999Z']])->assertOk();
+
+        expect(storedEvents($conversation))->toHaveCount(2);
+    });
 
     it('refuses a body that is not a list of events', function (mixed $events) {
         $conversation = eventsConversation();
@@ -334,6 +347,98 @@ describe('when events are accepted', function () {
         expect($response->json())->toBe(['accepted' => 1, 'duplicates' => 0])
             ->and(eventsRefreshed($conversation)->status)->toBe(ConversationStatus::Created)
             ->and(storedEvents($conversation))->toHaveCount(1);
+    });
+});
+
+describe('a replay after the conversation closed', function () {
+    // A browser that flushed its last batch just before the minute ran out retries it: when every event of the batch is
+    // already stored there is nothing left to refuse, and the retry must be answered as the replay it is.
+    it('is answered as duplicates when every event is already stored', function () {
+        $conversation = eventsConversation(ConversationStatus::Ended, ['ended_at' => now()->subSeconds(30)]);
+        postEvents($conversation, [utteranceEvent('k1'), utteranceEvent('k2')])->assertOk();
+        $this->travel(120)->seconds();
+
+        $response = postEvents($conversation, [utteranceEvent('k1'), utteranceEvent('k2')])->assertOk();
+
+        expect($response->json())->toBe(['accepted' => 0, 'duplicates' => 2])->and(storedEvents($conversation))->toHaveCount(2);
+    });
+
+    it('is refused whole when any event of the batch is new, and stores nothing of it', function () {
+        $conversation = eventsConversation(ConversationStatus::Ended, ['ended_at' => now()->subSeconds(30)]);
+        postEvents($conversation, [utteranceEvent('k1')])->assertOk();
+        $this->travel(120)->seconds();
+
+        $response = postEvents($conversation, [utteranceEvent('k1'), utteranceEvent('k-new')])->assertStatus(409);
+
+        expect($response->json('code'))->toBe('conversation_closed')->and(storedEvents($conversation))->toHaveCount(1);
+    });
+
+    it('still refuses an utterance before the conversation is connected when it is a new one', function () {
+        $conversation = eventsConversation(ConversationStatus::Created);
+
+        $response = postEvents($conversation, [utteranceEvent('k1')])->assertStatus(409);
+
+        expect($response->json('code'))->toBe('invalid_state');
+    });
+});
+
+describe('what is stored of an event\'s data', function () {
+    // The 2 KB limit is measured on the bytes that are stored, not on a different spelling of them.
+    it('is the encoding the limit was measured on', function () {
+        $conversation = eventsConversation();
+        $bindings = [];
+        DB::listen(function ($query) use (&$bindings) {
+            if (str_starts_with($query->sql, 'insert into "conversation_events"')) {
+                $bindings = $query->bindings;
+            }
+        });
+        $data = ['t' => str_repeat('é', 700), 'u' => str_repeat('/', 300)];
+
+        postEvents($conversation, [[...lifecycleEvent('k1', 'error'), 'data' => $data]])->assertOk();
+
+        $stored = array_values(array_filter($bindings, fn ($binding) => is_string($binding) && str_starts_with($binding, '{"t":')))[0] ?? '';
+        expect(strlen($stored))->toBeLessThanOrEqual(2048)->and(strlen($stored))->toBeGreaterThan(1400)
+            ->and(json_decode($stored, true))->toBe($data)
+            ->and(storedEvents($conversation)[0]->data)->not->toBeNull();
+    });
+
+    it('refuses data that is over 2 KB in the encoding that is stored', function () {
+        $conversation = eventsConversation();
+
+        $response = postEvents($conversation, [[...lifecycleEvent('k1', 'error'), 'data' => ['t' => str_repeat('é', 1100)]]])->assertStatus(422);
+
+        expect(array_keys($response->json('errors')))->toBe(['events.0.data'])->and(storedEvents($conversation))->toBe([]);
+    });
+});
+
+describe('how many events a conversation holds', function () {
+    // The transcript endpoint returns every utterance of a conversation, so what a conversation may hold is bounded
+    // where it is written. The sequence is dense (numbered from the highest stored), so it is the count.
+    it('takes events up to the cap and refuses the one past it as the conversation being closed to events', function () {
+        $conversation = eventsConversation();
+        DB::table('conversation_events')->insert([
+            'account_id' => $this->account->id, 'conversation_id' => $conversation->id, 'sequence' => EventIngestor::MAX_EVENTS - 1, 'source' => 'client',
+            'type' => 'utterance', 'role' => 'user', 'text' => 'x', 'idempotency_key' => 'seed', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        postEvents($conversation, [utteranceEvent('last')])->assertOk()->assertJson(['accepted' => 1]);
+        $response = postEvents($conversation, [utteranceEvent('one-too-many')])->assertStatus(409);
+
+        expect($response->json('code'))->toBe('conversation_closed')->and($response->json('detail'))->toContain('as many events')
+            ->and(storedEvents($conversation))->toHaveCount(2);
+    });
+
+    it('refuses a batch that would cross the cap whole, and still answers a replay of what is stored', function () {
+        $conversation = eventsConversation();
+        DB::table('conversation_events')->insert([
+            'account_id' => $this->account->id, 'conversation_id' => $conversation->id, 'sequence' => EventIngestor::MAX_EVENTS - 1, 'source' => 'client',
+            'type' => 'utterance', 'role' => 'user', 'text' => 'x', 'idempotency_key' => 'seed', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        postEvents($conversation, [utteranceEvent('a'), utteranceEvent('b')])->assertStatus(409);
+        $replay = postEvents($conversation, [utteranceEvent('seed')])->assertOk();
+
+        expect($replay->json())->toBe(['accepted' => 0, 'duplicates' => 1])->and(storedEvents($conversation))->toHaveCount(1);
     });
 });
 

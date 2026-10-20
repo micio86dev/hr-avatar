@@ -1,12 +1,15 @@
 <?php
 
+use App\AvatarProviders\ProviderRegistry;
 use App\Conversations\ConversationStatus;
+use App\Conversations\ProviderEventIngestor;
 use App\Jobs\ProcessProviderEvent;
 use App\Models\Account;
 use App\Models\Conversation;
 use App\Models\ProviderWebhookReceipt;
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -48,4 +51,34 @@ it('treats a different event of the same conversation as a new one', function ()
     postInbound('tavus', $this->token, inboundCallback(['event_type' => 'system.pal_joined']))->assertOk();
 
     expect(ProviderWebhookReceipt::withoutGlobalScopes()->count())->toBe(3);
+});
+
+// A second copy that reaches the unique key while the first is still being stored. The suite's single connection cannot
+// run two requests at once, so the copy is delivered from inside the first one's transaction, right after its insert:
+// the same interleaving the unique key exists for.
+it('stores and queues one receipt when a second copy arrives while the first is still being stored', function () {
+    $copy = app(ProviderRegistry::class)->get('tavus')->parseCallback(inboundCallback());
+    $delivered = false;
+    DB::listen(function ($query) use (&$delivered, $copy) {
+        if (! $delivered && str_starts_with($query->sql, 'insert into "provider_webhook_receipts"')) {
+            $delivered = true;
+            expect(app(ProviderEventIngestor::class)->ingest($this->conversation, $copy))->toBe(0);
+        }
+    });
+
+    postInbound('tavus', $this->token, inboundCallback())->assertOk()->assertExactJson(['received' => true]);
+
+    expect($delivered)->toBeTrue()->and(ProviderWebhookReceipt::withoutGlobalScopes()->count())->toBe(1);
+    Queue::assertPushed(ProcessProviderEvent::class, 1);
+});
+
+it('queues the processing again when the provider repeats a callback whose first processing never ran', function () {
+    postInbound('tavus', $this->token, inboundCallback())->assertOk();
+    Queue::fake();
+    $this->travel(ProviderEventIngestor::STALE_SECONDS + 1)->seconds();
+
+    postInbound('tavus', $this->token, inboundCallback())->assertOk()->assertExactJson(['received' => true]);
+
+    expect(ProviderWebhookReceipt::withoutGlobalScopes()->count())->toBe(1);
+    Queue::assertPushed(ProcessProviderEvent::class, 1);
 });

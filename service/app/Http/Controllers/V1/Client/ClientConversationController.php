@@ -45,12 +45,14 @@ class ClientConversationController
      * Stores a batch of 1 to 100 events (utterances and lifecycle signals) in order, once each: a
      * key sent before is counted in `duplicates` and not stored again, so a batch can be retried safely. One
      * invalid event rejects the whole batch (422). Events are taken while the conversation is open and for a
-     * minute after it ended; later ones are `conversation_closed`. An utterance before the conversation is
-     * connected is `invalid_state`. A `live` signal makes a connecting conversation live.
+     * minute after it ended; later ones are `conversation_closed`, except a batch whose events are all stored
+     * already, which is answered as the replay it is. A conversation holds at most 10,000 events: a batch that
+     * would pass that is `conversation_closed` as well. An utterance before the conversation is connected is
+     * `invalid_state`. A `live` signal makes a connecting conversation live.
      *
      * @return array{accepted: int, duplicates: int}
      */
-    #[ResponseDoc(409, description: 'The conversation closed more than a minute ago (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
+    #[ResponseDoc(409, description: 'The conversation closed more than a minute ago, or holds as many events as it may (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     public function events(ClientEventsRequest $request, Conversation $conversation, EventIngestor $ingestor): array
     {
         return $ingestor->ingest($conversation, $request->events());

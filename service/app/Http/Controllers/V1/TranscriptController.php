@@ -25,7 +25,9 @@ class TranscriptController
      * the provider gave it, then by arrival; lines with no time come last). `status` is `pending` until the
      * provider's own transcript has been merged in, then `ready`, or `partial` when the provider's side could
      * not be had and only what the browser forwarded is here. A conversation that was never connected has no
-     * transcript: 409 `invalid_state`.
+     * transcript: 409 `invalid_state`. The answer is not paginated: it is bounded where events are written (a
+     * conversation takes at most 10,000 events from the browser, and the provider's transcript is bounded by the
+     * conversation's duration).
      */
     #[ResponseDoc(409, description: 'The conversation was never connected (`invalid_state`).', mediaType: Problem::CONTENT_TYPE, type: Problem::SHAPE)]
     public function show(Conversation $conversation): TranscriptResource

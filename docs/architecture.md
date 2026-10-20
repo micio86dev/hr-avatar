@@ -139,7 +139,7 @@ sequenceDiagram
 ```
 
 - **Browser events** are stored once each (the browser's `idempotency_key`), in order, with a server-assigned
-  sequence. They are accepted while the conversation is open and for a minute after it ended.
+  sequence. They are accepted while the conversation is open and for a minute after it ended (a batch that was stored already is still answered as a replay), and a conversation holds at most 10,000 of them.
 - **Provider events** are stored first, as receipts, deduplicated on `(account, provider, idempotency key)`, and
   processed afterwards on the queue: an event is applied once however often it arrives.
 - **The transcript is a merge, never a replacement.** The browser's lines are kept; the provider's lines are added

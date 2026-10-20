@@ -5,6 +5,7 @@ namespace Tests\Support\AvatarProviders;
 use App\AvatarProviders\ConversationSpec;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderEvent;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
 use App\AvatarProviders\TranscriptLine;
@@ -36,6 +37,9 @@ final class ScriptedProvider extends StubProvider
 
     public static Ingestion $ingestion = Ingestion::None;
 
+    /** @var (Closure(array<string, mixed>): list<ProviderEvent>)|null what `parseCallback` answers; null reads nothing */
+    public static ?Closure $parse = null;
+
     /** The last spec a start was given. */
     public static ?ConversationSpec $lastSpec = null;
 
@@ -47,6 +51,7 @@ final class ScriptedProvider extends StubProvider
         self::$sessions = [];
         self::$calls = [];
         self::$ingestion = Ingestion::None;
+        self::$parse = null;
         self::$lastSpec = null;
         config()->set("hr-avatar.providers.{$id}", ['adapter' => self::class, 'credential' => false, ...($eventKeyPrefix === null ? [] : ['event_key_prefix' => $eventKeyPrefix])]);
     }
@@ -88,5 +93,10 @@ final class ScriptedProvider extends StubProvider
         $next = array_shift(self::$sessions) ?? new SessionStatus(false, null);
 
         return $next instanceof Closure ? $next($sessionRef, $auth) : $next;
+    }
+
+    public function parseCallback(array $payload): array
+    {
+        return self::$parse === null ? [] : (self::$parse)($payload);
     }
 }

@@ -31,6 +31,12 @@ class ConversationEvent extends Model
     /** @use HasFactory<ConversationEventFactory> */
     use BelongsToAccount, HasFactory;
 
+    /**
+     * How an event's `data` is encoded: for the 2 KB limit that the request measures and for the column it is stored in,
+     * the same bytes either way. (The column is jsonb, which reads the same whichever spelling it is given.)
+     */
+    public const DATA_JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR;
+
     /** Nothing is mass-assignable: the service sets the conversation, the arrival order and the source itself, member by member. */
     protected $guarded = ['*'];
 
