@@ -3,6 +3,7 @@
 namespace App\AvatarProviders;
 
 use DateTimeImmutable;
+use DateTimeZone;
 
 /**
  * Something that happened in a provider session, normalized: a callback and a polled observation
@@ -24,8 +25,9 @@ final readonly class ProviderEvent
         public ?string $providerEndReason,
         public array $payload,
     ) {
-        // The receipt stores the time as a timestamp; a year outside what one can hold would fail the insert (a 500).
-        $year = (int) $occurredAt->format('Y');
+        // The receipt stores the time as a timestamp, in UTC; a year outside what one can hold would fail the insert
+        // (a 500). The year is judged in UTC, whatever offset the provider wrote the time in.
+        $year = (int) $occurredAt->setTimezone(new DateTimeZone('UTC'))->format('Y');
 
         if ($year < 1 || $year > 9999) {
             throw new MalformedCallback('The event time is out of range.');

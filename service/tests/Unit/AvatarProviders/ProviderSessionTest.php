@@ -3,6 +3,7 @@
 use App\AvatarProviders\ConversationSpec;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\MalformedCallback;
 use App\AvatarProviders\ProviderEvent;
 use App\AvatarProviders\ProviderEventKind;
 use App\AvatarProviders\ProviderSession;
@@ -140,6 +141,17 @@ describe('ProviderEvent and Ingestion', function () {
             ->and($event->providerEndReason)->toBe('shutdown')
             ->and($event->payload)->toBe(['a' => 1]);
     });
+
+    it('judges the year of the event time in UTC, where it is stored', function (string $time, bool $accepted) {
+        $make = fn () => new ProviderEvent('tavus', 'c123', ProviderEventKind::Ended, new DateTimeImmutable($time), 'key-1', null, []);
+
+        $accepted ? expect($make())->toBeInstanceOf(ProviderEvent::class) : expect($make)->toThrow(MalformedCallback::class);
+    })->with([
+        'year 9999 locally, 10000 in UTC' => ['9999-12-31T23:30:00-02:00', false],
+        'year 1 locally, year 0 in UTC' => ['0001-01-01T00:30:00+02:00', false],
+        'the last half hour of 9999 in UTC' => ['9999-12-31T23:30:00+00:00', true],
+        'year 0 locally, year 1 in UTC' => ['0000-12-31T23:30:00-02:00', true],
+    ]);
 
     it('knows the four kinds of event and the three ways events arrive', function () {
         expect(array_map(fn (ProviderEventKind $kind) => $kind->value, ProviderEventKind::cases()))->toBe(['joined', 'ended', 'transcript_ready', 'ignored'])
