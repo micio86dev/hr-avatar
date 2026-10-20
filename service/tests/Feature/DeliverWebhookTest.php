@@ -402,7 +402,7 @@ describe('the destination at delivery time', function () {
         Queue::assertPushed(DeliverWebhook::class, fn (DeliverWebhook $job) => $job->delay === 10);
     });
 
-    it('sends nothing and asks the guard once for a name that resolved to nothing, leaving no second resolution to the client', function () {
+    it('sends no request and consults the guard once for a name that resolved to nothing', function () {
         $delivery = pendingDelivery();
         $lookups = 0;
         app()->instance(OutboundHostGuard::class, new OutboundHostGuard(true, function () use (&$lookups): array {
