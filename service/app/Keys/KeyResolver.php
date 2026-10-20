@@ -55,12 +55,12 @@ final class KeyResolver
 
         // The hash is unique and indexed, so at most one row is read however many keys share the prefix; the
         // prefix keeps the lookup on the narrow index, and hash_equals stays the judge of the match.
-        $candidate = ApiKey::withoutGlobalScope(AccountScope::class)
+        $match = ApiKey::withoutGlobalScope(AccountScope::class)
             ->where('key_prefix', KeyGenerator::prefixOf($rawKey))
             ->where('key_hash', $hash)
             ->first();
 
-        return $candidate !== null && hash_equals($candidate->key_hash, $hash) ? $candidate : null;
+        return $match !== null && hash_equals($match->key_hash, $hash) ? $match : null;
     }
 
     private function touch(ApiKey $key): void
