@@ -122,7 +122,7 @@ it('recognises the capacity message in the places Tavus puts it, in any case', f
     'data.message' => [['data' => ['message' => 'Maximum concurrent conversations reached']], true],
     'embedded in a longer text' => [['message' => 'Bad request: you hit the maximum concurrent conversations for your plan.'], true],
     'another message' => [['message' => 'invalid field'], false],
-    'a body that is not JSON' => [[], false],
+    'an empty JSON body' => [[], false],
 ]);
 
 it('never lets the response body or the key out of the exception it raises', function () {

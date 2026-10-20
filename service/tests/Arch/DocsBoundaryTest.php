@@ -35,18 +35,31 @@ function documents(): array
 }
 
 /**
+ * A scratch directory of the test's own, so a probe document never sits in the repository's docs/ where another
+ * test (or another process of a parallel run) could glob it.
+ */
+function probeDirectory(): string
+{
+    $directory = sys_get_temp_dir().'/docs-probe-'.bin2hex(random_bytes(6));
+    mkdir($directory);
+
+    return $directory;
+}
+
+/**
  * Runs the vocabulary scanner over the documents. The scanner reads directories, so the documents are copied
  * into one for the scan; a finding names the document, not the copy.
  *
+ * @param  array<string, string>|null  $documents  path => name; the repository's documents when null
  * @return list<string>
  */
-function documentFindings(): array
+function documentFindings(?array $documents = null): array
 {
     $staging = sys_get_temp_dir().'/docs-scan-'.bin2hex(random_bytes(6));
     mkdir($staging);
     $names = [];
 
-    foreach (documents() as $path => $name) {
+    foreach ($documents ?? documents() as $path => $name) {
         $copy = str_replace('/', '__', $name);
         copy($path, "{$staging}/{$copy}");
         $names[$copy] = $name;
@@ -141,13 +154,15 @@ it('is boundary-clean: no host-product vocabulary in any document', function () 
 });
 
 it('finds host-product vocabulary in a document, and names the document', function () {
-    $path = repositoryRoot().'/docs/zz-scan-probe.md';
+    $directory = probeDirectory();
+    $path = "{$directory}/zz-scan-probe.md";
     file_put_contents($path, "# Probe\n\nThe candidate record.\n");
 
     try {
-        $findings = documentFindings();
+        $findings = documentFindings([$path => 'docs/zz-scan-probe.md']);
     } finally {
         unlink($path);
+        rmdir($directory);
     }
 
     expect($findings)->toBe(['docs/zz-scan-probe.md:3 contains "candidate"']);
@@ -375,13 +390,18 @@ it('links only to files and headings that exist', function () {
 });
 
 it('finds a link to a missing file or heading, and passes a good one', function () {
-    $path = repositoryRoot().'/docs/zz-link-probe.md';
+    $directory = probeDirectory();
+    $path = "{$directory}/zz-link-probe.md";
+    // The good link points at a real document, copied next to the probe so the relative path resolves there.
+    copy(repositoryRoot().'/docs/railway.md', "{$directory}/railway.md");
     file_put_contents($path, "# Probe\n\n[gone](./nope.md) and [bad anchor](./railway.md#no-such-heading) and [ok](./railway.md#topology) and [self](#probe) and [web](https://example.com)\n");
 
     try {
         $broken = brokenLinks([$path => 'docs/zz-link-probe.md']);
     } finally {
         unlink($path);
+        unlink("{$directory}/railway.md");
+        rmdir($directory);
     }
 
     expect($broken)->toBe(['docs/zz-link-probe.md: ./nope.md (no such file)', 'docs/zz-link-probe.md: ./railway.md#no-such-heading (no such heading)']);

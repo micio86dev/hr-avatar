@@ -104,3 +104,36 @@ describe('through the real HTTP kernel with a body that can be read only once', 
         'no Content-Length, read in 7-byte chunks (chunked)' => [false, 7],
     ]);
 });
+
+// Review rv28: the body is handed back by rebuilding the request, so what a middleware before this one set on the request
+// has to come out the other side. The seven input bags and the headers are copied; the rest is the request's own state.
+describe('what was set on the request before the middleware', function () {
+    it('is still there afterwards: the attributes, the headers, the request format, the method and the resolvers', function () {
+        $request = Request::create('/v1/webhooks/providers/tavus/x', 'POST', ['q' => '1'], ['c' => '2'], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_REQUEST_ID' => 'req-1'], '{"a":1}');
+        $request->attributes->set('request_id', 'req-1');
+        $request->headers->set('X-Added', 'later');
+        $request->setRequestFormat('xml');
+        $request->setMethod('PUT');
+        $request->setUserResolver(fn () => 'the-user');
+        $request->setRouteResolver(fn () => 'the-route');
+
+        $seen = null;
+        (new LimitWebhookBody)->handle($request, function (Request $request) use (&$seen) {
+            $seen = $request;
+
+            return response('');
+        });
+
+        expect($seen)->toBe($request)
+            ->and($request->attributes->get('request_id'))->toBe('req-1')
+            ->and($request->headers->get('X-Added'))->toBe('later')
+            ->and($request->headers->get('X-Request-Id'))->toBe('req-1')
+            ->and($request->getRequestFormat())->toBe('xml')
+            ->and($request->getMethod())->toBe('PUT')
+            ->and($request->user())->toBe('the-user')
+            ->and($request->route())->toBe('the-route')
+            ->and($request->request->get('q'))->toBe('1')
+            ->and($request->cookies->get('c'))->toBe('2')
+            ->and($request->getContent())->toBe('{"a":1}');
+    });
+});

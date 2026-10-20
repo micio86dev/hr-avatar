@@ -118,7 +118,7 @@ describe('POST /v1/avatar-configs', function () {
             ->and($response->getContent())->not->toContain('sk-123');
     });
 
-    it('accepts an empty config for Mock whether it is omitted, an object or a list', function (array $body) {
+    it('accepts an empty config for Mock whether it is omitted or empty', function (array $body) {
         avcCall('post', '/v1/avatar-configs', ['name' => 'M', 'provider' => 'mock', ...$body])->assertCreated();
     })->with([
         'omitted' => [[]],

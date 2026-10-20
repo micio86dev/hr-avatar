@@ -53,7 +53,10 @@ describe('JoinMaterial', function () {
     });
 
     it('matches the members of the SDK\'s JoinMaterial type', function () {
-        $sdk = (string) file_get_contents(dirname(base_path()).'/sdk/src/api.ts');
+        // A cross-check between the two packages of this repository: it needs the whole checkout, not `service/` alone.
+        $path = dirname(base_path()).'/sdk/src/api.ts';
+        expect(is_file($path))->toBeTrue("The SDK source {$path} is missing: this test compares the service with the sdk/ package of the same checkout.");
+        $sdk = (string) file_get_contents($path);
         preg_match('/export interface JoinMaterial \{(.*?)\n\}/s', $sdk, $block);
         preg_match_all('/^\s*(\w+)\??:/m', $block[1] ?? '', $members);
 

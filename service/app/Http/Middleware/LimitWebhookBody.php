@@ -40,9 +40,16 @@ class LimitWebhookBody
 
         // Reading drained the stream, and whether the request can read it a second time is up to how it was built.
         // What was read is handed back, so everything after this sees the same body whatever the request's input is.
+        // `initialize()` resets what the request had worked out for itself; the format is the one such value a setter can
+        // have chosen (the method is kept in the server bag, the resolvers and the locale are not touched).
         $headers = $request->headers->all();
+        $format = $request->getRequestFormat(null);
         $request->initialize($request->query->all(), $request->request->all(), $request->attributes->all(), $request->cookies->all(), $request->files->all(), $request->server->all(), $body);
         $request->headers->replace($headers);
+
+        if ($format !== null) {
+            $request->setRequestFormat($format);
+        }
 
         return $next($request);
     }

@@ -3,6 +3,7 @@
 use App\AvatarProviders\ConversationSpec;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\Mock\MockProvider;
+use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\TranscriptLine;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
@@ -108,4 +109,25 @@ it('answers an empty transcript without an opening text, and for a session it ne
 it('takes no callback and needs no ingestion', function () {
     expect($this->mock->ingestion())->toBe(Ingestion::None)
         ->and($this->mock->parseCallback(['event_type' => 'system.shutdown']))->toBe([]);
+});
+
+// Review rv10 R3-001: the contract says a failed start is a ProviderException and a teardown never throws; the Mock keeps
+// its state in the cache, so a cache that is down must not leak a raw exception through either.
+describe('with a cache that is down', function () {
+    beforeEach(function () {
+        Cache::shouldReceive('put')->andThrow(new RuntimeException('redis is down: SECRET-HOST'));
+    });
+
+    it('fails a start as a ProviderException that carries nothing of the cause', function () {
+        try {
+            startMock();
+            $this->fail('Expected a ProviderException');
+        } catch (ProviderException $e) {
+            expect($e->getMessage())->toBe('Provider request failed (no response)')->not->toContain('SECRET-HOST');
+        }
+    });
+
+    it('answers a teardown that did not succeed, instead of throwing', function () {
+        expect($this->mock->teardown('mock_conv_abc', null, $this->auth))->toBeFalse();
+    });
 });

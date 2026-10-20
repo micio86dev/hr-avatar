@@ -8,6 +8,7 @@ use App\AvatarProviders\FieldSpecValidator;
 use App\AvatarProviders\Ingestion;
 use App\AvatarProviders\JoinMaterial;
 use App\AvatarProviders\ProviderDescription;
+use App\AvatarProviders\ProviderException;
 use App\AvatarProviders\ProviderSession;
 use App\AvatarProviders\SessionStatus;
 use App\AvatarProviders\SyncResult;
@@ -16,6 +17,7 @@ use App\AvatarProviders\VoiceBinding;
 use App\Credentials\ProviderAuth;
 use App\Models\AvatarConfig;
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
  * A deterministic adapter with no network I/O, selected only by an avatar config whose provider is
@@ -67,7 +69,12 @@ final class MockProvider implements AvatarProvider
     {
         $ref = "mock_{$conversationId}";
 
-        Cache::put("hra:mock:opening:{$ref}", $spec->openingText ?? '', self::STATE_TTL_SECONDS);
+        try {
+            Cache::put("hra:mock:opening:{$ref}", $spec->openingText ?? '', self::STATE_TTL_SECONDS);
+        } catch (Throwable) {
+            // The state lives in the cache; a cache that is down is a provider that could not start, nothing more is said.
+            throw ProviderException::noResponse();
+        }
 
         return new ProviderSession($ref, null, new JoinMaterial(
             provider: 'mock',
@@ -80,7 +87,12 @@ final class MockProvider implements AvatarProvider
 
     public function teardown(string $sessionRef, ?string $contextRef, ProviderAuth $auth): bool
     {
-        Cache::put("hra:mock:ended:{$sessionRef}", true, self::STATE_TTL_SECONDS);
+        try {
+            Cache::put("hra:mock:ended:{$sessionRef}", true, self::STATE_TTL_SECONDS);
+        } catch (Throwable) {
+            // The contract: a teardown reports that it did not succeed, it does not throw.
+            return false;
+        }
 
         return true;
     }

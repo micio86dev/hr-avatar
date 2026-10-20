@@ -57,7 +57,7 @@ describe('the worker and the scheduler', function () {
     })->with(['railway.worker.json', 'railway.scheduler.json']);
 });
 
-it('runs the scheduler as a single copy and does not schedule the services by cron', function (string $file) {
+it('sets no cron schedule and no multi-region config on any of the three services', function (string $file) {
     expect(railwayFile($file)['deploy'])->not->toHaveKey('cronSchedule')->not->toHaveKey('multiRegionConfig');
 })->with(['railway.json', 'railway.worker.json', 'railway.scheduler.json']);
 
