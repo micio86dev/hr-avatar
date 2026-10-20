@@ -1516,3 +1516,54 @@ Open decisions for the owner:
 4. **Railway healthcheck** is liveness; confirm that readiness should not gate a rollout.
 5. **Retention** (unchanged): no purge; owner decision pending, recorded in the README.
 6. Slices 30, 31 and 40 exceed the 400-line budget: recommend `size:exception`.
+
+## Security fix unit (post-review of slices 3-30)
+
+Branch `feature/extract-avatar-service`, base `9f662dd`, no push. Mode: Strict TDD. Rulings 57-67 in `reconciliation.md`; tasks SF-1 to SF-12 in `tasks.md`.
+
+### TDD cycle evidence
+
+| Item | RED observed (before the change) | GREEN | Commit |
+|---|---|---|---|
+| SF-1 guard, IPv6 spellings | 8 of the new cases failed: translated and compatible forms (5), 6to4 (1), local-use NAT64 (1), a mapped public address (over-blocked) (1). The mapped-private rows already passed (finding not reproducible at HEAD; PHP's reserved-range filter) | normalisation step | `2bbf676` |
+| SF-2 delivery fail closed | 2 failed: no request may be sent for an enforced host with no vetted address (and a second lookup must not happen) | `DeliverWebhook::send` | `d9e92d8` |
+| SF-3 relay of deliveries | 14 of 14 failed (command did not exist); the two end-to-end loss tests added after | `RelayLostJobs` | `7251fe2` |
+| SF-4 receipts | 2 failed: a redelivered stored receipt was not queued after the lease (single and per-lease) | `ProviderEventIngestor::requeue`, `requeueStored` | `7251fe2` |
+| SF-5 connect | 3 failed: conversation left `connecting` (callback target, keeping references, teardown failure); unknown provider already left `created` | `ConnectConversation` | `81d3146` |
+| SF-6 limits, scopes, origin | 17 failed: limits accepted 0/negative/below-minimum and in `testing` (13), unknown scope 500 (3 incl. rotation), Origin refusal not counted (1) | `AppServiceProvider::guardIntegerSettings`, `Scope::grantsNamed`, `AuthenticateSecretKey` | `0bd6340` |
+| SF-7 keys | 5 failed: successor expiry (2), `iat` from the wall clock (1), prefix bucket loaded (4 rows instead of 1) (1), plus one harness error fixed in the test; interleaved-rotation, tie-break, CORS-scope and live/test tests passed at HEAD | `ApiKeyController`, `ClientSecret`, `KeyResolver` | `762a582` |
+| SF-8 credentials | race tests were first written wrong (the competing insert inside the savepoint was rolled back with it) and failed with 500; rewritten with the insert between the read and the insert, they passed: the framework already handles it. `captureLogs`, resolver and ciphertext tests added | tests only (+ helper) | `60fdbea` |
+| SF-9 endpoints | 1 failed: unknown stored event name 500 on show, list and update; delete-stops-retries passed at HEAD (FK cascade) | `WebhookEndpointResource` | `3afea49` |
+| SF-10 release | none failed: the single release after the references are kept already held | test only | `66216a9` |
+| SF-11 ingestion | 9 failed: replay after grace 409; stored encoding 4,200 bytes for a 2 KB check; chunked body read 1 MiB for a 256 KiB cap; unreadable time 500 (1); malformed adapter error class missing (1); two cap tests undefined constant; client time year < 1 and year 10000 UTC (2, found by the review gate) | `EventIngestor`, `LimitWebhookBody`, `ProviderEvent`, `ProviderWebhookController`, `ClientEventsRequest` | `6b735d3` |
+
+REFACTOR: the redundant checks, the named helpers and the docblock corrections of the findings (rulings 57, 65). No assertion was weakened; the existing assertions that were changed or removed are listed in the rulings (57: two live-DNS assertions removed; 58: two `DeliverWebhookTest` assertions reversed; 62: the Origin-refusal test reversed; 64: a probabilistic assertion removed).
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test command | each item's `--filter` run; last: `cd service && DB_PORT=55442 php artisan test --filter='ClientEventsTest\|OpenApi'`: 96 passed, exit 0 |
+| Runtime harness | N/A for a live provider (no live call by rule). The loss and race scenarios run through the real command, queue fake, HTTP kernel and PostgreSQL, with the competing writes interleaved at the SQL level (`DB::listen`) because `RefreshDatabase` gives a single connection |
+| Full suite | `DB_PORT=55442 php artisan test --parallel --processes=4`: 2781 passed, 8720 assertions, exit 0 (baseline at `9f662dd`: 2666) |
+| Coverage | `php -d memory_limit=4G artisan test --coverage --min=90`: exit 0, total 100.0 %; `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95`: exit 0, total 100.0 % |
+| Static analysis and style | `vendor/bin/pint --test` exit 0; `vendor/bin/phpstan analyse --memory-limit=1G` (level 8) 0 errors |
+| OpenAPI | `php artisan scramble:export --path=openapi.json` then `git diff --exit-code service/openapi.json`: exit 0 (regenerated in the commits that changed documentation); `cd tools/spectral && bun run lint`: exit 0, nothing at `warn` or higher |
+| SDK | not touched |
+| Rollback boundary | per commit: the 12 commits listed in the final report revert independently in reverse order; the relay is `RelayLostJobs`, its schedule line and `ProviderEventIngestor::requeue`; the only persistent change is none (no migration; a comment in an existing one) |
+
+### Disposition of the findings
+
+(`hXXXXXXX` is the reviewed commit; the ids are the review's.)
+
+**Fixed, failing test first:** `h8d7d203` R1-001 (explicit IPv6 normalisation), R3-002, R3-003; `h863d32d` R4-003 (fail closed), R4-001 and R4-002 (relay); slice 29 `b33c6ce` R4-001 (receipts re-queued); `386b7a4` connect tail; `hb3abddd` R3-001 and R4-003 (boot validation), R3-003 (unknown scope), R4-001 (Origin refusal counted); `h450eb50` R3-001 (successor expiry); `hbac90c4` R3-002 (`iat`); `h83fe7cc` R3-002 and R3-003 (key lookup by hash); `h8d7d203` R3-004 and R4-003 (unknown event name); `83bdda7` R3-001 and R3-002; `e5db7e5` grace replay, size boundary, unbounded transcript; `h86eff30` R3-002 (release delay bound); plus one defect the review gate found (browser event time outside the years 1 to 9999).
+**Fixed as documentation or readability, with a check where one is possible:** `h8d7d203` R2-001, R2-004, R2-005, R2-006, R2-007, R2-008; `hb3abddd` R2-middleware-priority-comment (comment plus an order test), R3-002 and R4-002 (shared-address caveat in the docs); `e5db7e5` R3-migration-lock.
+**Already correct at HEAD, now proved by a test (or a flaky test made deterministic):** `h8d7d203` R4-004 (FK cascade) and R3-006 (live-DNS assertions removed); `hd8c577a` R3-001 (the framework's `createOrFirst`), R3-002 (`captureLogs`), R3-003 (resolver throws), R3-004 (probabilistic assertion removed); `h86eff30` R3-001 (single release); `h450eb50` R3-002 (interleaved rotation) and R3-003 (explicit ids); `h83fe7cc` R3-006 (live/test parity); `hbac90c4` R3-001 (CORS only on client routes); `83bdda7` R3-003 (second copy during the first insert); `hb3abddd` R3-004 (not reproducible: PHPUnit `<env>` does not override the process); `386b7a4` unknown provider leaves the conversation `created`.
+**Accepted, with a ruling:** `h83fe7cc` R3-001, R3-004, R3-005; `hb3abddd` R1-001, R2-failed-auth-duplicate-check, R2-magic-numbers-config, R3-005; `h8d7d203` R2-002, R2-003, R3-001 and R4-001 (DNS in the request), R3-005 (no parallel connection under `RefreshDatabase`), R3-007, R4-002 (create idempotency); `e5db7e5` R3-lock-test-coupling.
+
+### Open items for the owner
+
+1. The destination check at create time still resolves DNS in the request (ruling 65); a short resolver timeout is the lever.
+2. Webhook endpoint creation is not idempotent (ruling 65, README).
+3. The relay re-queues a receipt for 24 hours at most (ruling 60) and a delivery for as long as it is `pending` (its own six attempts end it); confirm both are the wanted policy.
+4. A conversation takes at most 10,000 events (ruling 67); confirm the number.
