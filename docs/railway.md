@@ -57,8 +57,11 @@ with the databases.
 | `LOG_CHANNEL` | required | all | `stderr`, so Railway collects the logs. |
 | `DB_CONNECTION` | required | all | `pgsql`. |
 | `DB_URL` | required | all | `${{Postgres.DATABASE_URL}}`. The connection string of the PostgreSQL service. |
+| `DB_SSLMODE` | optional | all | The PostgreSQL TLS mode. Default `require` when `APP_ENV` is anything but `local` or `testing` (so production encrypts the link without being told to), `prefer` on a developer's machine. Use `verify-full` with `DB_SSLROOTCERT` to also check the server's certificate. If the database offers no TLS the service cannot connect: that is deliberate, set `prefer` only knowingly. |
+| `DB_CONNECT_TIMEOUT` | optional | all | Seconds to wait for a PostgreSQL connection. Default 5. |
 | `REDIS_CLIENT` | required | all | `phpredis`. |
 | `REDIS_URL` | required | all | `${{Redis.REDIS_URL}}`. The connection string of the Redis service. |
+| `REDIS_TIMEOUT` | optional | all | Seconds to connect to Redis. Default 2. With `REDIS_READ_TIMEOUT` (seconds to wait for an answer, default 5) it makes an unreachable Redis fail the readiness check and a request in seconds. |
 | `CACHE_STORE` | required | all | `redis`. |
 | `QUEUE_CONNECTION` | required | all | `redis`. |
 | `HRA_JWT_SECRET` | required | all | At least 32 random bytes (`php -r 'echo bin2hex(random_bytes(32));'`). Signs the per-conversation client secret. A shorter value stops the process at boot. |

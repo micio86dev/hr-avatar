@@ -43,7 +43,13 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Encrypted unless the application runs on a developer's machine or under test; the compose database has no TLS.
+            // Set DB_SSLMODE (verify-full with DB_SSLROOTCERT is the strict choice) to override.
+            'sslmode' => env('DB_SSLMODE', in_array(env('APP_ENV', 'production'), ['local', 'testing'], true) ? 'prefer' : 'require'),
+            'sslrootcert' => env('DB_SSLROOTCERT'),
+            // Seconds to wait for a connection (PDO maps it to the PostgreSQL connect timeout), so an unreachable
+            // database fails the readiness check and a request in seconds, not after the operating system's minute.
+            'options' => [PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 5)],
         ],
 
     ],
@@ -92,6 +98,10 @@ return [
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_DB', '0'),
+            // Seconds to connect and to wait for an answer: an unreachable Redis fails fast (phpredis waits for the
+            // operating system's default otherwise). No command here blocks (the queue does not use block_for).
+            'timeout' => (float) env('REDIS_TIMEOUT', 2.0),
+            'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 5.0),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),
@@ -105,6 +115,10 @@ return [
             'password' => env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_CACHE_DB', '1'),
+            // Seconds to connect and to wait for an answer: an unreachable Redis fails fast (phpredis waits for the
+            // operating system's default otherwise). No command here blocks (the queue does not use block_for).
+            'timeout' => (float) env('REDIS_TIMEOUT', 2.0),
+            'read_timeout' => (float) env('REDIS_READ_TIMEOUT', 5.0),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
             'backoff_algorithm' => env('REDIS_BACKOFF_ALGORITHM', 'decorrelated_jitter'),
             'backoff_base' => env('REDIS_BACKOFF_BASE', 100),

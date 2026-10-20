@@ -1,7 +1,9 @@
 # Local development stack: PostgreSQL, Redis and the api, worker and scheduler services.
 # One image serves all three application services; build it with `docker compose build api`.
 # Host ports are overridable (HRA_DB_PORT, HRA_REDIS_PORT, HRA_API_PORT) when the defaults are taken.
-# Secrets come from the environment or from service/.env, never from this file.
+# Secrets come from the environment or from service/.env. The one literal in this file is the local-development
+# database password default (`postgres`, HRA_DB_PASSWORD): the published ports are bound to 127.0.0.1, and this
+# file is never a deployment (Railway is configured by the railway*.json files). Set HRA_DB_PASSWORD on a shared host.
 
 x-app: &app
   image: hra-service:local
@@ -17,6 +19,7 @@ x-app: &app
     DB_DATABASE: hra
     DB_USERNAME: postgres
     DB_PASSWORD: ${HRA_DB_PASSWORD:-postgres}
+    DB_SSLMODE: ${DB_SSLMODE:-prefer}
     REDIS_CLIENT: phpredis
     REDIS_HOST: redis
     REDIS_PORT: 6379
