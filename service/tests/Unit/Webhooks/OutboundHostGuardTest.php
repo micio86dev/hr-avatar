@@ -72,6 +72,44 @@ describe('literal addresses', function () {
     })->with(['decimal' => '2130706433', 'hex' => '0x7f000001', 'dotted hex' => '0x7f.0.0.1', 'octal' => '0177.0.0.1', 'short' => '127.1', 'mixed' => '10.1']);
 });
 
+describe('addresses that embed an IPv4 one', function () {
+    // Every IPv4 block must apply to an IPv6 spelling of the same address, in dotted and in hexadecimal form.
+    it('blocks an IPv4-mapped address of every blocked IPv4 range, dotted or hexadecimal', function (string $ip) {
+        expect(guardWithNoDns()->isBlocked("https://[{$ip}]/hook"))->toBeTrue()
+            ->and(guardResolving([$ip])->isBlocked('https://hooks.example.com/hook'))->toBeTrue();
+    })->with([
+        'shared address space' => '::ffff:100.64.0.1', 'shared address space (hex)' => '::ffff:6440:1', 'shared metadata address' => '::ffff:100.100.100.200',
+        'benchmarking' => '::ffff:198.18.0.1', 'benchmarking (hex)' => '::ffff:c612:1', 'protocol assignments' => '::ffff:192.0.0.8', 'protocol assignments (hex)' => '::ffff:c000:8',
+        'multicast' => '::ffff:224.0.0.1', 'multicast (hex)' => '::ffff:e000:1', 'reserved' => '::ffff:240.0.0.1', 'broadcast' => '::ffff:255.255.255.255',
+        'this network' => '::ffff:0.1.2.3', 'loopback (hex)' => '::ffff:7f00:1', 'private (hex)' => '::ffff:a00:1', 'link-local (hex)' => '::ffff:a9fe:a9fe',
+        'long form' => '0:0:0:0:0:ffff:6440:1', 'padded' => '0000:0000:0000:0000:0000:ffff:c612:0001',
+    ]);
+
+    it('blocks the IPv4-translated and the IPv4-compatible forms of a blocked address', function (string $ip) {
+        expect(guardWithNoDns()->isBlocked("https://[{$ip}]/hook"))->toBeTrue();
+    })->with(['translated private' => '::ffff:0:a00:1', 'translated shared' => '::ffff:0:6440:1', 'compatible private' => '::a00:1', 'compatible shared' => '::6440:1', 'compatible loopback' => '::7f00:1']);
+
+    it('blocks a 6to4 address that embeds a blocked IPv4 address, and allows one that embeds a public address', function () {
+        expect(guardWithNoDns()->isBlocked('https://[2002:a00:1::1]/hook'))->toBeTrue()
+            ->and(guardWithNoDns()->isBlocked('https://[2002:6440:1::1]/hook'))->toBeTrue()
+            ->and(guardWithNoDns()->isBlocked('https://[2002:7f00:1::]/hook'))->toBeTrue()
+            ->and(guardWithNoDns()->isBlocked('https://[2002:808:808::1]/hook'))->toBeFalse();
+    });
+
+    it('blocks the whole NAT64 range, the local-use one included', function (string $ip) {
+        expect(guardWithNoDns()->isBlocked("https://[{$ip}]/hook"))->toBeTrue();
+    })->with(['well-known, private' => '64:ff9b::a00:1', 'well-known, public' => '64:ff9b::808:808', 'local-use' => '64:ff9b:1::a00:1']);
+
+    it('allows an IPv4-mapped address of a public IPv4 address', function () {
+        expect(guardWithNoDns()->isBlocked('https://[::ffff:8.8.8.8]/hook'))->toBeFalse()
+            ->and(guardWithNoDns()->isBlocked('https://[::ffff:808:808]/hook'))->toBeFalse();
+    });
+
+    it('blocks a host that looks like an IPv6 literal but is not one, such as a zone identifier', function (string $host) {
+        expect(guardWithNoDns()->isBlocked("https://{$host}/hook"))->toBeTrue();
+    })->with(['zone id' => '[fe80::1%25eth0]', 'bare zone id' => '[fe80::1%eth0]', 'unclosed bracket' => '[::1', 'garbage with a colon' => '[not:an:address]']);
+});
+
 describe('the URL itself', function () {
     it('blocks what is not a https URL with a host', function (string $url) {
         expect(guardWithNoDns()->isBlocked($url))->toBeTrue();
@@ -127,12 +165,9 @@ describe('hostnames', function () {
         expect($asked)->toBe([]);
     });
 
+    // The hosts file answers `localhost` without the network. A name that must not exist, and the trailing-dot spelling,
+    // depended on the resolver in use (one that answers NXDOMAIN with an address would fail them), so they are not asserted.
     it('resolves with the system resolver by default: localhost is blocked', function () {
-        expect((new OutboundHostGuard)->isBlocked('https://localhost/hook'))->toBeTrue()
-            ->and((new OutboundHostGuard)->isBlocked('https://localhost.:8443/hook'))->toBeTrue();
-    });
-
-    it('treats a host that does not exist as unresolvable with the system resolver', function () {
-        expect((new OutboundHostGuard)->vettedAddresses('https://webhooks.invalid/hook'))->toBe([]);
+        expect((new OutboundHostGuard)->isBlocked('https://localhost/hook'))->toBeTrue();
     });
 });

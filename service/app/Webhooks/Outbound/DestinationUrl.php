@@ -15,7 +15,7 @@ final class DestinationUrl implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        $parts = is_string($value) && preg_match('/[\x00-\x20\x7f]/', $value) !== 1 ? parse_url($value) : false;
+        $parts = $this->parts($value);
         $schemes = $this->guard->enforced() ? ['https'] : ['http', 'https'];
 
         if (! is_array($parts) || ! in_array(strtolower($parts['scheme'] ?? ''), $schemes, true) || ($parts['host'] ?? '') === '') {
@@ -33,5 +33,20 @@ final class DestinationUrl implements ValidationRule
         if ($this->guard->isBlocked((string) $value)) {
             $fail('The :attribute must not point at a private or reserved address.');
         }
+    }
+
+    /**
+     * The URL's parts, or false for anything that is not a string URL. A control character or a space is
+     * refused outright: parsers disagree about what such a URL means.
+     *
+     * @return array{scheme?: string, host?: string, port?: int, user?: string, pass?: string, path?: string, query?: string, fragment?: string}|false
+     */
+    private function parts(mixed $value): array|false
+    {
+        if (! is_string($value) || preg_match('/[\x00-\x20\x7f]/', $value) === 1) {
+            return false;
+        }
+
+        return parse_url($value);
     }
 }
