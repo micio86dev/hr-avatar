@@ -53,7 +53,7 @@ php artisan db:seed --class=LlmModelSeeder     # the language-model catalogue
 php artisan hra:bootstrap-account "My account" # prints the first secret key, once
 php artisan serve --port=8100                  # http://localhost:8100
 php artisan queue:work                         # in a second shell: webhooks, transcripts, releases
-php artisan schedule:work                      # in a third: the sweeper and the poller
+php artisan schedule:work                      # in a third: the sweeper, the poller and the relay
 ```
 
 `docker compose build api && docker compose up -d` runs the same three processes as containers instead (the API

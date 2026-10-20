@@ -30,6 +30,7 @@ Every setting is in [`.env.example`](.env.example) and described in [docs/railwa
 | `hra:issue-key {account_id}` | Issues another key for an account (`--mode=test`, `--scopes=a,b`). |
 | `hra:conversations:sweep` | Ends conversations past their maximum duration or never connected. Scheduled every minute. |
 | `hra:conversations:poll` | Asks providers that send no callbacks whether their sessions ended. Scheduled. |
+| `hra:relay` | Queues again the webhook deliveries and provider events whose job was lost (a push that failed after the commit, a worker killed between two writes). Takes a row only once it has been stale for a few minutes, claims it under a lease so two runs never queue it twice. Scheduled every minute. |
 
 ## Where things are
 

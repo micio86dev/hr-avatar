@@ -47,7 +47,7 @@ flowchart LR
 - **api** answers every HTTP request. Migrations run once per deploy, before it takes traffic.
 - **worker** runs the queued work: webhook deliveries, transcript reconciliation, releasing provider sessions,
   processing provider events, syncing avatar configs.
-- **scheduler** runs the conversation sweeper (every minute) and the provider poller. There is exactly one.
+- **scheduler** runs the conversation sweeper (every minute), the provider poller and the relay (`hra:relay`), which queues again any webhook delivery or provider event whose job was lost between the commit that stored it and the queue. There is exactly one.
 
 ## The provider contract
 

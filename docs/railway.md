@@ -14,7 +14,7 @@ script or command here talks to Railway, and a deployment is a person's decision
 |---|---|---|---|
 | `api` | the HTTP API (nginx and php-fpm, port 8000) | `service/railway.json` | yes |
 | `worker` | `php artisan queue:work` (webhook deliveries, transcript reconciliation, provider releases, config sync) | `service/railway.worker.json` | no |
-| `scheduler` | `php artisan schedule:work` (conversation sweeper every minute, provider poller) | `service/railway.scheduler.json` | no |
+| `scheduler` | `php artisan schedule:work` (conversation sweeper every minute, provider poller, relay of lost jobs) | `service/railway.scheduler.json` | no |
 | PostgreSQL | the database (17) | none | no |
 | Redis | cache and queue (8) | none | no |
 
