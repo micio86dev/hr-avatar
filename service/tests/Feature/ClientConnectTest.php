@@ -477,6 +477,30 @@ describe('a conversation that ends while its session is being started', function
     });
 });
 
+describe('a conversation that ends before the provider\'s reference is stored', function () {
+    // While `provider_session_ref` is still null the lifecycle has nothing to release, so it queues nothing; the session
+    // that the start then creates is released once, by the connect, when it finds the conversation over (never leaked,
+    // never released twice).
+    it('queues the release once, after the references are kept and not before', function () {
+        $config = scriptedConfig();
+        $conversation = connectable([], $config);
+        $queuedWhileStarting = null;
+        ScriptedProvider::$starts = [function () use ($conversation, &$queuedWhileStarting) {
+            app(ConversationLifecycle::class)->end(Conversation::withoutGlobalScopes()->findOrFail($conversation->id), EndedReason::Client);
+            $queuedWhileStarting = Queue::pushed(ReleaseProviderSession::class)->count();
+
+            return null;
+        }];
+
+        connectCall($conversation)->assertStatus(409);
+
+        expect($queuedWhileStarting)->toBe(0)
+            ->and(storedConversation($conversation)->provider_session_ref)->not->toBeNull();
+        Queue::assertPushed(ReleaseProviderSession::class, 1);
+        Queue::assertPushed(ReleaseProviderSession::class, fn (ReleaseProviderSession $job) => $job->delay === config('hr-avatar.release_delay_seconds'));
+    });
+});
+
 describe('who may connect', function () {
     it('answers 404 for a conversation the key\'s account does not have, even with a valid secret for it', function () {
         $stranger = Account::factory()->create();
