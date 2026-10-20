@@ -10,6 +10,7 @@ use App\Models\AvatarConfig;
 use App\Models\Conversation;
 use App\Models\ProviderWebhookReceipt;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -148,6 +149,75 @@ describe('the same event twice', function () {
         $ingestor->ingest($other, [providerEvent(key: 'same', provider: 'scripted')]);
 
         expect(receipts())->toHaveCount(2);
+    });
+});
+
+describe('a stored receipt that was never processed', function () {
+    beforeEach(function () {
+        Queue::fake();
+        Carbon::setTestNow('2026-10-20 12:00:00');
+    });
+
+    // The first copy committed, and its job never reached the queue (the push failed) or died: nothing else
+    // would ever process it, so the provider's own retry of the event must be able to.
+    it('is queued again when the provider sends the event again after the lease', function () {
+        $ingestor = app(ProviderEventIngestor::class);
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+        Carbon::setTestNow(now()->addSeconds(ProviderEventIngestor::STALE_SECONDS + 1));
+
+        $stored = $ingestor->ingest($this->conversation, [providerEvent()]);
+
+        expect($stored)->toBe(0)->and(receipts())->toHaveCount(1);
+        Queue::assertPushed(ProcessProviderEvent::class, 2);
+        Queue::assertPushed(ProcessProviderEvent::class, fn (ProcessProviderEvent $job) => $job->receiptId === receipts()[0]->id && $job->accountId === $this->account->id);
+    });
+
+    it('is not queued twice for copies that arrive together: the first one holds the lease', function () {
+        $ingestor = app(ProviderEventIngestor::class);
+
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+
+        Queue::assertPushed(ProcessProviderEvent::class, 1);
+    });
+
+    it('is queued once per lease, however many copies come after it', function () {
+        $ingestor = app(ProviderEventIngestor::class);
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+        Carbon::setTestNow(now()->addSeconds(ProviderEventIngestor::STALE_SECONDS + 1));
+
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+        $ingestor->ingest($this->conversation, [providerEvent()]);
+
+        Queue::assertPushed(ProcessProviderEvent::class, 2);
+    });
+
+    it('is not queued again once it is processed, and an ignored one never is', function () {
+        $ingestor = app(ProviderEventIngestor::class);
+        $ingestor->ingest($this->conversation, [providerEvent(key: 'done'), providerEvent(ProviderEventKind::Ignored, 'ignored')]);
+        DB::table('provider_webhook_receipts')->where('idempotency_key', 'done')->update(['processed_at' => now()]);
+        Queue::fake();
+        Carbon::setTestNow(now()->addHour());
+
+        $ingestor->ingest($this->conversation, [providerEvent(key: 'done'), providerEvent(ProviderEventKind::Ignored, 'ignored')]);
+
+        Queue::assertNothingPushed();
+    });
+
+    it('is queued under its own account, never another\'s receipt of the same key', function () {
+        $ingestor = app(ProviderEventIngestor::class);
+        $stranger = Account::factory()->create();
+        $theirs = receiptConversation(account: $stranger);
+        $ingestor->ingest($theirs, [providerEvent(key: 'same')]);
+        Carbon::setTestNow(now()->addSeconds(ProviderEventIngestor::STALE_SECONDS + 1));
+        Queue::fake();
+
+        $ingestor->ingest($this->conversation, [providerEvent(key: 'same')]);
+
+        // Mine did not exist: it was stored (and queued) once; the stranger's stale one was not touched.
+        Queue::assertPushed(ProcessProviderEvent::class, 1);
+        Queue::assertPushed(ProcessProviderEvent::class, fn (ProcessProviderEvent $job) => $job->accountId === $this->account->id);
     });
 });
 
