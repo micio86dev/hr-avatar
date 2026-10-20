@@ -1639,3 +1639,118 @@ Strict TDD. Reconciliation: rulings 74-77. Baseline at `73eb643`: 2789 tests; no
 ### Open items for the owner
 
 1. For a JSON callback body the framework reads the whole body before `LimitWebhookBody` runs (ruling 74); only nginx's `client_max_body_size 1m` bounds its memory. Say if the size check should move ahead of the request capture.
+
+## Review findings fix unit SF-24..SF-33 (full-coverage reviews rv01..rv28)
+
+Strict TDD. Reconciliation: rulings 78-91. Baseline at `2d17853`: 2803 service tests; now 2896. SDK: 358 tests; now 377. Mode: strict TDD, every behavioural change started with an observed RED (the test run failed for the reason named, or, for a premise that did not hold, the test was shown to fail on a mutation that makes the premise true).
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| SF-24 `ReconcileTranscript` | the CRITICAL premise does not hold (the trait has `fail()`); with the job changed to use `Dispatchable` and `Bus\Queueable` only, the three queue-path tests fail on `Call to undefined method ... fail()`; the failure-hook test failed with the database error escaping | queue-path tests pass on the real job; the hook logs the kind and does not throw | `0f1ccca` |
+| SF-25 jobs | refused 401/403/404/422 threw (4 failures); `revision` uninitialized and no `timeout` property; the retry attempt queued nothing; a failed push left the mark | `fail()` for `ClientError`; property default; `$timeout = 60`; cache mark with give-back | `7d13b04` |
+| SF-26 status mapping | 408 answered 422, 502 and 504 answered 500 (3 failures) | `codeForStatus` | `3fdbed2` |
+| SF-26 `failed_jobs` | no table (2 failures) | migration | `6383168` |
+| SF-26 composer | `post-autoload-dump` had no `@putenv` step (1 failure); `composer run-script post-autoload-dump` reproduced the abort | `@putenv APP_ENV=testing` | `4492025` |
+| SF-26 defaults | `sslmode` `prefer` in production, no PDO or Redis timeouts (5 failures) | config | `2890541` |
+| SF-27 SDK | 10 failures in `api-hardening.spec.ts` (null body, no abort, hanging teardown, mount, mute, `reportError`), 7 in `transport-lifecycle-ordering.spec.ts` | `api.ts`, `connect.ts`, `conversation.ts`, transports | `fd2b1bc` |
+| SF-28 Tavus | timeout 30 not 15 (4), top-level reason masked the event (3), second event never read (1) | provider | `37ba3b0` |
+| SF-29 LiveAvatar | LLM registrar threw on a deleted secret (3), offsetless time read in the application's timezone (4: New York and Tokyo, LiveAvatar and Tavus), no log for a further page (1) | registrar, `instant()`, `time()` | `4532158` |
+| SF-30 configs | `sync_status` null on `create()`; a queue that is down answered a 500 (3); a refused voice masked 4 type/range errors | model, `AvatarConfigSync`, validator | `eaf7d63` |
+| SF-30 lists | 12 failures with the bounds removed; accented text passed as audio (2), the second list restarted the deadline (1) | `ListBounds`, `Audio::isAudio` | `b0d4101` |
+| SF-31 | `1e400` metadata answered 500 (2); `reload()` tests are pins | `JsonException` caught | `f56c3e1` |
+| SF-32 | Mock `start` and `teardown` leaked the cache's exception (2); the request format was lost by the body limit (1) | mock, middleware | `5341087` |
+
+Pins that were green at first sight, kept as regression guards and named in the rulings: the 1.0/1 PATCH (ruling 87), `reload()` (ruling 89), the credential-flags drift guard (ruling 90), `fail()` on the real trait (ruling 78).
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test commands | per area, with `DB_PORT=55442`: `vendor/bin/pest tests/Feature/ReconcileTranscriptQueuePathTest.php tests/Feature/ReconcileTranscriptTest.php` 24 passed; `tests/Unit/AvatarProviders` 871 passed; `tests/Feature/AvatarConfigEndpointTest.php` 103 passed; `bunx vitest run` (sdk) 377 passed |
+| Runtime harness | the queue path of the transcript job through the `sync` queue (hands the job its queue job and runs `failed()` as a worker does); `composer run-script post-autoload-dump` with an empty `HRA_JWT_SECRET` before and after (exit 1, exit 0); `php artisan package:discover` as a subprocess under `testing` and `local`; Playwright smoke on Chromium and WebKit. No live provider call by rule |
+| Rollback boundary | per commit; one migration (`failed_jobs`, droppable); no change to a column or to `openapi.json` |
+
+### Gates (foreground, `DB_PORT=55442`, one suite at a time)
+
+| Command | Result |
+|---|---|
+| `php artisan test --parallel --processes=4` | exit 0, 2896 passed, 9038 assertions |
+| `php -d memory_limit=4G artisan test --coverage --min=90` | exit 0, total 100.0 % |
+| `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` | exit 0, 2896 passed |
+| `vendor/bin/pint --test` | exit 0 |
+| `vendor/bin/phpstan analyse --memory-limit=1G` | exit 0, 0 errors |
+| `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json` | exit 0, no change |
+| `cd ../tools/spectral && bun run lint` | exit 0, nothing at warn or above |
+| sdk `bunx tsc --noEmit` | exit 0 |
+| sdk `bun run test:coverage` | exit 0, 377 passed, 100 % lines, 98.62 % branches |
+| sdk `bun run build`, `bun run size` | exit 0; `index.js` 5665 B and `hr-avatar.global.js` 6028 B gzipped (budget unchanged) |
+| sdk `bunx playwright test` | exit 0, 2 passed (Chromium, WebKit) |
+
+### Disposition of the findings
+
+| Finding | Disposition |
+|---|---|
+| rv22 R3-shape-error-fail-undefined (CRITICAL) | not reproducible; proved through the queue path (ruling 78, `0f1ccca`) |
+| rv22 R3-failed-hook-unguarded | fixed (ruling 78, `0f1ccca`) |
+| rv17 R3-001 | already fixed at HEAD by `37d4e5f` and `7c37563` (ruling 79) |
+| rv17 R3-002 | fixed, ruling 79, `7d13b04` |
+| rv17 R3-003 | proved by the sync-queue contrast (ruling 79, `7d13b04`) |
+| rv17 R3-004, R3-005 | accepted (ruling 85) |
+| rv17 R3-006 | fixed, ruling 87, `eaf7d63` |
+| rv20 R3-001 | fixed, ruling 79, `7d13b04` |
+| rv23 R3-001, R3-002 | fixed, ruling 79, `7d13b04` |
+| brief: status mapping | fixed, ruling 80, `3fdbed2` |
+| brief: `failed_jobs`, `job_batches` | `failed_jobs` fixed, `job_batches` not needed (ruling 81, `6383168`) |
+| brief: `composer install` and the boot guard | fixed (ruling 82, `4492025`) |
+| brief: `sslmode`, timeouts, compose password | fixed / documented (ruling 83, `2890541`) |
+| brief: JWT secret strength | already enforced (length); entropy not judged (ruling 83) |
+| rv03 R3-api-retry-001, R3-network-002 | fixed, ruling 84, `fd2b1bc` |
+| rv04 R3-outbox-retry-timer-dropped-on-final | accepted (ruling 84) |
+| rv05 R3-001, R3-002, R3-003, R3-004 | fixed, ruling 84, `fd2b1bc` |
+| rv05 R3-005 | accepted, proved by `tsc` (ruling 84) |
+| rv06 R3-001, R3-003 | fixed, ruling 84, `fd2b1bc` |
+| rv06 R3-002 | already fixed at HEAD by `e12b60b` (ruling 84) |
+| rv07 R3-001 | fixed, ruling 84, `fd2b1bc` |
+| rv07 R3-002 | accepted (ruling 84) |
+| rv09 R3-001 | fixed, ruling 87, `eaf7d63` |
+| rv09 R3-002 | already fixed at HEAD by `e5bf678` (ruling 87) |
+| rv09 R3-003 | already fixed at HEAD by `cff9392` (ruling 87) |
+| rv10 R3-001 | fixed, ruling 90, `5341087` |
+| rv10 R3-002 | message made explicit, accepted (ruling 90) |
+| rv11 R3-001 | already fixed at HEAD by `e8fda12` (ruling 85) |
+| rv11 R3-002 | accepted (ruling 85) |
+| rv11 R3-003 | fixed, ruling 85, `37ba3b0` |
+| rv12 R3-001 | fixed, ruling 85, `37ba3b0` |
+| rv12 R3-002 | already fixed at HEAD by `520770d` (ruling 85) |
+| rv13 R3-001 | fixed, ruling 86, `4532158` |
+| rv13 R3-002 | already fixed at HEAD by `7c37563` (ruling 86) |
+| rv14 R3-001 | accepted and logged (ruling 86, `4532158`) |
+| rv14 R3-002 | fixed, ruling 86, `4532158` |
+| rv14 R3-003 | accepted (ruling 86) |
+| rv14 R3-004 | already fixed at HEAD by `5da63d3` (ruling 86) |
+| rv15 R3-validate-config-refused-voice-masks-field-errors | fixed, ruling 87, `eaf7d63` |
+| rv16 R3-001 | not reproducible, pinned (ruling 87) |
+| rv18 R3-001 | not reproducible at HEAD (ruling 88) |
+| rv18 R3-002 | fixed, ruling 88, `b0d4101` |
+| rv19 R3-001 | fixed as a logged cut (ruling 88, `b0d4101`) |
+| rv19 R3-002 | fixed, ruling 88, `b0d4101` |
+| rv21 R3-001 | fixed, ruling 89, `f56c3e1` |
+| rv21 R3-002 | already fixed at HEAD by `0bd6340` (ruling 89) |
+| rv21 R3-003 | already fixed at HEAD by `6d4596f` (ruling 89) |
+| rv24 R3-reload-scope-failure, R3-sweep-chunk-mutation | accepted, pinned (ruling 89, `f56c3e1`) |
+| rv27 R3-001, R3-002 | fixed, ruling 90, `5341087` |
+| rv28 R3-reliability-handback-state | fixed, ruling 90, `5341087` |
+| every SUGGESTION | applied when trivial (rv10 R3-005/R3-006, rv11 R3-004, rv12 R3-003, rv16 R3-002, rv27 R3-003), the rest listed in ruling 91 |
+
+### SDK commits that change shipped code
+
+`fd2b1bc` (`api.ts`, `connect.ts`, `conversation.ts`, `transports/daily.ts`, `transports/liveavatar.ts`, `transports/speech.ts`). The BEAI frontend vendors the SDK as `frontend/vendor/hr-avatar-sdk-0.0.0.tgz`, which was not touched.
+
+### Open items for the owner
+
+1. `DB_SSLMODE` now defaults to `require` outside `local` and `testing` (ruling 83). If Railway's PostgreSQL offers no TLS the service refuses to connect until `DB_SSLMODE=prefer` is set; this could not be verified without a deploy.
+2. A catalogue or voice list cut at 20 pages or 30 s is returned partial, cached for five minutes and logged (ruling 88); no response member says so. Say if the API should carry a `truncated` flag (an `openapi.json` change).
+3. LiveAvatar transcript paging (`next_timestamp`) and the assumption that an unused session token lapses (ruling 86) both need a live check.
+4. Re-vendoring the SDK into the BEAI frontend is the orchestrator's decision.
