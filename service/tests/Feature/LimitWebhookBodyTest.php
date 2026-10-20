@@ -85,3 +85,33 @@ describe('a body with no Content-Length (chunked)', function () {
         expect($response->getContent())->toBe((string) LimitWebhookBody::MAX_BYTES);
     });
 });
+
+describe('through the real HTTP kernel, where the body is read from the SAPI input', function () {
+    /** A request the way the SAPI builds it: no content is handed over, it is read from `php://input` on demand. */
+    function kernelRequest(string $token, array $server): Request
+    {
+        return Request::create("/v1/webhooks/providers/tavus/{$token}", 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', ...$server], null);
+    }
+
+    it('leaves the body readable for the form request when a Content-Length is declared', function () {
+        $response = app()->handle(kernelRequest($this->token, ['CONTENT_LENGTH' => '0']));
+
+        // An empty body is not a callback: 422, and never the 500 of a body that cannot be read twice.
+        expect($response->getStatusCode())->toBe(422)->and(json_decode($response->getContent(), true)['code'])->toBe('validation_failed');
+    });
+
+    it('leaves the body readable for the form request when there is no Content-Length', function () {
+        $response = app()->handle(kernelRequest($this->token, []));
+
+        expect($response->getStatusCode())->toBe(422)->and(json_decode($response->getContent(), true)['code'])->toBe('validation_failed');
+    });
+
+    it('hands a streamed body within the limit on to the controller whole', function () {
+        $stream = fopen('php://memory', 'w+');
+        fwrite($stream, json_encode(inboundCallback(), JSON_THROW_ON_ERROR));
+        rewind($stream);
+        $request = Request::create("/v1/webhooks/providers/tavus/{$this->token}", 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], $stream);
+
+        expect(app()->handle($request)->getStatusCode())->toBe(200);
+    });
+});

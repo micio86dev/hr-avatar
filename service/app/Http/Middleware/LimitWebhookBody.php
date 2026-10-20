@@ -27,7 +27,8 @@ class LimitWebhookBody
         }
 
         // The header is only a claim, and a chunked body has none: read at most one byte past the limit from the
-        // stream instead of buffering whatever is sent. What is within the limit is read in full afterwards.
+        // stream instead of buffering whatever is sent. What is within the limit is read in full afterwards: the
+        // request reads its input again on the first `getContent()` (pinned through the kernel by the tests).
         $body = stream_get_contents($request->getContent(true), self::MAX_BYTES + 1);
 
         if ($body === false || strlen($body) > self::MAX_BYTES) {
