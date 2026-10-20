@@ -17,9 +17,10 @@ final class FieldSpecValidator
      * @param  list<FieldSpec>  $specs
      * @param  array<array-key, mixed>  $data
      * @param  string  $path  the request member the data came from (`config`, `persona`), prefixed to every field
+     * @param  bool  $voiceRefused  the voice's engine was refused: a voice-gated setting is judged by its type and range only
      * @return list<FieldError>
      */
-    public static function validate(array $specs, array $data, ?VoiceBinding $voice, string $path): array
+    public static function validate(array $specs, array $data, ?VoiceBinding $voice, string $path, bool $voiceRefused = false): array
     {
         $known = array_map(fn (FieldSpec $spec) => $spec->key, $specs);
         $errors = [];
@@ -32,7 +33,7 @@ final class FieldSpecValidator
 
         foreach ($specs as $spec) {
             $value = $data[$spec->key] ?? null;
-            $code = $value === null ? ($spec->required ? 'required' : null) : self::check($spec, $value, $voice);
+            $code = $value === null ? ($spec->required ? 'required' : null) : self::check($spec, $value, $voice, $voiceRefused);
 
             if ($code !== null) {
                 $errors[] = new FieldError("{$path}.{$spec->key}", $code);
@@ -45,7 +46,8 @@ final class FieldSpecValidator
     /**
      * What an adapter's `validateConfig` returns: the voice engine against the engines the provider
      * speaks with, then the config and the persona against their specs. When the provider refused
-     * the voice, the rest is still checked, but a setting is not also blamed for lacking a voice.
+     * the voice, the rest is still checked, but a setting is not also blamed for lacking a voice, and a
+     * voice-gated setting is still judged by its type and range (every problem at once, in one round trip).
      *
      * @param  array<array-key, mixed>  $config
      * @param  array<array-key, mixed>  $persona
@@ -56,34 +58,37 @@ final class FieldSpecValidator
         $refused = $voice !== null && ! in_array($voice->engine, $description->voiceEngines, true);
 
         $errors = [
-            ...self::validate($description->fields, $config, $refused ? null : $voice, 'config'),
-            ...self::validate($description->personaFields, $persona, $refused ? null : $voice, 'persona'),
+            ...self::validate($description->fields, $config, $refused ? null : $voice, 'config', $refused),
+            ...self::validate($description->personaFields, $persona, $refused ? null : $voice, 'persona', $refused),
         ];
 
-        return $refused
-            ? [new FieldError('voice.engine', 'unsupported'), ...array_values(array_filter($errors, fn (FieldError $error) => $error->code !== 'requires_voice_engine'))]
-            : $errors;
+        return $refused ? [new FieldError('voice.engine', 'unsupported'), ...$errors] : $errors;
     }
 
-    private static function check(FieldSpec $spec, mixed $value, ?VoiceBinding $voice): ?string
+    private static function check(FieldSpec $spec, mixed $value, ?VoiceBinding $voice, bool $voiceRefused): ?string
     {
-        if ($spec->voiceEngines !== null && ($voice === null || ! in_array($voice->engine, $spec->voiceEngines, true))) {
+        if (! $voiceRefused && $spec->voiceEngines !== null && ($voice === null || ! in_array($voice->engine, $spec->voiceEngines, true))) {
             return 'requires_voice_engine';
         }
 
         return match ($spec->type) {
             FieldType::Text => is_string($value) ? null : 'type',
             FieldType::Checkbox => is_bool($value) ? null : 'type',
-            FieldType::Select => self::select($spec, $value, $voice),
+            FieldType::Select => self::select($spec, $value, $voice, $voiceRefused),
             FieldType::Integer => is_int($value) ? self::range($spec, $value) : 'type',
             FieldType::Number => is_int($value) || is_float($value) ? self::range($spec, $value) : 'type',
         };
     }
 
-    private static function select(FieldSpec $spec, mixed $value, ?VoiceBinding $voice): ?string
+    private static function select(FieldSpec $spec, mixed $value, ?VoiceBinding $voice, bool $voiceRefused): ?string
     {
         if (! is_string($value)) {
             return 'type';
+        }
+
+        if ($voiceRefused && $spec->optionsByVoiceEngine !== null) {
+            // The options depend on the engine, and the engine was refused: only the type can be judged.
+            return null;
         }
 
         $allowed = $spec->optionsByVoiceEngine !== null && $voice !== null

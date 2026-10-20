@@ -204,6 +204,32 @@ describe('FieldSpecValidator::validateConfig', function () {
         expect(fieldErrorPairs($errors))->toBe(['voice.engine:unsupported']);
     });
 
+    // Review rv15: a refused voice must not hide a wrong type, range or enum on a voice-gated setting (one round trip, not two).
+    it('still checks the type, range and enum of a voice-gated setting when the voice was refused', function (array $config, array $expected) {
+        $description = new ProviderDescription(
+            fields: [
+                new FieldSpec('speed', FieldType::Number, min: 0.5, max: 2, voiceEngines: ['cartesia']),
+                new FieldSpec('flag', FieldType::Checkbox, voiceEngines: ['cartesia']),
+                new FieldSpec('model', FieldType::Select, options: ['a1', 'b1'], optionsByVoiceEngine: ['cartesia' => ['a1']], voiceEngines: ['cartesia']),
+            ],
+            personaFields: [],
+            resources: [],
+            voiceEngines: ['provider'],
+        );
+
+        $errors = FieldSpecValidator::validateConfig($description, $config, new VoiceBinding('cartesia', 'v'), []);
+
+        expect(fieldErrorPairs($errors))->toBe(['voice.engine:unsupported', ...$expected]);
+    })->with([
+        'a wrong type' => [['speed' => 'fast'], ['config.speed:type']],
+        'a value out of range' => [['speed' => 9], ['config.speed:range']],
+        'a wrong type on a checkbox' => [['flag' => 'yes'], ['config.flag:type']],
+        'a select that is not text' => [['model' => 3], ['config.model:type']],
+        'a valid value' => [['speed' => 1, 'flag' => true, 'model' => 'a1'], []],
+        // Which options are allowed depends on the engine, and the engine was refused: there is nothing to judge a name by.
+        'a select name no engine was asked about' => [['model' => 'zzz'], []],
+    ]);
+
     it('still checks the rest of the config when the voice was refused', function () {
         $errors = FieldSpecValidator::validateConfig(describedProvider(), [], new VoiceBinding('elevenlabs', 'v'), []);
 

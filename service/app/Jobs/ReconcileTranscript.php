@@ -106,7 +106,7 @@ final class ReconcileTranscript implements ShouldQueue
                 }
             });
         } catch (Throwable $unfinished) {
-            Log::error('Transcript could not be finished as partial', ['conversation_id' => $this->conversationId, 'exception' => $unfinished::class]);
+            Log::error('Transcript could not be finished as partial', ['conversation_id' => $this->conversationId, 'failure' => $unfinished::class]);
         }
     }
 

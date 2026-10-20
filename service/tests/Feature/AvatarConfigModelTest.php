@@ -58,6 +58,16 @@ it('creates a config with a prefixed id and the documented defaults', function (
         ->and($config->deleted_at)->toBeNull();
 });
 
+// Review rv09 R3-001: the instance create() returns holds the table's defaults too, before anything reads it back.
+it('holds the documented defaults on the instance create() returns, without reloading it', function () {
+    $config = inAccount($this->account, fn () => AvatarConfig::create(['name' => 'Greeter', 'provider' => 'mock']));
+
+    expect($config->sync_status)->toBe(SyncStatus::NotRequired)
+        ->and($config->config)->toBe([])
+        ->and($config->provider_state)->toBe([])
+        ->and($config->sync_revision)->toBe(0);
+});
+
 it('round-trips the structured columns', function () {
     $config = makeConfig([
         'config' => ['replica_id' => 'r1', 'nested' => ['a' => [1, 2, 3]]],

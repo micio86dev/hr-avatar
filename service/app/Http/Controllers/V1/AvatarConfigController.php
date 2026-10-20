@@ -109,6 +109,7 @@ class AvatarConfigController
 
         if ($changed) {
             AvatarConfigSync::dispatchWhenPending($avatarConfig);
+            $avatarConfig->refresh();
         }
 
         return new AvatarConfigResource($avatarConfig);
@@ -133,7 +134,7 @@ class AvatarConfigController
         $avatarConfig->refresh();
         AvatarConfigSync::dispatchWhenPending($avatarConfig);
 
-        return (new AvatarConfigResource($avatarConfig))->response()->setStatusCode(202);
+        return (new AvatarConfigResource($avatarConfig->refresh()))->response()->setStatusCode(202);
     }
 
     /**

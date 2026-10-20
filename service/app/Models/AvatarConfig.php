@@ -46,7 +46,7 @@ class AvatarConfig extends Model
      *
      * @var array<string, int|string>
      */
-    protected $attributes = ['config' => '{}', 'provider_state' => '{}', 'sync_revision' => 0];
+    protected $attributes = ['config' => '{}', 'provider_state' => '{}', 'sync_revision' => 0, 'sync_status' => 'not_required'];
 
     /** The members a client may set. The sync state, its revision and the adapter's own state are written with forceFill. */
     protected $fillable = ['name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref'];

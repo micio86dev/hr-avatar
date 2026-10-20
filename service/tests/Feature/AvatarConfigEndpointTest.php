@@ -7,6 +7,7 @@ use App\Models\AvatarConfig;
 use App\Models\LlmModel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Testing\Fakes\QueueFake;
 use Illuminate\Testing\TestResponse;
 
 const AVATAR_CONFIG_MEMBERS = ['id', 'name', 'provider', 'config', 'persona', 'llm_model_id', 'voice', 'external_ref', 'sync_status', 'sync_error', 'synced_at', 'created_at', 'updated_at'];
@@ -474,6 +475,31 @@ describe('sync dispatch', function () {
         'same config, other key order' => [['config' => ['persona_id' => 'p', 'replica_id' => 'r']], false],
     ]);
 
+    // Review rv16 R3-001: 1 and 1.0 are the same number; repeating what is stored in another spelling is not a change.
+    // Not reproducible: the cast writes the sent value as JSON before it is compared, and PHP writes 1.0 as 1, so the
+    // spellings meet there. Pinned, because the comparison would otherwise look at an int and a float. The body is sent
+    // as text: the test client would write 1.0 as 1 itself.
+    it('treats a number repeated in another spelling as no change: the state stays and nothing is queued', function (int|float $stored, string $sent) {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'persona' => ['llm_temperature' => $stored], 'sync_status' => SyncStatus::Synced]);
+
+        $this->call('PATCH', "/v1/avatar-configs/{$config->id}", server: ['HTTP_AUTHORIZATION' => 'Bearer '.$this->raw, 'CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], content: '{"persona":{"llm_temperature":'.$sent.'}}')
+            ->assertOk()->assertJsonPath('sync_status', 'synced');
+
+        Queue::assertNothingPushed();
+        expect($config->refresh()->sync_revision)->toBe(0);
+    })->with([
+        'integer stored, float sent' => [1, '1.0'],
+        'float stored, integer sent' => [1.0, '1'],
+    ]);
+
+    it('still queues a sync for a number that really differs', function () {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'persona' => ['llm_temperature' => 1], 'sync_status' => SyncStatus::Synced]);
+
+        avcCall('patch', "/v1/avatar-configs/{$config->id}", ['persona' => ['llm_temperature' => 1.5]])->assertOk()->assertJsonPath('sync_status', 'pending');
+
+        Queue::assertPushed(SyncAvatarConfig::class, 1);
+    });
+
     it('queues nothing for a patch that settles a config as not required', function () {
         $config = avcMake(['provider' => 'heygen', 'config' => ['avatarId' => 'a'], 'llm_model_id' => 'gem-1', 'sync_status' => SyncStatus::Synced]);
 
@@ -488,6 +514,56 @@ describe('sync dispatch', function () {
         avcCall('patch', "/v1/avatar-configs/{$config->id}", ['llm_model_id' => null])->assertOk()->assertJsonPath('sync_status', 'pending');
 
         Queue::assertPushed(SyncAvatarConfig::class, 1);
+    });
+});
+
+/** A queue that refuses every push, as one that is down does. */
+function avcDownQueue(): QueueFake
+{
+    $queue = new class(app()) extends QueueFake
+    {
+        public function push($job, $data = '', $queue = null)
+        {
+            throw new RuntimeException('queue is down');
+        }
+    };
+    Queue::swap($queue);
+
+    return $queue;
+}
+
+// Review rv17 R3-006: the row is saved before the job is pushed, so a push that fails must not leave a config `pending`
+// that nothing will ever sync, nor answer an error for a config that exists.
+describe('a queue that is down', function () {
+    it('leaves a created config failed with a fixed reason the caller can retry, and answers 201', function () {
+        avcDownQueue();
+
+        $response = avcCall('post', '/v1/avatar-configs', avcTavusBody())->assertCreated();
+
+        $response->assertJsonPath('sync_status', 'failed')->assertJsonPath('sync_error', 'Synchronization could not be queued.');
+        Queue::swap(new QueueFake(app()));
+        avcCall('post', '/v1/avatar-configs/'.$response->json('id').'/sync')->assertStatus(202)->assertJsonPath('sync_status', 'pending');
+        Queue::assertPushed(SyncAvatarConfig::class, 1);
+    });
+
+    it('does the same for a patch that changes what the provider holds, and for a manual sync', function () {
+        $config = avcMake(['provider' => 'tavus', 'config' => ['replica_id' => 'r', 'persona_id' => 'p'], 'sync_status' => SyncStatus::Synced]);
+        avcDownQueue();
+
+        avcCall('patch', "/v1/avatar-configs/{$config->id}", ['persona' => ['llm_temperature' => 1]])->assertOk()
+            ->assertJsonPath('sync_status', 'failed')->assertJsonPath('sync_error', 'Synchronization could not be queued.');
+        avcCall('post', "/v1/avatar-configs/{$config->id}/sync")->assertStatus(202)
+            ->assertJsonPath('sync_status', 'failed')->assertJsonPath('sync_error', 'Synchronization could not be queued.');
+    });
+
+    it('logs the kind of failure and not its message', function () {
+        $logs = captureLogs();
+        avcDownQueue();
+
+        avcCall('post', '/v1/avatar-configs', avcTavusBody())->assertCreated();
+
+        $everything = implode("\n", $logs->getArrayCopy());
+        expect($everything)->toContain('Avatar config sync could not be queued')->and($everything)->toContain(RuntimeException::class)->and($everything)->not->toContain('queue is down');
     });
 });
 
