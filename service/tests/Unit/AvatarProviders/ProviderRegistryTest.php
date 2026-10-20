@@ -77,7 +77,10 @@ it('builds an adapter through the container, so it can take dependencies', funct
 // Review rv10 R3-005: whether a provider takes a key is written twice in the shipped config; the two must not drift.
 it('lists as credential providers exactly the providers that need a key and the voice vendors that are not providers', function () {
     $shipped = require base_path('config/hr-avatar.php');
-    $needKey = array_keys(array_filter($shipped['providers'], fn (array $provider) => $provider['credential'] === true));
+    $undeclared = array_keys(array_filter($shipped['providers'], fn (array $provider) => ! array_key_exists('credential', $provider)));
+    expect($undeclared)->toBe([], 'every shipped provider must say whether it takes a credential');
+
+    $needKey = array_keys(array_filter($shipped['providers'], fn (array $provider) => ($provider['credential'] ?? false) === true));
     $vendorsOnly = array_values(array_diff(array_keys($shipped['voice_vendors']), array_keys($shipped['providers'])));
 
     expect($shipped['credential_providers'])->toEqualCanonicalizing([...$needKey, ...$vendorsOnly]);

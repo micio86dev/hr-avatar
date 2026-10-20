@@ -112,7 +112,7 @@ it('does not retry anything that is not a concurrency rejection', function (int 
     'a success' => [200, ['conversation_id' => 'c1']],
 ]);
 
-it('recognises the capacity message in the places Tavus puts it, in any case', function (array $body, bool $limited) {
+it('recognises the capacity message in the places Tavus puts it, in any case', function (array|string $body, bool $limited) {
     Http::fake([TAVUS_GUARD_URL => Http::response($body, 400)]);
 
     expect((new TavusConcurrencyGuard)->isConcurrencyLimited(tavusGuardCall()))->toBe($limited);
@@ -123,6 +123,7 @@ it('recognises the capacity message in the places Tavus puts it, in any case', f
     'embedded in a longer text' => [['message' => 'Bad request: you hit the maximum concurrent conversations for your plan.'], true],
     'another message' => [['message' => 'invalid field'], false],
     'an empty JSON body' => [[], false],
+    'a body that is not JSON' => ['<html><body>Bad Request</body></html>', false],
 ]);
 
 it('never lets the response body or the key out of the exception it raises', function () {

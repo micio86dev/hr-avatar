@@ -121,10 +121,15 @@ it('maps the callback fixture', function () {
 
 // Review rv14 R3-002 (same rule for Tavus): a time with no offset is UTC, whatever the application's timezone is.
 it('reads a time that carries no offset as UTC, under any application timezone', function (string $timezone) {
+    $original = date_default_timezone_get();
     date_default_timezone_set($timezone);
 
-    $at = TavusEventMapper::time('2025-10-19T12:00:00');
+    try {
+        $at = TavusEventMapper::time('2025-10-19T12:00:00');
+    } finally {
+        // A throw must not leave the changed timezone to the tests that follow in this process.
+        date_default_timezone_set($original);
+    }
 
-    date_default_timezone_set('UTC');
     expect($at->getTimestamp())->toBe(1760875200);
 })->with(['UTC', 'America/New_York', 'Asia/Tokyo']);

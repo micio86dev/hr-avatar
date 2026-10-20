@@ -47,6 +47,18 @@ function probeDirectory(): string
 }
 
 /**
+ * Removes a probe directory with whatever the test managed to put in it before it failed.
+ */
+function removeProbeDirectory(string $directory): void
+{
+    foreach (glob("{$directory}/*") ?: [] as $file) {
+        unlink($file);
+    }
+
+    rmdir($directory);
+}
+
+/**
  * Runs the vocabulary scanner over the documents. The scanner reads directories, so the documents are copied
  * into one for the scan; a finding names the document, not the copy.
  *
@@ -156,13 +168,12 @@ it('is boundary-clean: no host-product vocabulary in any document', function () 
 it('finds host-product vocabulary in a document, and names the document', function () {
     $directory = probeDirectory();
     $path = "{$directory}/zz-scan-probe.md";
-    file_put_contents($path, "# Probe\n\nThe candidate record.\n");
 
     try {
+        file_put_contents($path, "# Probe\n\nThe candidate record.\n");
         $findings = documentFindings([$path => 'docs/zz-scan-probe.md']);
     } finally {
-        unlink($path);
-        rmdir($directory);
+        removeProbeDirectory($directory);
     }
 
     expect($findings)->toBe(['docs/zz-scan-probe.md:3 contains "candidate"']);
@@ -392,16 +403,14 @@ it('links only to files and headings that exist', function () {
 it('finds a link to a missing file or heading, and passes a good one', function () {
     $directory = probeDirectory();
     $path = "{$directory}/zz-link-probe.md";
-    // The good link points at a real document, copied next to the probe so the relative path resolves there.
-    copy(repositoryRoot().'/docs/railway.md', "{$directory}/railway.md");
-    file_put_contents($path, "# Probe\n\n[gone](./nope.md) and [bad anchor](./railway.md#no-such-heading) and [ok](./railway.md#topology) and [self](#probe) and [web](https://example.com)\n");
 
     try {
+        // The good link points at a real document, copied next to the probe so the relative path resolves there.
+        copy(repositoryRoot().'/docs/railway.md', "{$directory}/railway.md");
+        file_put_contents($path, "# Probe\n\n[gone](./nope.md) and [bad anchor](./railway.md#no-such-heading) and [ok](./railway.md#topology) and [self](#probe) and [web](https://example.com)\n");
         $broken = brokenLinks([$path => 'docs/zz-link-probe.md']);
     } finally {
-        unlink($path);
-        unlink("{$directory}/railway.md");
-        rmdir($directory);
+        removeProbeDirectory($directory);
     }
 
     expect($broken)->toBe(['docs/zz-link-probe.md: ./nope.md (no such file)', 'docs/zz-link-probe.md: ./railway.md#no-such-heading (no such heading)']);
