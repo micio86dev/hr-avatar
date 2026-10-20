@@ -1,0 +1,3699 @@
+{
+    "openapi": "3.1.2",
+    "info": {
+        "title": "HR-Avatar",
+        "version": "0.1.0",
+        "description": "HTTP API of the HR-Avatar avatar conversation engine: create, drive and tear down real-time avatar conversations.",
+        "contact": {
+            "name": "HR-Avatar API"
+        }
+    },
+    "servers": [
+        {
+            "url": "/v1"
+        }
+    ],
+    "tags": [
+        {
+            "name": "API keys"
+        },
+        {
+            "name": "Avatar configs"
+        },
+        {
+            "name": "Catalogue"
+        },
+        {
+            "name": "Client"
+        },
+        {
+            "name": "Conversations"
+        },
+        {
+            "name": "Credentials"
+        },
+        {
+            "name": "Health"
+        },
+        {
+            "name": "Provider webhooks"
+        },
+        {
+            "name": "Webhook endpoints"
+        }
+    ],
+    "paths": {
+        "/api-keys": {
+            "get": {
+                "operationId": "api-keys.index",
+                "description": "The account's keys, newest first. Neither the key nor its hash is ever returned after creation.",
+                "summary": "List API keys",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `ApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ApiKeyResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api-keys.store",
+                "description": "The response carries the full `key` once; it cannot be retrieved afterwards. A secret key\nneeds an explicit scope list, a publishable key needs 1 to 20 allowed origins. A key can only\nissue keys of its own mode and, unless it holds `*`, only scopes it holds itself.",
+                "summary": "Create an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateApiKeyRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssuedApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuedApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "403": {
+                        "description": "The caller lacks a requested scope (`insufficient_scope`) or asked for the other mode (`forbidden`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/api-keys/{apiKey}/revoke": {
+            "post": {
+                "operationId": "api-keys.revoke",
+                "description": "Takes effect at once. Revoking a key that is already revoked changes nothing and keeps the\noriginal `revoked_at`. Revoking only removes access, so unlike create and rotate it needs\nno scope or mode comparison with the caller: any key with `api_keys:manage` may revoke any\nkey of the account, itself included. The way back from a lockout is the `hra:issue-key` command.",
+                "summary": "Revoke an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true,
+                        "description": "The api key ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/api-keys/{apiKey}/rotate": {
+            "post": {
+                "operationId": "api-keys.rotate",
+                "description": "Issues a successor with the same type, mode, scopes, origins and expiry, returned once as `key`.\nA key that never expires has a successor that never expires; one that expires has a successor that\nexpires at the same moment, so rotation cannot be used to outlive an expiry.\nThe old key keeps working for `overlap_seconds` (default 3600, 0 revokes it immediately) and never\noutlives an expiry it already had. A revoked or expired key cannot be rotated.",
+                "summary": "Rotate an API key",
+                "tags": [
+                    "API keys"
+                ],
+                "parameters": [
+                    {
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true,
+                        "description": "The api key ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RotateApiKeyRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssuedApiKeyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IssuedApiKeyResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "403": {
+                        "description": "The key carries a scope the caller lacks (`insufficient_scope`) or is of the other mode (`forbidden`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The key is revoked or expired (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/avatar-configs": {
+            "get": {
+                "operationId": "avatar-configs.index",
+                "description": "The account's configs, newest first. `external_ref` keeps only those carrying exactly that\nreference (case-sensitive, no wildcards); it is applied before the page is cut, so a host that\nshares one account across its own customers never loses a config to the page size.",
+                "summary": "List avatar configs",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    },
+                    {
+                        "name": "external_ref",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/AvatarConfigResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "avatar-configs.store",
+                "description": "`config` is checked against the settings the provider's adapter declares (`GET /v1/catalogue`):\nan unknown key, a missing required key or a wrong value is a 422 naming `config.<key>`.\n`llm_model_id` must be an enabled catalogue model; `voice` is `{engine, voice_id}` and the\nengine must be one the provider speaks with. A config whose provider needs objects created for\nit starts `pending`, any other `not_required`.",
+                "summary": "Create an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateAvatarConfigRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/avatar-configs/{avatarConfig}": {
+            "get": {
+                "operationId": "avatar-configs.show",
+                "description": "One config of the account. A config of another account, or a deleted one, is a 404.",
+                "summary": "Show an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "avatar-configs.update",
+                "description": "Each member sent replaces the stored one as a whole; members left out are kept. The provider\ncannot change. Changing the `config`, `persona`, `llm_model_id` or `voice` to something\ndifferent moves the config back to `pending` (or `not_required` when its provider needs\nnothing for it); a change to the name or the reference leaves the sync state alone.",
+                "summary": "Update an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateAvatarConfigRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "avatar-configs.destroy",
+                "description": "A soft delete: the config leaves the list and cannot start new conversations, and the\nconversations that used it keep their reference to it. While a conversation that has not\nfinished (`created`, `connecting` or `live`) uses the config, it is refused with 409 `config_in_use`.",
+                "summary": "Delete an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "A conversation that has not finished uses the config (`config_in_use`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/avatar-configs/{avatarConfig}/sync": {
+            "post": {
+                "operationId": "avatar-configs.sync",
+                "description": "Queues a sync of the provider-side objects the config needs (for example a persona, a\nlanguage-model configuration or a bound voice) and answers 202 with the config, now `pending`.\nUse it to retry a `failed` config or to push again a `synced` one. A config whose provider\nneeds no such objects is refused with 409 `invalid_state`.",
+                "summary": "Synchronize an avatar config",
+                "tags": [
+                    "Avatar configs"
+                ],
+                "parameters": [
+                    {
+                        "name": "avatarConfig",
+                        "in": "path",
+                        "required": true,
+                        "description": "The avatar config ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "`AvatarConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AvatarConfigResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "The config needs no provider-side objects (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/catalogue": {
+            "get": {
+                "operationId": "catalogue.index",
+                "description": "For every provider: the settings its avatar configs accept (`fields` for `config`,\n`persona_fields` for `persona`: key, type, whether required, limits and allowed values), the\nresources it can list, and the voice engines it speaks with. The voice vendors that are not\navatar providers follow, each with the one resource `voice`. Makes no provider call.",
+                "summary": "Describe the providers",
+                "tags": [
+                    "Catalogue"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": {}
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/catalogue/{provider}/{resource}": {
+            "get": {
+                "operationId": "catalogue.show",
+                "description": "Fetches what the account can pick from at the provider (for example avatars, voices, replicas\nor personas) with the account's credential, else the platform's, and returns normalized\nentries. `language` is set only when the provider states it. The result is cached for five\nminutes per credential; `fresh=1` skips the cache. The provider's raw answer, errors and keys\nare never returned.",
+                "summary": "List a provider's inventory",
+                "tags": [
+                    "Catalogue"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "resource",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "fresh",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "language": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_audio_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_audio_via_api": {
+                                                        "type": "boolean"
+                                                    },
+                                                    "preview_image_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "preview_video_url": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "name",
+                                                    "language",
+                                                    "preview_audio_url",
+                                                    "preview_audio_via_api",
+                                                    "preview_image_url",
+                                                    "preview_video_url"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "No credential is available for the provider (`provider_credential_missing`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The provider does not list that resource.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The provider failed or could not be reached (`provider_error`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/voice-preview": {
+            "post": {
+                "operationId": "voice-preview.store",
+                "description": "Returns a short audio sample of one voice as base64. The sentence is the platform's own for the\n`language`; the request cannot supply text (any member beyond the four is a 422). A voice vendor\nsynthesizes that sentence; LiveAvatar returns its own generic clip. A provider that has no voices\nof its own is previewed through the external vendor named in `tts_engine`; without one there is\nnothing to preview (422). The vendor is called with the account's credential, else the platform's,\nand a repeat is served from a cache without a vendor call. Every preview request counts against\na budget of its own per key (10 a minute by default, on top of the key's general budget), because\neach synthesis is a paid vendor call; beyond it the answer is 429 with `Retry-After`.",
+                "summary": "Preview a voice",
+                "tags": [
+                    "Catalogue"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VoicePreviewRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "content_type": {
+                                            "type": "string",
+                                            "enum": [
+                                                "audio/wav",
+                                                "audio/ogg",
+                                                "audio/mpeg"
+                                            ]
+                                        },
+                                        "audio_base64": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "content_type",
+                                        "audio_base64"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The body is not valid, the voice has no vendor to preview it, or no credential is available for the vendor (`provider_credential_missing`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The vendor does not know the voice.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The vendor failed or could not be reached (`provider_error`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/client/conversations/{conversation}/connect": {
+            "post": {
+                "operationId": "client.conversations.connect",
+                "description": "Starts the provider session for a conversation that has not been connected, and answers with what the\nbrowser needs to join it. It can succeed once per conversation: a second call is `already_connected`.\nThe provider's and the language model's credentials are checked first; a missing one is a 422 that leaves\nthe conversation as it was. If the provider cannot start the session the conversation fails and the\nanswer is a 502 (a 429 when the provider is at capacity).",
+                "summary": "Connect",
+                "tags": [
+                    "Client"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`JoinMaterialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JoinMaterialResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "The conversation is already connected (`already_connected`), or is over (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The provider has no credential (`provider_credential_missing`) or the language model has none (`llm_credential_missing`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "The provider is at its concurrency limit (`provider_concurrency_limited`). It is also `rate_limited` when the budget of the key, or of the address for failed authentications, is spent; `Retry-After` says when to retry.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "The provider could not start the session (`provider_error`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "clientSecret": [],
+                        "publishableKey": []
+                    }
+                ]
+            }
+        },
+        "/client/conversations/{conversation}/events": {
+            "post": {
+                "operationId": "client.conversations.events",
+                "description": "Stores a batch of 1 to 100 events (utterances and lifecycle signals) in order, once each: a\nkey sent before is counted in `duplicates` and not stored again, so a batch can be retried safely. One\ninvalid event rejects the whole batch (422). Events are taken while the conversation is open and for a\nminute after it ended; later ones are `conversation_closed`, except a batch whose events are all stored\nalready, which is answered as the replay it is. A conversation holds at most 10,000 events: a batch that\nwould pass that is `conversation_closed` as well. An utterance before the conversation is connected is\n`invalid_state`. A `live` signal makes a connecting conversation live.",
+                "summary": "Send events",
+                "tags": [
+                    "Client"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ClientEventsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "accepted": {
+                                            "type": "integer"
+                                        },
+                                        "duplicates": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "accepted",
+                                        "duplicates"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "409": {
+                        "description": "The conversation closed more than a minute ago, or holds as many events as it may (`conversation_closed`), or an utterance was sent before it was connected (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "clientSecret": [],
+                        "publishableKey": []
+                    }
+                ]
+            }
+        },
+        "/client/conversations/{conversation}/end": {
+            "post": {
+                "operationId": "client.conversations.end",
+                "description": "Ends the conversation from the browser, with the reason `client`, and answers 200 with it. Ending a\nconversation that is already over answers 200 with it unchanged.",
+                "summary": "End",
+                "tags": [
+                    "Client"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "clientSecret": [],
+                        "publishableKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations": {
+            "post": {
+                "operationId": "conversations.store",
+                "description": "Registers a conversation on one of the account's avatar configs and answers 201 with it, in\nstatus `created`, plus a `client_secret` and its expiry. The secret is shown once: the host hands it\nto the browser, which presents it with a publishable key to connect. Nothing is asked of the provider\nor of any credential here; that happens when the browser connects. `external_ref` and `metadata` are\nthe host's own and come back exactly as sent. A config whose provider needs synchronizing must be\n`synced` first (409 `config_not_synced`); a config of another account, or a deleted one, is a 404.",
+                "summary": "Create a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateConversationRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CreatedConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreatedConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "404": {
+                        "description": "The avatar config does not exist, belongs to another account or was deleted (`not_found`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "The avatar config is still synchronizing, or its last synchronization failed (`config_not_synced`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations/{conversation}/end": {
+            "post": {
+                "operationId": "conversations.end",
+                "description": "Ends a conversation that is not over yet, with the reason `api`, and answers 200 with it. Its provider\nsession is released a few seconds later and its transcript is completed from the provider's. A\nconversation that was never connected has no session: it ends at once and its transcript is final\n(`ready`, empty). A conversation that is already over (ended or failed) is answered 200 as it is,\nwith nothing changed and nothing emitted, so ending twice is safe.",
+                "summary": "End a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations/{conversation}": {
+            "get": {
+                "operationId": "conversations.show",
+                "description": "One conversation of the account. Neither the client secret nor anything of the provider's (its\nreferences, the callback token) is ever returned. A conversation of another account is a 404.",
+                "summary": "Show a conversation",
+                "tags": [
+                    "Conversations"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ConversationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConversationResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/conversations/{conversation}/transcript": {
+            "get": {
+                "operationId": "conversations.transcript",
+                "description": "What was said in a conversation that has been connected, earliest first (by the time the browser or\nthe provider gave it, then by arrival; lines with no time come last). `status` is `pending` until the\nprovider's own transcript has been merged in, then `ready`, or `partial` when the provider's side could\nnot be had and only what the browser forwarded is here. A conversation that was never connected has no\ntranscript: 409 `invalid_state`. The answer is not paginated: it is bounded where events are written (a\nconversation takes at most 10,000 events from the browser, and the provider's transcript is bounded by the\nconversation's duration).",
+                "summary": "Read a transcript",
+                "tags": [
+                    "Conversations"
+                ],
+                "parameters": [
+                    {
+                        "name": "conversation",
+                        "in": "path",
+                        "required": true,
+                        "description": "The conversation ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TranscriptResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TranscriptResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "409": {
+                        "description": "The conversation was never connected (`invalid_state`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/provider-credentials": {
+            "get": {
+                "operationId": "provider-credentials.index",
+                "description": "One entry per credential provider. `source` says whose key a call would use: `account` (the\naccount stored one), `platform` (only the platform key is set) or `none`. `last_four` is\nshown only for an account key of 12 characters or more.",
+                "summary": "List provider credentials",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "provider": {
+                                                        "type": "string"
+                                                    },
+                                                    "source": {
+                                                        "$ref": "#/components/schemas/CredentialSource"
+                                                    },
+                                                    "last_four": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                },
+                                                "required": [
+                                                    "provider",
+                                                    "source",
+                                                    "last_four"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/provider-credentials/{provider}": {
+            "put": {
+                "operationId": "provider-credentials.update",
+                "description": "Creates or replaces the account's key for the provider. The key is encrypted at rest and is\nnever returned; the answer shows only its last four characters.",
+                "summary": "Store a provider credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PutCredentialRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`ProviderCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProviderCredentialResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "provider-credentials.destroy",
+                "description": "Idempotent: removing a key that is not stored answers 204 as well. Calls then use the\nplatform key, if one is set.",
+                "summary": "Remove a provider credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-credentials": {
+            "get": {
+                "operationId": "llm-credentials.index",
+                "description": "The account's stored keys, shown as the provider and the last four characters of the key (null\nfor a key under 12 characters).",
+                "summary": "List language-model credentials",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `LlmCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/LlmCredentialResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-credentials/{llmProvider}": {
+            "put": {
+                "operationId": "llm-credentials.update",
+                "description": "Creates or replaces the account's key for a provider that appears in the model catalogue (404\notherwise). The key is encrypted at rest and never returned.",
+                "summary": "Store a language-model credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "llmProvider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PutCredentialRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`StoredLlmCredentialResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoredLlmCredentialResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "404": {
+                        "description": "The provider does not appear in the model catalogue.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "llm-credentials.destroy",
+                "description": "Idempotent: answers 204 whether or not a key was stored. A conversation whose config binds a\nmodel of this provider then fails to connect with `llm_credential_missing`.",
+                "summary": "Remove a language-model credential",
+                "tags": [
+                    "Credentials"
+                ],
+                "parameters": [
+                    {
+                        "name": "llmProvider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/llm-models": {
+            "get": {
+                "operationId": "llm-models.index",
+                "description": "The enabled entries of the platform catalogue. The catalogue is the same for every account\nand cannot be changed through the API.",
+                "summary": "List language models",
+                "tags": [
+                    "Credentials"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `LlmModelResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/LlmModelResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/webhooks/providers/{provider}/{token}": {
+            "post": {
+                "operationId": "webhooks.providers.receive",
+                "description": "Authenticated by the unguessable token in the path alone (a provider cannot send a key). The event is\nstored first, so it is not lost, and is processed afterwards; a callback seen before is answered the\nsame and changes nothing. A token, provider or conversation id that does not match is one identical\n404: the answer does not say which part was wrong. A body above 256 KB is refused before anything else.",
+                "summary": "Receive a provider callback",
+                "tags": [
+                    "Provider webhooks"
+                ],
+                "parameters": [
+                    {
+                        "name": "provider",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProviderCallbackRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "received": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "received"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "The token is good but the body is not a callback: it must be a JSON object with `conversation_id`, `event_type` and `timestamp`, and the provider's adapter must be able to read it (`validation_failed`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "The token, the provider or the conversation id does not match (`not_found`); the answer is the same for each.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "413": {
+                        "description": "The body is above 256 KB (`payload_too_large`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "More than 120 callbacks a minute from one address (`rate_limited`).",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/webhook-endpoints": {
+            "get": {
+                "operationId": "webhook-endpoints.index",
+                "description": "The account's endpoints, newest first. The secret is never returned after creation.",
+                "summary": "List webhook endpoints",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/WebhookEndpointResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "webhook-endpoints.store",
+                "description": "The response carries the signing `secret` once (`hra_whsec_` and 64 hex characters); it cannot be\nread afterwards. The URL must be https, at most 2048 characters, without credentials, and must not\npoint at a private or reserved address (plain http, and a private address, are accepted only where destinations are\nnot enforced: the `local` and `testing` environments).\nAn account holds at most 20 endpoints; the 21st is a 422.",
+                "summary": "Create a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateWebhookEndpointRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CreatedWebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CreatedWebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/webhook-endpoints/{webhookEndpoint}": {
+            "get": {
+                "operationId": "webhook-endpoints.show",
+                "description": "One endpoint of the account, without its secret. An endpoint of another account is a 404.",
+                "summary": "Show a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "webhook-endpoints.update",
+                "description": "Each member sent replaces the stored one; members left out are kept. A new URL is checked like the\nURL of a new endpoint. The secret cannot be changed.",
+                "summary": "Update a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateWebhookEndpointRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WebhookEndpointResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookEndpointResource"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "webhook-endpoints.destroy",
+                "description": "Deliveries still waiting for a retry stop with it.",
+                "summary": "Delete a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/webhook-endpoints/{webhookEndpoint}/deliveries": {
+            "get": {
+                "operationId": "webhook-endpoints.deliveries.index",
+                "description": "Newest first, optionally only those in one `status`. Each entry says how many attempts were made,\nthe last response status, a short `last_error` code (`timeout`, `connection_failed`,\n`destination_not_allowed`, `destination_unresolved`, `endpoint_disabled`, `internal_error` or `http_<status>`) and, for a delivery\nwaiting for a retry, when the next attempt is due. Neither the body that was sent nor anything a\nreceiver answered is ever returned. An endpoint of another account is a 404.",
+                "summary": "List the deliveries of a webhook endpoint",
+                "tags": [
+                    "Webhook endpoints"
+                ],
+                "parameters": [
+                    {
+                        "name": "webhookEndpoint",
+                        "in": "path",
+                        "required": true,
+                        "description": "The webhook endpoint ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 512
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "$ref": "#/components/schemas/DeliveryStatus"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WebhookDeliveryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/WebhookDeliveryResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "The \"cursor\" that points to the next set of items."
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFound"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationFailed"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/Unauthenticated"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": [
+                    {
+                        "secretKey": []
+                    }
+                ]
+            }
+        },
+        "/health": {
+            "get": {
+                "operationId": "health.live",
+                "description": "Always answers `{\"status\":\"ok\"}` while the process runs. It touches neither the database nor\nRedis, so an orchestrator can use it to decide whether to restart the process.",
+                "summary": "Liveness: the process is up",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "const": "ok"
+                                        }
+                                    },
+                                    "required": [
+                                        "status"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        },
+        "/health/ready": {
+            "get": {
+                "operationId": "health.ready",
+                "description": "Checks PostgreSQL and Redis, and, when a registered provider calls back, that the service has a public base url to hand it. A failure answers 503 and names each dependency `ok` or `failed`,\nnever its address, version or connection string.",
+                "summary": "Readiness: the dependencies answer",
+                "tags": [
+                    "Health"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "status": {
+                                                    "type": "string",
+                                                    "const": "ok"
+                                                },
+                                                "checks": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "database": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "failed",
+                                                                "ok"
+                                                            ]
+                                                        },
+                                                        "redis": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "failed",
+                                                                "ok"
+                                                            ]
+                                                        },
+                                                        "public_base_url": {
+                                                            "type": "string",
+                                                            "enum": [
+                                                                "failed",
+                                                                "ok"
+                                                            ]
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "database",
+                                                        "redis",
+                                                        "public_base_url"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "status",
+                                                "checks"
+                                            ]
+                                        },
+                                        {
+                                            "type": "string"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "A dependency is unreachable; `checks` names each one `ok` or `failed`.",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Problem"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": []
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "secretKey": {
+                "type": "http",
+                "description": "Server-to-server secret key (`hra_sk_...`) sent as `Authorization: Bearer`.",
+                "scheme": "bearer"
+            },
+            "clientSecret": {
+                "type": "http",
+                "description": "Per-conversation `client_secret` JWT sent as `Authorization: Bearer`, always together with the publishable key.",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            },
+            "publishableKey": {
+                "type": "apiKey",
+                "description": "Browser-safe publishable key (`hra_pk_...`); it grants nothing without the client secret.",
+                "in": "header",
+                "name": "X-HRA-Publishable-Key"
+            }
+        },
+        "schemas": {
+            "ApiKeyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "key_prefix": {
+                        "type": "string"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revoked_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rotated_from_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "mode",
+                    "key_prefix",
+                    "scopes",
+                    "allowed_origins",
+                    "expires_at",
+                    "revoked_at",
+                    "last_used_at",
+                    "rotated_from_id",
+                    "created_at"
+                ],
+                "title": "ApiKeyResource"
+            },
+            "AvatarConfigResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "config": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "persona": {
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "additionalProperties": {}
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "sync_status": {
+                        "$ref": "#/components/schemas/SyncStatus"
+                    },
+                    "sync_error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "synced_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "provider",
+                    "config",
+                    "persona",
+                    "llm_model_id",
+                    "voice",
+                    "external_ref",
+                    "sync_status",
+                    "sync_error",
+                    "synced_at",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "AvatarConfigResource"
+            },
+            "ClientEventsRequest": {
+                "type": "object",
+                "description": "A batch of the browser's events. The batch is validated whole: one invalid event rejects all of them.",
+                "properties": {
+                    "events": {
+                        "type": "array",
+                        "description": "One to a hundred events, applied in this order.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "idempotency_key": {
+                                    "type": "string",
+                                    "description": "The browser's own key for the event; sending it again is counted as a duplicate and stored once.",
+                                    "minLength": 1,
+                                    "maxLength": 128
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "description": "What happened: an `utterance` somebody spoke, or a `lifecycle` signal of the call.",
+                                    "enum": [
+                                        "utterance",
+                                        "lifecycle"
+                                    ]
+                                },
+                                "occurred_at": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "date-time",
+                                    "description": "When it happened, in ISO 8601 with a time zone, in the years 1 to 9999 once converted to UTC.",
+                                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$"
+                                },
+                                "role": {
+                                    "type": "string",
+                                    "description": "Who spoke, for an utterance only.",
+                                    "enum": [
+                                        "user",
+                                        "avatar"
+                                    ]
+                                },
+                                "text": {
+                                    "type": "string",
+                                    "description": "What was said, 1 to 8000 characters, for an utterance only.",
+                                    "minLength": 1,
+                                    "maxLength": 8000
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "description": "The signal, for a lifecycle event only: `live` (the call is up) or `error`.",
+                                    "enum": [
+                                        "live",
+                                        "error"
+                                    ]
+                                },
+                                "data": {
+                                    "type": [
+                                        "object",
+                                        "null"
+                                    ],
+                                    "description": "Anything the browser wants to add, a JSON object of at most 2 KB."
+                                }
+                            },
+                            "required": [
+                                "idempotency_key",
+                                "type"
+                            ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 100
+                    }
+                },
+                "required": [
+                    "events"
+                ],
+                "title": "ClientEventsRequest"
+            },
+            "ConversationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ConversationStatus"
+                    },
+                    "avatar_config_id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "max_duration_seconds": {
+                        "type": "integer"
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "ended_reason": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/EndedReason"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "transcript_status": {
+                        "$ref": "#/components/schemas/TranscriptStatus"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "connecting_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "live_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ended_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "avatar_config_id",
+                    "provider",
+                    "language",
+                    "max_duration_seconds",
+                    "external_ref",
+                    "metadata",
+                    "ended_reason",
+                    "transcript_status",
+                    "created_at",
+                    "connecting_at",
+                    "live_at",
+                    "ended_at"
+                ],
+                "title": "ConversationResource"
+            },
+            "ConversationStatus": {
+                "type": "string",
+                "description": "Where a conversation is: `created -> connecting -> live -> ended | failed`. The transitions themselves are the lifecycle's business; this only names the states.\n",
+                "enum": [
+                    "created",
+                    "connecting",
+                    "live",
+                    "ended",
+                    "failed"
+                ],
+                "title": "ConversationStatus"
+            },
+            "CreateApiKeyRequest": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Scope"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "type",
+                    "mode"
+                ],
+                "title": "CreateApiKeyRequest"
+            },
+            "CreateAvatarConfigRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "provider": {
+                        "type": "string",
+                        "enum": [
+                            "mock",
+                            "heygen",
+                            "tavus"
+                        ]
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "The provider-specific settings. The accepted keys depend on the provider: see `GET /v1/catalogue`.",
+                        "additionalProperties": {}
+                    },
+                    "persona": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "Provider-specific persona settings, or null for none.",
+                        "additionalProperties": {}
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The voice to speak with, or null for the provider's default. `engine` must be one the provider speaks with.",
+                        "properties": {
+                            "engine": {
+                                "type": "string",
+                                "enum": [
+                                    "provider",
+                                    "cartesia",
+                                    "elevenlabs"
+                                ]
+                            },
+                            "voice_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                            }
+                        },
+                        "required": [
+                            "engine",
+                            "voice_id"
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "name",
+                    "provider"
+                ],
+                "title": "CreateAvatarConfigRequest"
+            },
+            "CreateConversationRequest": {
+                "type": "object",
+                "description": "The body of a conversation create. `external_ref` and `metadata` are the host's own and are carried untouched.",
+                "properties": {
+                    "avatar_config_id": {
+                        "type": "string",
+                        "description": "The avatar config to talk with: one of the account's, synchronized if its provider needs it."
+                    },
+                    "system_prompt": {
+                        "type": "string",
+                        "description": "The instructions the avatar follows. Kept as sent, whitespace included.",
+                        "maxLength": 32000
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "The two-letter ISO 639-1 code of the conversation's language, in lower case.",
+                        "pattern": "^[a-z]{2}$"
+                    },
+                    "opening_text": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "What the avatar says first, if anything.",
+                        "maxLength": 4000
+                    },
+                    "max_duration_seconds": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "How long the conversation may last, 30 seconds up to the platform ceiling. Defaults to 1800 (or the ceiling, if lower).",
+                        "minimum": 30,
+                        "maximum": 3600
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The host's own reference, returned as sent and never interpreted.",
+                        "maxLength": 255
+                    },
+                    "metadata": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The host's own JSON object, up to 8 KB encoded, returned exactly as sent and never interpreted."
+                    }
+                },
+                "required": [
+                    "avatar_config_id",
+                    "system_prompt",
+                    "language"
+                ],
+                "title": "CreateConversationRequest"
+            },
+            "CreateWebhookEndpointRequest": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Where the events are sent: an https URL of at most 2048 characters, without credentials and not on a private address.",
+                        "maxLength": 2048
+                    },
+                    "events": {
+                        "type": "array",
+                        "description": "The events to receive. All of them when left out.",
+                        "items": {
+                            "$ref": "#/components/schemas/EventType"
+                        }
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether events are sent to this endpoint."
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A note of the host's own, up to 255 characters.",
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "url"
+                ],
+                "title": "CreateWebhookEndpointRequest"
+            },
+            "CreatedConversationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ConversationStatus"
+                    },
+                    "avatar_config_id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "max_duration_seconds": {
+                        "type": "integer"
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "metadata": {
+                        "type": "object"
+                    },
+                    "ended_reason": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/EndedReason"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "transcript_status": {
+                        "$ref": "#/components/schemas/TranscriptStatus"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "connecting_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "live_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ended_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "client_secret": {
+                        "type": "string"
+                    },
+                    "client_secret_expires_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "avatar_config_id",
+                    "provider",
+                    "language",
+                    "max_duration_seconds",
+                    "external_ref",
+                    "metadata",
+                    "ended_reason",
+                    "transcript_status",
+                    "created_at",
+                    "connecting_at",
+                    "live_at",
+                    "ended_at",
+                    "client_secret",
+                    "client_secret_expires_at"
+                ],
+                "title": "CreatedConversationResource"
+            },
+            "CreatedWebhookEndpointResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    },
+                    "secret": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "events",
+                    "enabled",
+                    "description",
+                    "created_at",
+                    "updated_at",
+                    "secret"
+                ],
+                "title": "CreatedWebhookEndpointResource"
+            },
+            "CredentialSource": {
+                "type": "string",
+                "description": "Whose key a provider call would be made with, as the credential list reports it.\n",
+                "enum": [
+                    "account",
+                    "platform",
+                    "none"
+                ],
+                "title": "CredentialSource"
+            },
+            "DeliveryStatus": {
+                "type": "string",
+                "description": "Where a delivery is: `pending` until an attempt gets a 2xx (and while attempts remain), then `succeeded`, or `failed` once the last attempt has failed or the delivery was stopped.\n",
+                "enum": [
+                    "pending",
+                    "succeeded",
+                    "failed"
+                ],
+                "title": "DeliveryStatus"
+            },
+            "EndedReason": {
+                "type": "string",
+                "description": "Why a conversation reached a terminal state. The first writer wins and the value never changes.\n",
+                "enum": [
+                    "client",
+                    "api",
+                    "max_duration",
+                    "provider",
+                    "expired",
+                    "provider_error",
+                    "provider_capacity"
+                ],
+                "title": "EndedReason"
+            },
+            "EventType": {
+                "type": "string",
+                "description": "The events an endpoint can subscribe to. The values are the `type` of the delivered body.\n",
+                "enum": [
+                    "conversation.live",
+                    "conversation.ended",
+                    "transcript.ready"
+                ],
+                "title": "EventType"
+            },
+            "IssuedApiKeyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/KeyType"
+                    },
+                    "mode": {
+                        "$ref": "#/components/schemas/KeyMode"
+                    },
+                    "key_prefix": {
+                        "type": "string"
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "allowed_origins": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revoked_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rotated_from_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "key": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "mode",
+                    "key_prefix",
+                    "scopes",
+                    "allowed_origins",
+                    "expires_at",
+                    "revoked_at",
+                    "last_used_at",
+                    "rotated_from_id",
+                    "created_at",
+                    "key"
+                ],
+                "title": "IssuedApiKeyResource"
+            },
+            "JoinMaterialResource": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "transport": {
+                        "type": "string"
+                    },
+                    "conversation_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "session_token": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expires_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "provider",
+                    "transport",
+                    "conversation_url",
+                    "session_token",
+                    "expires_at"
+                ],
+                "title": "JoinMaterialResource"
+            },
+            "KeyMode": {
+                "type": "string",
+                "description": "A label of the key space and its prefix. It never changes provider selection and never partitions data: both modes read and write the same account's resources.\n",
+                "enum": [
+                    "live",
+                    "test"
+                ],
+                "title": "KeyMode"
+            },
+            "KeyType": {
+                "type": "string",
+                "enum": [
+                    "secret",
+                    "publishable"
+                ],
+                "title": "KeyType"
+            },
+            "LlmCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "llm_provider": {
+                        "type": "string"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "llm_provider",
+                    "last_four"
+                ],
+                "title": "LlmCredentialResource"
+            },
+            "LlmModelResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": "string"
+                    },
+                    "base_url": {
+                        "type": "string"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "provider",
+                    "model",
+                    "display_name",
+                    "base_url",
+                    "enabled"
+                ],
+                "title": "LlmModelResource"
+            },
+            "Problem": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "Always `about:blank`."
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "The HTTP status text."
+                    },
+                    "status": {
+                        "type": "integer",
+                        "description": "The HTTP status."
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "A sentence about this occurrence, in English; never a secret or a provider's message."
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "The stable machine-readable error code; it is never localized."
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "description": "The request id, also sent as `X-Request-Id`; quote it when asking about a request."
+                    },
+                    "errors": {
+                        "type": "object",
+                        "description": "Only on `validation_failed`: each invalid field and its messages.",
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "detail",
+                    "code",
+                    "request_id"
+                ],
+                "title": "Problem"
+            },
+            "ProviderCallbackRequest": {
+                "type": "object",
+                "description": "The envelope of a provider callback: a JSON object with the conversation, the event and its time. What a\nprovider adds beyond that is kept as sent. The callback address carries the credential, and a provider may\necho it, so the token is taken out of the body before anything reads it.",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string",
+                        "description": "The provider's own id of the conversation; it must be the one the callback address was minted for."
+                    },
+                    "event_type": {
+                        "type": "string",
+                        "description": "What happened, in the provider's words."
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "When it happened, as the provider wrote it."
+                    }
+                },
+                "required": [
+                    "conversation_id",
+                    "event_type",
+                    "timestamp"
+                ],
+                "title": "ProviderCallbackRequest"
+            },
+            "ProviderCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "$ref": "#/components/schemas/CredentialSource"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "provider",
+                    "source",
+                    "last_four",
+                    "updated_at"
+                ],
+                "title": "ProviderCredentialResource"
+            },
+            "PutCredentialRequest": {
+                "type": "object",
+                "description": "The body of a credential write, shared by provider and language-model credentials.",
+                "properties": {
+                    "api_key": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                    }
+                },
+                "required": [
+                    "api_key"
+                ],
+                "title": "PutCredentialRequest"
+            },
+            "RotateApiKeyRequest": {
+                "type": "object",
+                "properties": {
+                    "overlap_seconds": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 604800
+                    }
+                },
+                "title": "RotateApiKeyRequest"
+            },
+            "Scope": {
+                "type": "string",
+                "enum": [
+                    "*",
+                    "avatar_configs:read",
+                    "avatar_configs:write",
+                    "credentials:manage",
+                    "llm_models:read",
+                    "conversations:read",
+                    "conversations:write",
+                    "webhook_endpoints:manage",
+                    "api_keys:manage"
+                ],
+                "title": "Scope"
+            },
+            "StoredLlmCredentialResource": {
+                "type": "object",
+                "properties": {
+                    "llm_provider": {
+                        "type": "string"
+                    },
+                    "last_four": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "llm_provider",
+                    "last_four",
+                    "updated_at"
+                ],
+                "title": "StoredLlmCredentialResource"
+            },
+            "SyncStatus": {
+                "type": "string",
+                "description": "Whether an avatar config's provider-side objects match the config: `not_required` when the provider needs nothing created for it, `pending` after a change, `synced` once the objects exist and match, `failed` when the last attempt gave up.\n",
+                "enum": [
+                    "not_required",
+                    "pending",
+                    "synced",
+                    "failed"
+                ],
+                "title": "SyncStatus"
+            },
+            "TranscriptResource": {
+                "type": "object",
+                "properties": {
+                    "conversation_id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/TranscriptStatus"
+                    },
+                    "utterances": {
+                        "type": "array",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "conversation_id",
+                    "status",
+                    "utterances"
+                ],
+                "title": "TranscriptResource"
+            },
+            "TranscriptStatus": {
+                "type": "string",
+                "description": "`pending` until the transcript has been reconciled with the provider's, then `ready`, or `partial` when the provider's side never became available.\n",
+                "enum": [
+                    "pending",
+                    "ready",
+                    "partial"
+                ],
+                "title": "TranscriptStatus"
+            },
+            "UpdateAvatarConfigRequest": {
+                "type": "object",
+                "description": "A partial update: each member sent replaces the stored one as a whole (`config` is replaced, not\nmerged), each member left out is kept. The provider is fixed at creation; sending the one it\nalready has is allowed, any other is refused.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "config": {
+                        "type": "object",
+                        "description": "The provider-specific settings. The accepted keys depend on the provider: see `GET /v1/catalogue`.",
+                        "additionalProperties": {}
+                    },
+                    "persona": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "Provider-specific persona settings, or null for none.",
+                        "additionalProperties": {}
+                    },
+                    "llm_model_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "The voice to speak with, or null for the provider's default. `engine` must be one the provider speaks with.",
+                        "properties": {
+                            "engine": {
+                                "type": "string",
+                                "enum": [
+                                    "provider",
+                                    "cartesia",
+                                    "elevenlabs"
+                                ]
+                            },
+                            "voice_id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                            }
+                        },
+                        "required": [
+                            "engine",
+                            "voice_id"
+                        ]
+                    },
+                    "external_ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "title": "UpdateAvatarConfigRequest"
+            },
+            "UpdateWebhookEndpointRequest": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Where the events are sent: an https URL of at most 2048 characters, without credentials and not on a private address.",
+                        "maxLength": 2048
+                    },
+                    "events": {
+                        "type": "array",
+                        "description": "The events to receive. All of them when left out.",
+                        "items": {
+                            "$ref": "#/components/schemas/EventType"
+                        }
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "Whether events are sent to this endpoint."
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A note of the host's own, up to 255 characters.",
+                        "maxLength": 255
+                    }
+                },
+                "title": "UpdateWebhookEndpointRequest"
+            },
+            "VoicePreviewRequest": {
+                "type": "object",
+                "description": "The body of a voice preview: which voice, and in which language to hear it. There is no member for the\nsentence and no way to add one: any key outside these four is refused. The voice id is placed in a\nvendor url, so it is limited to what an id is made of.",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "enum": [
+                            "tavus",
+                            "heygen",
+                            "cartesia",
+                            "elevenlabs"
+                        ]
+                    },
+                    "voice_id": {
+                        "type": "string",
+                        "description": "The vendor's id of the voice: 1 to 128 letters, digits, `_` or `-`.",
+                        "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                    },
+                    "tts_engine": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The external engine the provider routes its voice through, or null. Needed to preview the voice of a provider\nthat has no voices of its own.",
+                        "enum": [
+                            "cartesia",
+                            "elevenlabs",
+                            null
+                        ]
+                    },
+                    "language": {
+                        "type": "string",
+                        "enum": [
+                            "en",
+                            "it"
+                        ]
+                    }
+                },
+                "required": [
+                    "provider",
+                    "voice_id",
+                    "language"
+                ],
+                "title": "VoicePreviewRequest"
+            },
+            "WebhookDeliveryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "event_id": {
+                        "type": "string"
+                    },
+                    "event_type": {
+                        "$ref": "#/components/schemas/EventType"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/DeliveryStatus"
+                    },
+                    "attempts": {
+                        "type": "integer"
+                    },
+                    "last_response_status": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "last_error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "next_attempt_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "event_id",
+                    "event_type",
+                    "status",
+                    "attempts",
+                    "last_response_status",
+                    "last_error",
+                    "next_attempt_at",
+                    "created_at",
+                    "completed_at"
+                ],
+                "title": "WebhookDeliveryResource"
+            },
+            "WebhookEndpointResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "events",
+                    "enabled",
+                    "description",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "WebhookEndpointResource"
+            }
+        },
+        "responses": {
+            "Unauthenticated": {
+                "description": "The credential is missing or wrong (`unauthenticated`), has expired (`key_expired`) or was revoked (`key_revoked`); on a browser call also an invalid or expired client secret (`client_secret_invalid`, `client_secret_expired`).",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "NotFound": {
+                "description": "There is no such resource in this account (`not_found`). A resource of another account is not found either.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "ValidationFailed": {
+                "description": "The request is not valid (`validation_failed`); `errors` maps each field to its messages.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            },
+            "RateLimited": {
+                "description": "Too many requests (`rate_limited`): the budget of the key, or of the address for failed authentications, is spent. `Retry-After` says when to retry.",
+                "content": {
+                    "application/problem+json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Problem"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

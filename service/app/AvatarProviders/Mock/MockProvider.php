@@ -1,0 +1,138 @@
+<?php
+
+namespace App\AvatarProviders\Mock;
+
+use App\AvatarProviders\AvatarProvider;
+use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\FieldSpecValidator;
+use App\AvatarProviders\Ingestion;
+use App\AvatarProviders\JoinMaterial;
+use App\AvatarProviders\ProviderDescription;
+use App\AvatarProviders\ProviderException;
+use App\AvatarProviders\ProviderSession;
+use App\AvatarProviders\SessionStatus;
+use App\AvatarProviders\SyncResult;
+use App\AvatarProviders\TranscriptLine;
+use App\AvatarProviders\VoiceBinding;
+use App\Credentials\ProviderAuth;
+use App\Models\AvatarConfig;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use RedisException;
+
+/**
+ * A deterministic adapter with no network I/O, selected only by an avatar config whose provider is
+ * `mock`. It exists so the whole conversation flow can run without a provider account.
+ *
+ * What the api process starts the worker process must see, so the little state it has (that a
+ * session was ended, the opening text for the transcript) lives in the shared cache. A cache store that
+ * fails (Redis, or the database store) is logged by the kind of failure, never its message, and answered as the
+ * contract says; any other exception is a bug and is raised. The Redis client is phpredis (predis is not
+ * installed), which reports every failure of the server or the connection as `RedisException`; the
+ * framework wraps none of them. A second client would raise others and needs its own entry here.
+ */
+final class MockProvider implements AvatarProvider
+{
+    private const STATE_TTL_SECONDS = 86400;
+
+    private const SESSION_TTL_SECONDS = 3600;
+
+    public function ingestion(): Ingestion
+    {
+        return Ingestion::None;
+    }
+
+    public function describe(): ProviderDescription
+    {
+        return new ProviderDescription(fields: [], personaFields: [], resources: [], voiceEngines: [VoiceBinding::PROVIDER_ENGINE]);
+    }
+
+    public function validateConfig(array $config, ?VoiceBinding $voice, array $persona = []): array
+    {
+        return FieldSpecValidator::validateConfig($this->describe(), $config, $voice, $persona);
+    }
+
+    /**
+     * Never: there is no provider-side object to create.
+     */
+    public function syncRequired(AvatarConfig $config): bool
+    {
+        return false;
+    }
+
+    public function sync(AvatarConfig $config, ProviderAuth $auth): SyncResult
+    {
+        return SyncResult::notRequired();
+    }
+
+    public function catalogue(string $resource, ProviderAuth $auth): array
+    {
+        return [];
+    }
+
+    public function start(string $conversationId, ConversationSpec $spec, AvatarConfig $config, ProviderAuth $auth, ?string $callbackUrl): ProviderSession
+    {
+        $ref = "mock_{$conversationId}";
+
+        try {
+            Cache::put("hra:mock:opening:{$ref}", $spec->openingText ?? '', self::STATE_TTL_SECONDS);
+        } catch (RedisException|QueryException $failure) {
+            // The state lives in the cache; a cache that is down is a provider that could not start, nothing more is said.
+            $this->logStateFailure($failure);
+
+            throw ProviderException::noResponse();
+        }
+
+        return new ProviderSession($ref, null, new JoinMaterial(
+            provider: 'mock',
+            transport: 'mock',
+            conversationUrl: "mock://conversation/{$conversationId}",
+            sessionToken: "mock_token_{$conversationId}",
+            expiresAt: now()->addSeconds(self::SESSION_TTL_SECONDS)->toDateTimeImmutable(),
+        ));
+    }
+
+    public function teardown(string $sessionRef, ?string $contextRef, ProviderAuth $auth): bool
+    {
+        try {
+            Cache::put("hra:mock:ended:{$sessionRef}", true, self::STATE_TTL_SECONDS);
+        } catch (RedisException|QueryException $failure) {
+            // The contract: a teardown reports that it did not succeed, it does not throw.
+            $this->logStateFailure($failure);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    public function fetchTranscript(string $sessionRef, ProviderAuth $auth): array
+    {
+        $opening = Cache::get("hra:mock:opening:{$sessionRef}");
+
+        return is_string($opening) && $opening !== '' ? [new TranscriptLine(TranscriptLine::AVATAR, $opening, null, null)] : [];
+    }
+
+    public function fetchSession(string $sessionRef, ProviderAuth $auth): SessionStatus
+    {
+        $ended = Cache::has("hra:mock:ended:{$sessionRef}");
+
+        return new SessionStatus($ended, $ended ? 'teardown' : null);
+    }
+
+    public function callbackTranscript(array $payload): array
+    {
+        return [];
+    }
+
+    public function parseCallback(array $payload): array
+    {
+        return [];
+    }
+
+    private function logStateFailure(RedisException|QueryException $failure): void
+    {
+        Log::warning('Mock provider state could not be stored', ['failure' => $failure::class]);
+    }
+}

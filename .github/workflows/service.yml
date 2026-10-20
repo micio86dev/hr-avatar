@@ -1,0 +1,163 @@
+name: service
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+    paths:
+      - "service/**"
+      - "tools/**"
+      - ".spectral.yaml"
+      - ".github/workflows/service.yml"
+  pull_request:
+    paths:
+      - "service/**"
+      - "tools/**"
+      - ".spectral.yaml"
+      - ".github/workflows/service.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: service-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:8.0-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # Dummy values for CI only. The application refuses to boot outside testing without a signing
+      # secret of at least 32 bytes (composer's package discovery runs as testing and needs none).
+      APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      HRA_JWT_SECRET: ci-only-dummy-signing-secret-not-for-use
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      # The CI service container offers no TLS; outside local/testing the default would be `require`.
+      DB_SSLMODE: disable
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, redis, pcntl
+          coverage: pcov
+          ini-values: memory_limit=1G
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Create the test database
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -c 'CREATE DATABASE hra_test'
+
+      - name: Code style
+        run: vendor/bin/pint --test
+
+      - name: Static analysis
+        run: vendor/bin/phpstan analyse --memory-limit=1G
+
+      - name: Migrate
+        run: php artisan migrate --force
+        env:
+          DB_DATABASE: hra
+
+      - name: Tests with coverage
+        run: php artisan test --coverage --min=90
+
+      - name: High-integrity coverage (keys, accounts, middleware)
+        run: vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95
+
+  openapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      HRA_JWT_SECRET: ci-only-dummy-signing-secret-not-for-use
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: hra
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      # The CI service container offers no TLS; outside local/testing the default would be `require`.
+      DB_SSLMODE: disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+          extensions: pdo_pgsql, redis, pcntl
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+        working-directory: service
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Export the OpenAPI document
+        run: php artisan scramble:export --path=openapi.json
+        working-directory: service
+
+      # `git diff` ignores a file git does not track; marking it intent-to-add makes a missing or new one a diff.
+      - name: Fail on drift
+        run: |
+          git add --intent-to-add -- service/openapi.json
+          git diff --exit-code -- service/openapi.json
+
+      - name: Lint the OpenAPI document
+        working-directory: tools/spectral
+        run: |
+          bun install --frozen-lockfile
+          bun run lint

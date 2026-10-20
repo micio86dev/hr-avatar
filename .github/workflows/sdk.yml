@@ -1,0 +1,45 @@
+name: sdk
+
+on:
+  push:
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk.yml'
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: sdk
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      # Bun runs the scripts; Node runs the Vitest and Playwright runners.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun run test:coverage
+      - run: bun run build
+      - run: bun run size
+      - run: bunx playwright install --with-deps chromium webkit
+      - run: bunx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: sdk/playwright-report/
+          if-no-files-found: ignore

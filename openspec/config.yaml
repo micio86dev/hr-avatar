@@ -1,0 +1,48 @@
+schema: spec-driven
+project: hr-avatar
+initialized: 2026-10-19
+persistence: hybrid
+strict_tdd: true
+
+context: |
+  Project: HR-Avatar (placeholder name) — standalone, provider-agnostic avatar conversation engine.
+  Extracted from BEAI (sibling wrapper repo). Must carry NO BEAI/HR/assessment concepts.
+  Service: Laravel 13 + PHP 8.5 + PostgreSQL 17 + Redis 8, API-only, Scramble OpenAPI — dir: service/
+  SDK: @hr-avatar/sdk, TypeScript, Bun (install/build), tsup ESM/CJS/IIFE, Vitest + Playwright — dir: sdk/
+  Providers: Tavus (browser transport Daily via @daily-co/daily-js) and HeyGen LiveAvatar
+  (browser transport LiveKit via @heygen/liveavatar-web-sdk); server side only mints join material.
+  Auth: own key space — secret keys (hra_sk_), publishable keys (hra_pk_), per-conversation client_secret JWT.
+  Git Flow: main/develop + feature/*; no deploy; Railway config as code only.
+  Source analysis and approved design: ../docs/extraction/{FINDINGS,DESIGN}.md in the BEAI wrapper.
+  Repo rules (binding, also the review rules): CLAUDE.md (AGENTS.md is a symlink to it).
+
+rules:
+  proposal:
+    - Scope must stay free of host-product (BEAI/HR) concepts.
+  specs:
+    - Use RFC 2119 keywords and Given/When/Then scenarios.
+    - Every endpoint names its auth (secret key, publishable key + client_secret, or provider token).
+  design:
+    - Provider specifics live only behind the provider contract.
+  tasks:
+    - Every task starts with a failing test (strict TDD) and names its verification command.
+  apply:
+    - Never weaken assertions, skip tests, or lower coverage thresholds.
+
+testing:
+  strict_tdd: true
+  coverage_target: 90
+  coverage_high_integrity: 95  # auth/keys, webhook signatures, conversation state machine
+  runners:
+    service:
+      framework: Pest
+      command: "php artisan test --coverage --min=90"
+      status: planned
+    sdk_unit:
+      framework: Vitest
+      command: "bun run test:coverage"
+      status: planned
+    sdk_e2e:
+      framework: Playwright (chromium + webkit)
+      command: "bunx playwright test"
+      status: planned

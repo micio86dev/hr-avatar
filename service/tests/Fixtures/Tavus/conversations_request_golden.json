@@ -1,0 +1,12 @@
+{
+  "persona_id": "p_golden",
+  "replica_id": "r_golden",
+  "conversational_context": "TEST_PROMPT",
+  "custom_greeting": "TEST_OPENING",
+  "callback_url": "https://hra.example.test/webhooks/providers/tavus/TOKEN",
+  "properties": {
+    "language": "italian",
+    "max_call_duration": 600,
+    "participant_left_timeout": 60
+  }
+}

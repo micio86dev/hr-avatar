@@ -1,0 +1,186 @@
+<?php
+
+use App\AvatarProviders\ConversationSpec;
+use App\AvatarProviders\Ingestion;
+use App\AvatarProviders\Mock\MockProvider;
+use App\AvatarProviders\ProviderException;
+use App\AvatarProviders\TranscriptLine;
+use App\Credentials\ProviderAuth;
+use App\Models\AvatarConfig;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Predis\Client;
+
+beforeEach(function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-19 12:00:00', 'UTC'));
+    Cache::flush();
+    $this->mock = new MockProvider;
+    $this->auth = new ProviderAuth('not-used-by-the-mock', ProviderAuth::PLATFORM);
+    $this->config = new AvatarConfig(['name' => 'Mock', 'provider' => 'mock']);
+});
+
+function mockSpec(?string $opening = 'Hello there!'): ConversationSpec
+{
+    return new ConversationSpec('Be kind.', $opening, 'en', 600, new stdClass);
+}
+
+function startMock(string $conversationId = 'conv_abc', ?string $opening = 'Hello there!')
+{
+    return test()->mock->start($conversationId, mockSpec($opening), test()->config, test()->auth, null);
+}
+
+it('starts with deterministic refs, URL, token and an expiry one hour out', function () {
+    $session = startMock('conv_abc');
+
+    expect($session->sessionRef)->toBe('mock_conv_abc')
+        ->and($session->contextRef)->toBeNull()
+        ->and($session->joinMaterial->provider)->toBe('mock')
+        ->and($session->joinMaterial->transport)->toBe('mock')
+        ->and($session->joinMaterial->conversationUrl)->toBe('mock://conversation/conv_abc')
+        ->and($session->joinMaterial->sessionToken)->toBe('mock_token_conv_abc')
+        ->and($session->joinMaterial->expiresAt->format('Y-m-d\TH:i:s'))->toBe('2026-10-19T13:00:00');
+});
+
+it('gives identical results for the same conversation and clock', function () {
+    expect(startMock('conv_abc')->joinMaterial->toArray())->toBe(startMock('conv_abc')->joinMaterial->toArray())
+        ->and(startMock('conv_abc')->joinMaterial->toArray())->not->toBe(startMock('conv_other')->joinMaterial->toArray());
+});
+
+it('does no network I/O in any operation', function () {
+    Http::fake();
+
+    $session = startMock();
+    $this->mock->fetchTranscript($session->sessionRef, $this->auth);
+    $this->mock->fetchSession($session->sessionRef, $this->auth);
+    $this->mock->teardown($session->sessionRef, null, $this->auth);
+    $this->mock->parseCallback(['anything' => 1]);
+
+    Http::assertNothingSent();
+});
+
+it('reports the session as ended only once it was torn down', function () {
+    $session = startMock();
+
+    expect($this->mock->fetchSession($session->sessionRef, $this->auth)->ended)->toBeFalse();
+
+    expect($this->mock->teardown($session->sessionRef, null, $this->auth))->toBeTrue();
+
+    $status = $this->mock->fetchSession($session->sessionRef, $this->auth);
+    expect($status->ended)->toBeTrue()->and($status->endReason)->toBe('teardown');
+});
+
+it('keeps the ended flag in the cache, which the api and the worker share', function () {
+    $session = startMock();
+
+    $this->mock->teardown($session->sessionRef, null, $this->auth);
+
+    expect(Cache::has('hra:mock:ended:mock_conv_abc'))->toBeTrue()
+        ->and((new MockProvider)->fetchSession('mock_conv_abc', $this->auth)->ended)->toBeTrue();
+});
+
+it('tears down idempotently and only the session it was asked about', function () {
+    startMock('conv_one');
+    startMock('conv_two');
+
+    expect($this->mock->teardown('mock_conv_one', null, $this->auth))->toBeTrue()
+        ->and($this->mock->teardown('mock_conv_one', null, $this->auth))->toBeTrue()
+        ->and($this->mock->fetchSession('mock_conv_two', $this->auth)->ended)->toBeFalse();
+});
+
+it('answers a transcript of one avatar line holding the opening text', function () {
+    $session = startMock('conv_abc', 'Hello there!');
+
+    $lines = $this->mock->fetchTranscript($session->sessionRef, $this->auth);
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0])->toBeInstanceOf(TranscriptLine::class)
+        ->and($lines[0]->role)->toBe(TranscriptLine::AVATAR)
+        ->and($lines[0]->text)->toBe('Hello there!')
+        ->and($lines[0]->occurredAt)->toBeNull();
+});
+
+it('answers an empty transcript without an opening text, and for a session it never started', function (?string $opening) {
+    $session = startMock('conv_abc', $opening);
+
+    expect($this->mock->fetchTranscript($session->sessionRef, $this->auth))->toBe([])
+        ->and($this->mock->fetchTranscript('mock_never_started', $this->auth))->toBe([]);
+})->with([null, '']);
+
+it('takes no callback and needs no ingestion', function () {
+    expect($this->mock->ingestion())->toBe(Ingestion::None)
+        ->and($this->mock->parseCallback(['event_type' => 'system.shutdown']))->toBe([]);
+});
+
+// Review rv10 R3-001: the contract says a failed start is a ProviderException and a teardown never throws; the Mock keeps
+// its state in the cache, so a cache that is down must not leak a raw exception through either. Review sf11 R3-001: only
+// the failures of a cache store are turned into that answer, each is logged by its kind (never its message), and
+// a programming error is still raised.
+describe('with a cache that is down', function () {
+    beforeEach(function () {
+        $this->logs = captureLogs();
+    });
+
+    // The Redis store raises RedisException; the database store raises QueryException.
+    $stores = [
+        'redis' => [fn () => new RedisException('redis is down: SECRET-HOST')],
+        'database' => [fn () => new QueryException('pgsql', 'insert into cache', [], new Exception('connection to SECRET-HOST refused'))],
+    ];
+
+    it('fails a start as a ProviderException that carries nothing of the cause, and logs the kind of failure', function (Closure $failure) {
+        Cache::shouldReceive('put')->andThrow($failure());
+
+        try {
+            startMock();
+            $this->fail('Expected a ProviderException');
+        } catch (ProviderException $e) {
+            expect($e->getMessage())->toBe('Provider request failed (no response)')->not->toContain('SECRET-HOST');
+        }
+
+        $everything = implode("\n", $this->logs->getArrayCopy());
+        expect($everything)->toContain('Mock provider state could not be stored')->toContain(class_basename($failure()))->not->toContain('SECRET-HOST');
+    })->with($stores);
+
+    it('answers a teardown that did not succeed, instead of throwing, and logs the kind of failure', function (Closure $failure) {
+        Cache::shouldReceive('put')->andThrow($failure());
+
+        expect($this->mock->teardown('mock_conv_abc', null, $this->auth))->toBeFalse();
+
+        $everything = implode("\n", $this->logs->getArrayCopy());
+        expect($everything)->toContain('Mock provider state could not be stored')->toContain(class_basename($failure()))->not->toContain('SECRET-HOST');
+    })->with($stores);
+
+    // Review of sf11 (warning): the catch must hold every failure the configured stores raise. The service runs the
+    // phpredis client (predis is not installed), and the framework wraps nothing, so an unreachable Redis reaches the
+    // adapter as phpredis's own RedisException. Observed against a closed port rather than assumed.
+    it('answers a Redis that cannot be reached, through the real store and the real client', function () {
+        config([
+            'cache.default' => 'redis',
+            'database.redis.cache.host' => '127.0.0.1',
+            'database.redis.cache.port' => 1,
+            'database.redis.cache.max_retries' => 0,
+        ]);
+        Cache::purge('redis');
+        app('redis')->purge('cache');
+
+        expect(fn () => startMock())->toThrow(ProviderException::class)
+            ->and($this->mock->teardown('mock_conv_abc', null, $this->auth))->toBeFalse();
+
+        expect(implode("\n", $this->logs->getArrayCopy()))->toContain('Mock provider state could not be stored')->toContain('RedisException');
+    });
+
+    // The catch names the failures of the phpredis client and of the database store. A second Redis client would raise
+    // others, so installing one (or switching the client) must make this test fail and the catch be revisited.
+    it('is written for the phpredis client, the only one installed', function () {
+        expect(config('database.redis.client'))->toBe('phpredis')
+            ->and(class_exists(Client::class))->toBeFalse();
+    });
+});
+
+it('does not hide a programming error as a cache that is down', function () {
+    Cache::shouldReceive('put')->andThrow(new TypeError('a bug'));
+
+    expect(fn () => startMock())->toThrow(TypeError::class)
+        ->and(fn () => $this->mock->teardown('mock_conv_abc', null, $this->auth))->toThrow(TypeError::class);
+});

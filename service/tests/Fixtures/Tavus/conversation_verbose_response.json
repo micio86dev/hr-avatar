@@ -1,0 +1,33 @@
+{
+  "conversation_id": "c9f2a1c7e4b3d4a1",
+  "conversation_name": "fixture",
+  "status": "ended",
+  "conversation_url": "https://tavus.daily.co/c9f2a1c7e4b3d4a1",
+  "created_at": "2026-10-19T12:00:00.000000Z",
+  "events": [
+    {
+      "event_type": "system.replica_joined",
+      "message_type": "system",
+      "timestamp": "2026-10-19T12:00:05.000000Z",
+      "properties": {}
+    },
+    {
+      "event_type": "system.shutdown",
+      "message_type": "system",
+      "timestamp": "2026-10-19T12:10:00.000000Z",
+      "properties": { "shutdown_reason": "participant_left" }
+    },
+    {
+      "event_type": "application.transcription_ready",
+      "message_type": "application",
+      "timestamp": "2026-10-19T12:10:03.000000Z",
+      "properties": {
+        "transcript": [
+          { "role": "system", "content": "You are a friendly interviewer." },
+          { "role": "assistant", "content": "Hello, tell me about yourself.", "timestamp": "2026-10-19T12:00:07.000000Z", "seconds_from_start": 2.5, "duration": 3.1 },
+          { "role": "user", "content": "I am a software engineer.", "timestamp": "2026-10-19T12:00:12.000000Z", "seconds_from_start": 7.25, "duration": 2.0 }
+        ]
+      }
+    }
+  ]
+}
