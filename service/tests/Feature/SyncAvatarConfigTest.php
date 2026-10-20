@@ -9,6 +9,8 @@ use App\Models\AvatarConfig;
 use App\Models\LlmCredential;
 use App\Models\LlmModel;
 use App\Models\ProviderCredential;
+use Illuminate\Queue\InvalidPayloadException;
+use Illuminate\Queue\SyncQueue;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -184,6 +186,34 @@ describe('a failed run', function () {
 
         expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe('Provider request failed (status 500)')
             ->and(implode("\n", $logs->getArrayCopy()))->not->toContain('could not be queued');
+    });
+
+    // Review of sf9 (warning): the synchronous queue builds the payload before it runs the job, so a push that fails there
+    // (the job cannot be serialized) is a push that failed, exactly as on a queue that is down: the job never ran and
+    // recorded nothing, so the config must not stay `pending` for ever.
+    it('records a push that fails before the job runs as a sync that could not be queued, and does not raise it', function () {
+        $logs = captureLogs();
+        $config = syncJobConfig();
+        $queue = new class extends SyncQueue
+        {
+            public function connection(): static
+            {
+                return $this;
+            }
+
+            protected function createPayload($job, $queue, $data = '', $delay = null)
+            {
+                throw new InvalidPayloadException('cannot serialize SECRET-JOB');
+            }
+        };
+        $queue->setContainer(app());
+        Queue::swap($queue);
+
+        AvatarConfigSync::dispatchWhenPending($config);
+
+        expect($config->refresh()->sync_status)->toBe(SyncStatus::Failed)->and($config->sync_error)->toBe(AvatarConfigSync::NOT_QUEUED);
+        $everything = implode("\n", $logs->getArrayCopy());
+        expect($everything)->toContain('Avatar config sync could not be queued')->toContain('InvalidPayloadException')->not->toContain('SECRET-JOB');
     });
 
     it('says what is missing when a bound model has no key', function () {
