@@ -15,6 +15,7 @@ final class Audio
      */
     public static function isAudio(string $bytes): bool
     {
+        // mb_strcut cuts on a character boundary, so text that straddles the 512th byte is still valid text (AudioTest).
         $start = mb_strcut($bytes, 0, 512, 'UTF-8');
         $isText = mb_check_encoding($start, 'UTF-8') && preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $start) !== 1;
 
