@@ -998,3 +998,9 @@ Source: the findings of the approved native reviews sf7..sf11 of the review find
 - [x] SF-37 Lists (sf10 R3-liveavatar-paged-no-bounds-on-exception, R3-tavus-deadline-cut-unreported): an optional LiveAvatar list that fails part way is reported as cut; Tavus has no unreported partial outcome, pinned with the end-of-list case at the page limit (ruling 93, `cc4ee0a`).
 - [x] SF-38 `Audio` and `MockProvider` (sf10 R3-audio-isaudio-utf8-truncation, sf11 R3-001): the audio check is not reproducible (pinned); the Mock catches only the failures of a cache store and logs their kind (ruling 93, `f84abb5`, `d81f704`).
 - [x] SF-39 Test hygiene and gates (sf11 R3-002 and the suggestions): the docs probe directory is cleaned whatever fails, the timezone is restored in `finally`, the drift guard names a missing credential flag, the non-JSON guard body case is back (ruling 94, `e81adb3`); gates, apply-progress, Engram.
+
+## Warning fixes of the approved review of the SF-34..SF-39 unit (SF-40)
+
+Source: the warnings of the approved native review of the SF-34..SF-39 unit. Reconciliation: ruling 95. Strict TDD, each claim verified first. The SDK item first and in its own commit; no push, no deploy.
+
+- [x] SF-40 Three warnings: SDK `#applyMic` settles a call whose transport throws instead of rejecting (`bdf785e`, ships SDK code); the Mock catch is complete for the phpredis client and pinned against the real store (`210b1f6`); `AvatarConfigSync` records a push that fails before a synchronous job runs as `failed`/`NOT_QUEUED` while a failure of the job still reaches the caller (`9552a09`); gates, apply-progress, Engram. (ruling 95)

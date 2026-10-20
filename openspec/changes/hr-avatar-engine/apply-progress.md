@@ -1818,3 +1818,47 @@ Strict TDD. Reconciliation: rulings 92-94. Baseline at `8c69816`: 2896 service t
 
 1. On a synchronous queue (local development only) a provider failure during a config create or update now answers the job's error (not a 2xx), as it did before the queue-down handling; with a real queue the request still succeeds and the config shows `failed`.
 2. The items of the SF-24..SF-33 unit that stay open (TLS mode on Railway, partial lists not flagged in the response, LiveAvatar paging and token lapse, re-vendoring) are unchanged.
+
+## Warning fixes SF-40 (approved review of the SF-34..SF-39 unit)
+
+Strict TDD. Reconciliation: ruling 95. Baseline: 2913 service tests, 383 SDK tests; now 2916 and 384.
+
+### TDD cycle evidence
+
+| Item | RED (observed) | GREEN | Commit |
+|---|---|---|---|
+| SDK `#applyMic` | a transport that throws synchronously made `toggleMic` throw the failure (1 failure) | the transport call inside a `try`; a throw becomes the call's rejection | `bdf785e` (ships SDK code) |
+| Mock catch | not a defect: the real store at a closed port is answered at first sight; mutation narrowing the catch to `QueryException` fails the new test with the raw `RedisException` | none needed; docblock, real-store test, client guard | `210b1f6` |
+| `AvatarConfigSync` | a payload that cannot be built on a real `SyncQueue` reached the caller and left the config `pending` (1 failure) | conditional record on a row still pending; re-raise on a `SyncQueue` when nothing was recorded | `9552a09` |
+
+### Work Unit Evidence
+
+| Evidence | Value |
+|---|---|
+| Focused test commands | sdk `bunx vitest run tests/unit/conversation-controls.spec.ts` 21 passed; service (`DB_PORT=55442`) `tests/Unit/AvatarProviders/MockProviderTest.php` 17 passed, `tests/Feature/SyncAvatarConfigTest.php` + `AvatarConfigEndpointTest.php` + `SyncRevisionTest.php` 147 passed |
+| Runtime harness | real phpredis client and Redis cache store at a closed port; a real `SyncQueue` subclass that fails to build the payload; the sync-queue job failure through `AvatarConfigSync::dispatchWhenPending` |
+| Rollback boundary | per commit; no migration, no `openapi.json` change |
+
+### Gates (foreground, `DB_PORT=55442`, one suite at a time)
+
+| Command | Result |
+|---|---|
+| `php artisan test --parallel --processes=4` | exit 0, 2916 passed |
+| `php -d memory_limit=4G artisan test --coverage --min=90` | exit 0, 2916 passed, total 100.0 % |
+| `vendor/bin/pest -c phpunit.high-integrity.xml --coverage --min=95` | exit 0, 2916 passed, total 100.0 % |
+| `vendor/bin/pint --test` | exit 0 |
+| `vendor/bin/phpstan analyse --memory-limit=1G` | exit 0, 0 errors |
+| `php artisan scramble:export --path=openapi.json && git diff --exit-code openapi.json` | exit 0, no change |
+| `cd ../tools/spectral && bun run lint` | exit 0, nothing at warn or above |
+| sdk `bunx tsc --noEmit` | exit 0 |
+| sdk `bun run test:coverage` | exit 0, 384 passed, 100 % lines, 98.65 % branches |
+| sdk `bun run build`, `bun run size` | exit 0; `index.js` 5751 B and `hr-avatar.global.js` 6122 B gzipped (was 5731 and 6102) |
+| sdk `bunx playwright test` | exit 0, 2 passed (Chromium, WebKit) |
+
+### SDK commits that change shipped code
+
+`bdf785e` (`conversation.ts`). Re-vendoring into the BEAI frontend is the orchestrator's step and was not done here.
+
+### Open items for the owner
+
+None new. The items of the previous units are unchanged.
